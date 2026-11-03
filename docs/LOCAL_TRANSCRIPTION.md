@@ -5,7 +5,7 @@ This optional command creates an SRT file from a video or audio file you are aut
 Install the optional dependency in the project environment:
 
 ```powershell
-python -m pip install "faster-whisper==1.2.1" "av>=11,<17"
+python -m pip install -e ".[asr]"
 ```
 
 Run from the project root:
