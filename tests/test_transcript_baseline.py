@@ -8,6 +8,7 @@ from video_rag.api import create_app
 from video_rag.transcript_baseline import (
     build_transcript_library,
     build_transcript_pipeline,
+    build_transcript_segments,
     find_subtitles,
     parse_subtitles,
     segments_from_subtitles,
@@ -80,6 +81,17 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(client.get(data["evidence"][0]["video_url"]).data, b"fake video bytes for API test")
         missing = client.post("/api/ask", json={"question": "quantum entanglement"}).get_json()
         self.assertTrue(missing["abstained"])
+
+    def test_empty_workspace_imports_and_restores_without_startup_video(self):
+        db = self.base / "empty.sqlite3"
+        client = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        self.assertEqual(client.get("/api/library").get_json()["videos"], [])
+        self.assertEqual(client.post("/api/ask", json={"question": "attention"}).status_code, 503)
+        self.assertEqual(client.post("/api/library/local-video", json={"video_path": str(self.video)}).status_code, 201)
+        self.assertFalse(client.post("/api/ask", json={"question": "attention"}).get_json()["abstained"])
+        reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
+        self.assertFalse(reopened.post("/api/ask", json={"question": "attention"}).get_json()["abstained"])
 
     def test_multiple_videos_are_separate_and_search_can_be_scoped(self):
         other_video = self.base / "second.mp4"
