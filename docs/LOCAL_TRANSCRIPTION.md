@@ -5,7 +5,7 @@ This optional command creates an SRT file from a video or audio file you are aut
 Install the optional dependency in the project environment:
 
 ```powershell
-python -m pip install faster-whisper
+python -m pip install "faster-whisper==1.2.1" "av>=11,<17"
 ```
 
 Run from the project root:
@@ -21,3 +21,8 @@ Choose `--language zh` for Chinese, or omit it for automatic detection. The defa
 The default output is `artifacts/transcripts/<input-name>.srt`. The command refuses to overwrite an existing file; choose another `.srt` path inside `artifacts/transcripts` with `--output`. These files may include sensitive information, so keep them out of public repositories. Review the course's copyright, participant privacy, and permissions for transcription before processing. Deleting recordings should include associated subtitles and derived files.
 
 This is a standalone transcription tool: the original `prepare_videos.py` does not automatically consume its SRT output. A separate integration would be required before these subtitles enter the video RAG index.
+
+## Verified local example
+
+On Windows with Python 3.12, faster-whisper 1.2.1 and PyAV 16.1.0, the multilingual `base` model successfully transcribed the 97-second [public educational sample](PUBLIC_SAMPLE_ZH.md) locally on CPU. Its output had 21 cues; the supplied English subtitle had 15. A case-normalized word-sequence comparison produced a similarity of 0.977 for this single sample. This is not a word-error rate or a formal accuracy claim, and neither subtitle has been independently verified against the recording. PyAV 19.0.2 produced an incompatible `metadata_errors` argument error in this setup, so the installation example constrains PyAV below 17.
+
