@@ -93,6 +93,10 @@ class VideoRAGPipeline:
         if not ranked or ranked[0][1] < self._minimum_rerank_score:
             return self._abstention(started, recalled_at, fused_at, reranked_at)
 
+        # A strong first match does not make weaker matches reliable evidence.
+        # Apply the same relevance threshold to every returned segment and to
+        # the material supplied to the answer generator.
+        ranked = [(segment, score) for segment, score in ranked if score >= self._minimum_rerank_score]
         selected_segments = [item[0] for item in ranked]
         answer_text = self._generator.generate(query, selected_segments)
         finished = perf_counter()
@@ -161,3 +165,4 @@ class VideoRAGPipeline:
                 "total": (finished - started) * 1000,
             },
         )
+
