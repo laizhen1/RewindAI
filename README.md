@@ -104,7 +104,9 @@ CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完�
 
 ## Licence · 许可证
 
-No specific open-source licence has been selected for this repository yet; consult the owner before reuse. Model weights, datasets, videos and third-party dependencies have their own terms.
+RewindAI's code is available for non-commercial use, modification and redistribution under the [RewindAI Non-Commercial Use License](LICENSE). Commercial use requires separate written permission. Model weights, datasets, videos and third-party dependencies have their own terms.
+
+本项目代码允许非商业用途的使用、修改和再分发，详见 [许可证](LICENSE)；商业用途需要另行取得书面许可。模型、数据集、视频和第三方依赖遵循各自的许可条款。
 
 ## Links · 项目链接
 
