@@ -115,9 +115,15 @@ class TranscriptBaselineTests(unittest.TestCase):
         result = client.post("/api/ask", json={"question": "embeddings", "video_id": new_id}).get_json()
         self.assertFalse(result["abstained"])
         self.assertEqual(result["evidence"][0]["video_id"], new_id)
+        old_segment = result["evidence"][0]["segment_id"]
+        saved = client.post("/api/bookmarks", json={"video_id": new_id, "segment_id": old_segment, "note": "Keep this note"})
+        self.assertEqual(saved.status_code, 201)
+        self.assertTrue(client.get("/api/bookmarks").get_json()["bookmarks"][0]["available"])
+        self.assertEqual(client.delete(f"/api/library/unavailable-video/{new_id}").status_code, 404)
         self.assertTrue(client.get(f"/api/videos/{first_id}").status_code == 200)
         demo = create_app(pipeline, database_path=self.base / "demo.sqlite3", mode="demo").test_client()
         self.assertEqual(demo.post("/api/library/local-video", json={"video_path": str(other)}).status_code, 409)
+        self.assertEqual(demo.delete(f"/api/library/unavailable-video/{new_id}").status_code, 409)
 
         # Recreate the app from the initial source to simulate a restart.
         resumed = create_app(build_transcript_pipeline(self.video, self.srt),
@@ -131,7 +137,18 @@ class TranscriptBaselineTests(unittest.TestCase):
         data = changed.get("/api/library").get_json()
         self.assertEqual(len(data["videos"]), 1)
         self.assertEqual(data["unavailable_saved_videos"], 1)
+        self.assertEqual(data["unavailable_videos"], [{"id": new_id, "title": "other.mp4"}])
         self.assertEqual(changed.post("/api/ask", json={"question": "embeddings", "video_id": new_id}).status_code, 404)
+        self.assertFalse(changed.get("/api/bookmarks").get_json()["bookmarks"][0]["available"])
+        self.assertEqual(changed.delete(f"/api/library/unavailable-video/{new_id}").status_code, 204)
+        self.assertTrue(other.exists())
+        self.assertEqual(changed.get("/api/library").get_json()["unavailable_saved_videos"], 0)
+        self.assertEqual(changed.post("/api/library/local-video", json={"video_path": str(other)}).status_code, 201)
+        new_result = changed.post("/api/ask", json={"question": "embeddings", "video_id": new_id}).get_json()
+        self.assertNotEqual(new_result["evidence"][0]["segment_id"], old_segment)
+        bookmark = changed.get("/api/bookmarks").get_json()["bookmarks"][0]
+        self.assertEqual(bookmark["note"], "Keep this note")
+        self.assertFalse(bookmark["available"])
 
     def test_generic_question_words_and_partial_content_do_not_produce_answers(self):
         self.srt.write_text(
@@ -161,4 +178,3 @@ class TranscriptBaselineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
