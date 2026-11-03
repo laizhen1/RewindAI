@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from video_rag.transcript_baseline import build_transcript_pipeline  # noqa: E402
+from video_rag.transcript_baseline import build_transcript_pipeline
 
 
 def overlap(hit: dict, start: float, end: float) -> bool:
@@ -16,22 +17,40 @@ def overlap(hit: dict, start: float, end: float) -> bool:
     return hit["start_time"] < end and hit["end_time"] > start
 
 
+def coverage(hit: dict, start: float, end: float) -> float:
+    """Fraction of the reference interval covered by a single retrieved hit."""
+    return max(0.0, min(hit["end_time"], end) - max(hit["start_time"], start)) / (end - start)
+
+
 def diagnose(pipeline, questions: list[dict]) -> list[dict]:
     results = []
     for item in questions:
         question = item["question"]
-        start, end = float(item["evidence_start_seconds"]), float(item["evidence_end_seconds"])
-        if not question.strip() or start < 0 or end <= start:
+        answerable = item.get("expected_answerable", True)
+        if not isinstance(answerable, bool) or not isinstance(question, str) or not question.strip():
             raise ValueError("Invalid question or reference evidence range")
+        if answerable:
+            start, end = float(item["evidence_start_seconds"]), float(item["evidence_end_seconds"])
+            if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
+                raise ValueError("Invalid question or reference evidence range")
         result = pipeline.ask(question).to_dict()
         hits = result["evidence"]
-        results.append({
+        row = {
             "question": question,
+            "expected_answerable": answerable,
             "abstained": result["abstained"],
-            "first_hit_overlaps": bool(hits and overlap(hits[0], start, end)),
-            "any_hit_overlaps": any(overlap(hit, start, end) for hit in hits),
             "returned_ranges": [[hit["start_time"], hit["end_time"]] for hit in hits],
-        })
+        }
+        if answerable:
+            row.update({
+                "first_hit_overlaps": bool(hits and overlap(hits[0], start, end)),
+                "any_hit_overlaps": any(overlap(hit, start, end) for hit in hits),
+                "first_hit_reference_coverage": coverage(hits[0], start, end) if hits else 0.0,
+                "best_hit_reference_coverage": max((coverage(hit, start, end) for hit in hits), default=0.0),
+            })
+        else:
+            row["correct_abstention"] = bool(result["abstained"])
+        results.append(row)
     return results
 
 
