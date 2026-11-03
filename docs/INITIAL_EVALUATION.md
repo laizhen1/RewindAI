@@ -97,3 +97,30 @@ For the first video use `data/evaluation/public_sample_questions.pending.json`. 
 ### Experimental semantic workspace smoke test
 
 The optional semantic mode was also run locally with the same quantized MiniLM model and generated captions for the public ethics sample. The HTTP service reported `semantic_experimental`. At the illustrative threshold of 0.4, `medical professionals` abstained; `How can AI help doctors select therapy?` returned a first segment at 36–56 seconds. These two observations check serving and expose uncertain retrieval behavior; they do not establish answer correctness or provide new accuracy metrics. The mode does not replace the default keyword baseline.
+
+## Independent TutorialVQA transcript benchmark
+
+We evaluated the existing keyword retrieval baseline on [TutorialVQA](https://github.com/acolas1/TutorialVQAData), an independently created instructional-video question answering dataset by Colas et al. ([LREC 2020 paper](https://aclanthology.org/2020.lrec-1.670/)). The dataset authors license their data under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). The test set was not authored by RewindAI; however, it covers Photoshop screencast tutorials rather than university lectures. It contains some low-quality questions and all items are treated as answerable; results therefore do not assess unanswerable-question rejection.
+
+On the original `test.json` (Git blob `de3b59001325df56c33c6180d62353054a5ebfbe`) and `videos.json` (Git blob `583ce560cf51aba22d78f4385e2bd7403049945d`), all 1,239 questions and 76 referenced videos passed range validation. We indexed each supplied transcript sentence as a separate segment, selected only the question's known source video, and returned at most three sentences using the existing default keyword retriever and reranker. We interpreted the dataset's start and end sentence indices as inclusive. The segment start/end fields in this experiment are **sentence indices, not video seconds**. No source video was downloaded or processed.
+
+| Measure | Result |
+| --- | ---: |
+| True-positive retrieved sentences | 1,028 |
+| False-positive retrieved sentences | 1,207 |
+| False-negative reference sentences | 7,312 |
+| Micro sentence precision | 0.460 |
+| Micro sentence recall | 0.123 |
+| Micro sentence F1 | 0.194 |
+| Top-1 sentence falls within reference span | 554 / 1,239 = 0.447 |
+| Questions with no returned evidence | 273 / 1,239 = 0.220 |
+
+Counts are aggregated over question–sentence pairs; precision is TP/(TP+FP), recall is TP/(TP+FN), and F1 is their harmonic mean. Reference spans often include multiple sentences while the system returns at most three, limiting achievable recall; this experiment is not directly comparable to full answer-span prediction results in the paper. A sentence within a reference span is treated as relevant without independent semantic review, and source transcript quality and the inclusive-index interpretation may affect scores. These numbers are **not** video-timestamp precision/recall, answer accuracy, speech-recognition performance, or a measure of the full multimodal system. Test data were not used to choose or tune the retrieval settings for this run.
+
+To reproduce, obtain `videos.json` and `test.json` directly from the linked TutorialVQA repository, observe its noncommercial data licence and citation requirements, then run locally:
+
+```powershell
+python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_TEST_JSON
+```
+
+The external data are not bundled in RewindAI. This script does not access the internet.

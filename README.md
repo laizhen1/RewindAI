@@ -110,7 +110,7 @@ CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完�
 上游候选问题集用于诊断，不是经过完整人工核验的正式金标准。不要把历史候选集中的结果写成经验证的准确率。课程视频测试应逐条核验答案和证据，按视频划分数据，分别检查语音、画面、综合和无答案问题。
 
 - [中文评估方案](docs/REWINDAI_EVALUATION_ZH.md)
-- [初步实际评估与可复现方法](docs/INITIAL_EVALUATION.md)
+- [初步实际评估、独立 TutorialVQA 字幕检索测试与可复现方法](docs/INITIAL_EVALUATION.md)
 - [人工标注模板](data/evaluation/rewindai_annotation_template.csv)
 - [实验记录模板](data/evaluation/rewindai_experiment_template.md)
 - [完整产品和研发计划](docs/REWINDAI_PLAN_ZH.md)
