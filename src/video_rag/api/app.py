@@ -146,8 +146,13 @@ def create_app(
         question = payload.get("question")
         if not isinstance(question, str) or not question.strip() or len(question) > 4000:
             return jsonify({"error": "question must contain 1 to 4000 characters"}), 400
+        video_id = payload.get("video_id")
+        if video_id is not None and (not isinstance(video_id, str) or not video_id):
+            return jsonify({"error": "video_id must be a non-empty string"}), 400
+        if video_id is not None and pipeline.video_path(video_id) is None:
+            return jsonify({"error": "video not found in the loaded index"}), 404
         try:
-            result = pipeline.ask(question)
+            result = pipeline.ask(question, video_id=video_id) if video_id is not None else pipeline.ask(question)
         except RuntimeError as exc:
             return jsonify({"error": str(exc)}), 503
         response = result.to_dict()
@@ -171,3 +176,4 @@ def create_app(
         return send_file(resolved, conditional=True)
 
     return app
+
