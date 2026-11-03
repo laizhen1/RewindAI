@@ -13,6 +13,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+semantic = [
+  "onnxruntime>=1.17,<2",
+  "tokenizers>=0.20,<1",
+]
 asr = [
   "faster-whisper==1.2.1",
   "av>=11,<17",
