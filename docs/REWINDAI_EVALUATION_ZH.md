@@ -56,3 +56,14 @@
 答案质量需人工逐条判断：回答是否正确、引用片段是否支持结论、是否遗漏重要条件。单独报告无答案题的拒答数量和分母，同时检查有答案题的错误拒答。记录视频预处理时长、问答延迟和硬件条件；量力而行，不推断未测的价格或显存。
 
 实验记录模板：`data/evaluation/rewindai_experiment_template.md`。分别记录每组配置、分母、结果、错误例子与限制，禁止将候选题、模拟演示或未运行实验标为正式结果。必要时先在私有目录整理题目，再使用 `scripts/validate_questions.py --help` 和 `scripts/evaluate_retrieval.py --help` 检查工具要求；检索工具需要真实索引和模型，不能只靠模板运行。
+# 本地时间范围诊断
+
+对已经准备好的本地视频、字幕与问题 JSON，可运行：
+
+```powershell
+python scripts/diagnose_transcript.py --video "C:\path\video.mp4" --subtitles "C:\path\video.srt" --questions "C:\path\questions.json"
+```
+
+JSON 包含 `questions` 数组；每条至少有 `question`。有答案的问题还需 `evidence_start_seconds` 和 `evidence_end_seconds`；无答案问题设置 `expected_answerable` 为 `false`。程序报告返回片段是否与参考时间有正时长交集、单个片段覆盖参考时间的比例，以及无答案问题是否拒答。时间重叠不等于回答正确，比例也不是模型准确率；只有先对问题及证据独立人工复核，诊断才有意义。输出可能包含问题文本，私人资料请留在本地。
+
+
