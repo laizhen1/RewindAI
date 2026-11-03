@@ -17,3 +17,13 @@ def test_invalid_label_rejected():
     with pytest.raises(ValueError):
         evaluate([{"video_id": "1", "transcript": ["apple"]}],
                  [{"video_id": "1", "question": "apple", "answer_start": 0, "answer_end": 1}])
+
+
+def test_context_expands_without_duplicates_and_respects_transcript_boundaries():
+    videos = [{"video_id": "1", "transcript": ["apple fruit", "orange fruit", "pear fruit"]}]
+    questions = [{"video_id": "1", "question": "apple", "answer_start": 0, "answer_end": 1}]
+    result = evaluate(videos, questions, context_sentences=1)
+    assert (result["tp"], result["fp"], result["fn"]) == (2, 0, 0)
+    assert result["f1"] == 1.0
+    with pytest.raises(ValueError):
+        evaluate(videos, questions, context_sentences=-1)

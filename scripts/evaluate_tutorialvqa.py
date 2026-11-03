@@ -13,8 +13,10 @@ from video_rag.schemas import VideoSegment
 from video_rag.transcript_baseline import build_transcript_segments
 
 
-def evaluate(videos: list[dict], questions: list[dict]) -> dict:
+def evaluate(videos: list[dict], questions: list[dict], context_sentences: int = 0) -> dict:
     """Compute micro sentence overlap with inclusive annotated answer spans."""
+    if type(context_sentences) is not int or not 0 <= context_sentences <= 5:
+        raise ValueError("context_sentences must be an integer between 0 and 5")
     lookup = {v["video_id"]: v for v in videos}
     if len(lookup) != len(videos) or not questions:
         raise ValueError("Duplicate video IDs or empty question set")
@@ -35,7 +37,9 @@ def evaluate(videos: list[dict], questions: list[dict]) -> dict:
         answer = pipelines[vid].ask(row["question"])
         predicted = [int(e.segment.segment_id) for e in answer.evidence]
         reference = set(range(start, end + 1))
-        found = set(predicted)
+        found = {index for hit in predicted
+                 for index in range(max(0, hit - context_sentences),
+                                    min(len(transcript), hit + context_sentences + 1))}
         tp += len(found & reference)
         fp += len(found - reference)
         fn += len(reference - found)
@@ -43,7 +47,8 @@ def evaluate(videos: list[dict], questions: list[dict]) -> dict:
         top1_overlap += int(bool(predicted) and predicted[0] in reference)
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
-    return {"question_count": len(questions), "video_count": len(pipelines), "tp": tp, "fp": fp, "fn": fn,
+    return {"question_count": len(questions), "video_count": len(pipelines), "context_sentences": context_sentences,
+            "tp": tp, "fp": fp, "fn": fn,
             "precision": precision, "recall": recall, "f1": 2 * precision * recall / (precision + recall)
             if precision + recall else 0.0, "top1_overlap_count": top1_overlap,
             "top1_overlap_rate": top1_overlap / len(questions), "abstained": abstained}
@@ -53,11 +58,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--videos", type=Path, required=True, help="Locally obtained TutorialVQA videos.json")
     parser.add_argument("--questions", type=Path, required=True, help="Locally obtained TutorialVQA split JSON")
+    parser.add_argument("--context-sentences", type=int, default=0,
+                        help="Adjacent transcript sentences on each side of a hit (0–5, default 0)")
     args = parser.parse_args()
     try:
         videos = json.loads(args.videos.read_text(encoding="utf-8-sig"))
         questions = json.loads(args.questions.read_text(encoding="utf-8-sig"))
-        result = evaluate(videos, questions)
+        result = evaluate(videos, questions, context_sentences=args.context_sentences)
     except (OSError, KeyError, TypeError, ValueError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
     print(json.dumps({"warning": "Sentence-index experiment, not video time or answer accuracy; "

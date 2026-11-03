@@ -124,3 +124,24 @@ python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions 
 ```
 
 The external data are not bundled in RewindAI. This script does not access the internet.
+
+### Adjacent sentence context experiment
+
+We explored whether including neighboring transcript sentences around each returned hit improves reference-span coverage. `scripts/evaluate_tutorialvqa.py --context-sentences N` expands each top-three retrieved sentence by N sentences on each side, clips to the transcript and deduplicates overlaps. It changes only the evaluation output set: the initial ranking, top-1 hit and abstention behavior are unchanged. This experiment does not modify the application.
+
+On the dataset's 1,238-question development split (`dev.json`, Git blob `f9901f4bc5bf3c131ba98c64d89776a75431909e`):
+
+| Context on each side | Micro precision | Micro recall | Micro F1 |
+| ---: | ---: | ---: | ---: |
+| 0 | 0.477 | 0.135 | 0.210 |
+| 1 | 0.394 | 0.294 | 0.337 |
+| 2 | 0.350 | 0.402 | 0.374 |
+| 3 | 0.317 | 0.479 | 0.382 |
+
+Among these four tested settings, three adjacent sentences gave the highest development F1. Applied to the 1,239-question test split, it produced TP 3,778, FP 8,373 and FN 4,562: precision **0.311**, recall **0.453** and F1 **0.369**, compared with **0.460 / 0.123 / 0.194** without context. More text covers more reference sentences but also introduces more unrelated sentences; it does not improve the initial hit. The test still has 273 abstentions and 554 top-1 overlaps.
+
+This is an exploratory comparison, not a generalization result: we inspected the baseline test result before this experiment, all 76 test videos also appear in the development split, and 12 distinct `(video_id, question)` pairs appear in both splits (exact string comparison). Context size was selected from only the four values 0–3 on development data. The data's answer spans are treated as inclusive; the reference transcripts, not model-transcribed lecture audio, are evaluated. Production uses variable-length timed subtitle chunks rather than individual sentence indices, so these numbers cannot be assumed to carry over. Evaluate on genuinely unseen videos and review relevance before deciding whether to expose extra context in the product.
+
+```powershell
+python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_DEV_OR_TEST_JSON --context-sentences 3
+```
