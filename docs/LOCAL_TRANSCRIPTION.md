@@ -16,6 +16,8 @@ python scripts/transcribe_local.py "C:\path\authorized-lecture.mp4" --language e
 
 Choose `--language zh` for Chinese, or omit it for automatic detection. The default is the multilingual `base` model, CPU with int8 computation, and `local_files_only=True`. Required model files must already be cached; the first run with an empty cache will fail without contacting the model hub. To explicitly allow model files to download, add `--allow-model-download`. This download can contact a model provider, but the command does not upload the input media. Existing offline environment settings may still prevent downloads.
 
+On Windows, after installing the ASR dependency and caching the model, double-click `Start-RewindAI-Transcribe.cmd` and choose a video, or drag one video onto that file. The tool automatically detects the language, transcribes on CPU and then starts the local search interface. It never opts into downloading the model. Keep the command window open while using the interface. If the model is absent, follow the explicit download instructions above first. The generated SRT remains in `artifacts/transcripts`; the video loaded by this launcher is available for that session, and can be added through the regular workspace using that SRT for later restoration.
+
 To transcribe and then open the local subtitle-search interface in one command:
 
 ```powershell
@@ -33,4 +35,3 @@ This is a standalone transcription tool: the original `prepare_videos.py` does n
 ## Verified local example
 
 On Windows with Python 3.12, faster-whisper 1.2.1 and PyAV 16.1.0, the multilingual `base` model successfully transcribed the 97-second [public educational sample](PUBLIC_SAMPLE_ZH.md) locally on CPU. Its output had 21 cues; the supplied English subtitle had 15. A case-normalized word-sequence comparison produced a similarity of 0.977 for this single sample. This is not a word-error rate or a formal accuracy claim, and neither subtitle has been independently verified against the recording. PyAV 19.0.2 produced an incompatible `metadata_errors` argument error in this setup, so the installation example constrains PyAV below 17.
-
