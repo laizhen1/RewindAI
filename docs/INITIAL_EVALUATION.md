@@ -29,6 +29,8 @@ The same public video was transcribed on CPU using faster-whisper `base` and com
 
 This is a single short, curated public sample. The supplied captions are a convenient reference, not independently verified ground truth; timing, speaker names and semantic correctness were not evaluated. English words and individual CJK characters are used as tokens, so results across languages are not directly comparable. The test is **not** an accuracy claim about question answering or Canvas lectures.
 
+As an additional check, the same local model was run on a second [public KI-Campus video](PUBLIC_SAMPLE_ZH.md), about 143 seconds long. Its published English subtitle contained 282 reference tokens; the generated transcript also contained 282. Alignment found 277 matches, 5 substitutions, no insertions or deletions: WER **1.77%**, precision **98.23%**, recall **98.23%** and F1 **98.23%**. This second sample has the same producer and style; its reference is likewise not independently verified. The two examples are too few to establish general performance, especially for real lectures with background noise, accents or specialist vocabulary.
+
 ```powershell
 python scripts/evaluate_transcription.py --reference "PATH_TO_SUPPLIED.srt" --hypothesis "PATH_TO_GENERATED.srt"
 ```
