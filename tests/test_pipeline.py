@@ -37,6 +37,13 @@ def make_pipeline(minimum_score=0.01):
 
 
 class PipelineTests(unittest.TestCase):
+    def test_scoped_search_checks_past_global_top_k(self):
+        pipeline = make_pipeline()
+        pipeline._recall_top_k = 1
+        result = pipeline.ask("飞机蛋糕", video_id="v2")
+        self.assertFalse(result.abstained)
+        self.assertTrue(all(e.segment.video_id == "v2" for e in result.evidence))
+
     def test_pipeline_returns_structured_evidence(self):
         result = make_pipeline().ask("飞机在哪里降落")
         self.assertFalse(result.abstained)
