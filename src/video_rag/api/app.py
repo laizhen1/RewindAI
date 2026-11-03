@@ -237,12 +237,30 @@ def create_app(
         if not isinstance(question, str) or not question.strip() or len(question) > 4000:
             return jsonify({"error": "question must contain 1 to 4000 characters"}), 400
         video_id = payload.get("video_id")
+        course_id = payload.get("course_id")
+        if course_id is not None and (type(course_id) is not int or course_id <= 0):
+            return jsonify({"error": "course_id must be a positive integer"}), 400
+        if video_id is not None and course_id is not None:
+            return jsonify({"error": "Choose a video or a course, not both"}), 400
         if video_id is not None and (not isinstance(video_id, str) or not video_id):
             return jsonify({"error": "video_id must be a non-empty string"}), 400
         if video_id is not None and pipeline.video_path(video_id) is None:
             return jsonify({"error": "video not found in the loaded index"}), 404
+        course_videos = None
+        if course_id is not None:
+            if not any(course["id"] == course_id for course in store.courses()):
+                return jsonify({"error": "course not found"}), 404
+            course_videos = {key for key, value in store.assignments().items() if value == course_id
+                             and pipeline.video_path(key) is not None}
+            if not course_videos:
+                return jsonify({"error": "No loaded videos in this course"}), 400
         try:
-            result = pipeline.ask(question, video_id=video_id) if video_id is not None else pipeline.ask(question)
+            if course_videos is not None:
+                result = pipeline.ask(question, video_ids=course_videos)
+            elif video_id is not None:
+                result = pipeline.ask(question, video_id=video_id)
+            else:
+                result = pipeline.ask(question)
         except RuntimeError as exc:
             return jsonify({"error": str(exc)}), 503
         response = result.to_dict()
