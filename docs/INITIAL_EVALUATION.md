@@ -13,6 +13,12 @@ This is a **small provisional engineering diagnostic**, not a validated benchmar
 
 On this one video and nine draft questions: TP = 3, FP = 3, FN = 0, TN = 3; question-level temporal-evidence precision = **0.50**, recall = **1.00**, and F1 = **0.67**. All three false positives were the harder unanswerable candidates. These values do not show whether the answer text is correct and must not be used as portfolio accuracy figures or generalized to other videos.
 
+### Experimental semantic retrieval
+
+An additional CPU experiment used [Xenova/all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2), quantized ONNX model revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`, with a deliberately uncalibrated cosine cutoff of 0.4. The same nine provisional questions gave TP = 2, FP = 3, FN = 1, TN = 4: precision **0.40**, recall **0.67**, F1 **0.50**. This is below the keyword baseline on this tiny sample, so it has **not** replaced the default retrieval. These are not held-out results; the cutoff is illustrative rather than validated, and this model is English-only. Cosine similarity is not a calibrated probability and cannot establish answerability.
+
+To repeat, install `pip install -e ".[semantic]"`, obtain that model revision's `tokenizer.json` and `onnx/model_quantized.onnx` into a local directory, then use `python scripts/diagnose_semantic.py --video VIDEO --subtitles SRT --questions data/evaluation/public_sample_questions.pending.json --model-dir LOCAL_MODEL_DIRECTORY --threshold 0.4`. The diagnostic itself reads model and video data locally; the model files and source videos are not committed. Model weights have their own Apache-2.0 licence. Do not tune a threshold on the final test set.
+
 ## Reproduce
 
 Obtain the video as described in [PUBLIC_SAMPLE_ZH.md](PUBLIC_SAMPLE_ZH.md), generate a local subtitle with [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md), then run:
