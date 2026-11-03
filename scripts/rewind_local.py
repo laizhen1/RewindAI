@@ -43,9 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     print("Starting local subtitle search; verify results against the video.", flush=True)
     return subprocess.call([sys.executable, str(ROOT / "scripts" / "run_transcript.py"),
                             "--video", str(video), "--subtitles", str(subtitles),
-                            "--port", str(args.port)], cwd=ROOT)
+                            "--save-startup-video", "--port", str(args.port)], cwd=ROOT)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
