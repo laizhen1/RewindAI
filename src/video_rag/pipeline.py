@@ -6,7 +6,7 @@ from time import perf_counter
 
 from video_rag.retrieval.base import Generator, Reranker, Retriever
 from video_rag.retrieval.fusion import reciprocal_rank_fusion
-from video_rag.schemas import Answer, Evidence, VideoSegment
+from video_rag.schemas import Answer, Evidence, SearchHit, VideoSegment
 
 
 class VideoRAGPipeline:
@@ -52,18 +52,29 @@ class VideoRAGPipeline:
         for retriever in self._retrievers:
             retriever.search(query, 1)
 
-    def ask(self, query: str) -> Answer:
+    def ask(self, query: str, *, video_id: str | None = None) -> Answer:
         query = query.strip()
         if not query:
             raise ValueError("query must not be empty")
         if not self._segments:
             raise RuntimeError("Pipeline index is empty; call build() first")
+        if video_id is not None and not any(s.video_id == video_id for s in self._segments.values()):
+            raise ValueError("video not found in the loaded index")
 
         started = perf_counter()
-        result_lists = [
-            retriever.search(query, self._recall_top_k)
-            for retriever in self._retrievers
-        ]
+        # Scoped queries must not lose the desired video to global top-k truncation.
+        # Ask each segment-level retriever for its complete ranking, then filter
+        # and renumber before fusion. This is more expensive for large indexes.
+        count = len(self._segments) if video_id is not None else self._recall_top_k
+        result_lists = [retriever.search(query, count) for retriever in self._retrievers]
+        if video_id is not None:
+            result_lists = [
+                [SearchHit(hit.segment_id, hit.score, hit.source, rank, hit.metadata)
+                 for rank, hit in enumerate(
+                    (hit for hit in hits if hit.segment_id in self._segments
+                     and self._segments[hit.segment_id].video_id == video_id), start=1)]
+                for hits in result_lists
+            ]
         recalled_at = perf_counter()
         fused = reciprocal_rank_fusion(
             result_lists,
