@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Lock
 from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, render_template, request, send_file
@@ -18,6 +19,7 @@ def create_app(
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     store = LibraryStore(database_path)
+    import_lock = Lock()
     if mode not in {"demo", "full", "transcript", "unknown"}:
         raise ValueError("mode must be demo, full, transcript or unknown")
 
@@ -57,6 +59,39 @@ def create_app(
             item["course_id"] = assignments.get(item["id"])
             item["video_url"] = f"/api/videos/{item['id']}"
         return jsonify({"courses": store.courses(), "videos": videos})
+
+    @app.post("/api/library/local-video")
+    def import_local_video():
+        nonlocal pipeline
+        if mode != "transcript":
+            return jsonify({"error": "Local import is only available in subtitle mode"}), 409
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "JSON object required"}), 400
+        video = payload.get("video_path")
+        subtitle = payload.get("subtitle_path", "")
+        if not isinstance(video, str) or not video.strip() or not isinstance(subtitle, str):
+            return jsonify({"error": "A local video path and optional subtitle path are required"}), 400
+        if len(video) > 4096 or len(subtitle) > 4096:
+            return jsonify({"error": "Path is too long"}), 400
+        from video_rag.transcript_baseline import (
+            build_transcript_segments,
+            find_subtitles,
+            segments_from_subtitles,
+        )
+        try:
+            video_path = Path(video.strip()).expanduser().resolve()
+            subtitle_path = Path(subtitle.strip()).expanduser().resolve() if subtitle.strip() else find_subtitles(video_path)
+            added = segments_from_subtitles(video_path, subtitle_path)
+            with import_lock:
+                current = pipeline.segments()
+                if any(segment.video_id == added[0].video_id for segment in current):
+                    return jsonify({"error": "Video is already loaded"}), 409
+                replacement = build_transcript_segments([*current, *added])
+                pipeline = replacement
+            return jsonify({"video_id": added[0].video_id, "segment_count": len(added)}), 201
+        except (OSError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
 
     @app.post("/api/courses")
     def create_course():
