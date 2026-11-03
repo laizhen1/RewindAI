@@ -154,7 +154,8 @@ def segments_from_subtitles(video_path: str | Path, subtitles_path: str | Path) 
     if subtitles.stat().st_size > MAX_SUBTITLE_BYTES:
         raise ValueError("Subtitle file exceeds the 10 MiB limit")
     try:
-        cues = parse_subtitles(subtitles.read_text(encoding="utf-8-sig"))
+        subtitle_text = subtitles.read_text(encoding="utf-8-sig")
+        cues = parse_subtitles(subtitle_text)
     except UnicodeDecodeError as exc:
         raise ValueError("Subtitles must be encoded as UTF-8") from exc
 
@@ -167,9 +168,13 @@ def segments_from_subtitles(video_path: str | Path, subtitles_path: str | Path) 
         else:
             groups[-1].append(cue)
     video_id = "video_" + hashlib.sha256(str(video).encode("utf-8")).hexdigest()[:16]
+    stat = video.stat()
+    revision = hashlib.sha256(
+        (subtitle_text + f"\0{stat.st_size}\0{stat.st_mtime_ns}").encode("utf-8")
+    ).hexdigest()[:16]
     return [
         VideoSegment(
-            segment_id=f"{video_id}_{index:05d}", video_id=video_id,
+            segment_id=f"{video_id}_{revision}_{index:05d}", video_id=video_id,
             source_path=str(video), start_time=group[0].start_time,
             end_time=max(cue.end_time for cue in group),
             transcript=" ".join(cue.text for cue in group),
@@ -204,4 +209,3 @@ def build_transcript_segments(segments: list[VideoSegment]) -> VideoRAGPipeline:
     )
     pipeline.build(segments)
     return pipeline
-
