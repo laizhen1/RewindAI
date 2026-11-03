@@ -63,6 +63,11 @@ class LibraryStore:
             connection.execute("INSERT INTO local_transcript_videos VALUES (?, ?, ?, ?, ?)",
                                (video_id, path, size, mtime_ns, segments_json))
 
+    def forget_video(self, video_id: str) -> bool:
+        """Remove only the cached source and transcript, retaining personal notes."""
+        with self.connect() as connection:
+            return connection.execute("DELETE FROM local_transcript_videos WHERE video_id = ?", (video_id,)).rowcount > 0
+
     def create_course(self, name: str) -> dict:
         with self.connect() as connection:
             result = connection.execute("INSERT INTO courses (name) VALUES (?)", (name,))
@@ -120,4 +125,3 @@ class LibraryStore:
                 (question, segment_id, rating, comment),
             )
             return int(result.lastrowid)
-
