@@ -68,7 +68,7 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 
 ### 使用完整多模态模型
 
-完整流程涉及视频预处理、构建索引和启动真实服务。原项目推荐 Ubuntu 22.04、Python 3.11+、FFmpeg、24 GB 以上 NVIDIA 显存、64 GB 内存与 100 GB 磁盘；具体资源取决于视频和模型配置。请先阅读 [本地视频导入指南](docs/LOCAL_VIDEO_IMPORT.md)、[原始 VideoRAG 技术说明](docs/UPSTREAM_VIDEORAG.md) 和 `config.toml`，再根据自己的设备验证。模型权重和依赖的首次获取可能需要联网。
+完整流程涉及视频预处理、构建索引和启动真实服务。推荐 Ubuntu 22.04、Python 3.11+、FFmpeg、24 GB 以上 NVIDIA 显存、64 GB 内存与 100 GB 磁盘；具体资源取决于视频和模型配置。请先阅读 [本地视频导入指南](docs/LOCAL_VIDEO_IMPORT.md) 和 `config.toml`，再根据自己的设备验证。模型权重和依赖的首次获取可能需要联网。
 
 安装好模型依赖、FFmpeg 并准备好本地缓存后，可处理已有授权的视频文件或文件夹：
 
@@ -89,7 +89,7 @@ Question ───────────────────────�
       → evidence-grounded answer + timestamps → review and bookmarks
 ```
 
-CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完整模型流程是原项目描述的方案，不代表本次已经验证过模型质量。
+CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完整模型流程不代表已经验证过模型质量。
 
 ## Evaluation · 评估
 
@@ -102,16 +102,13 @@ CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完�
 - [完整产品和研发计划](docs/REWINDAI_PLAN_ZH.md)
 - [可用于本地演示的公开教育视频及许可](docs/PUBLIC_SAMPLE_ZH.md)
 
-## Attribution · 来源与贡献
+## Licence · 许可证
 
-RewindAI builds on [VideoRAG](https://github.com/zhuzhenxiang93-create/VideoRAG). The upstream project supplies the existing video RAG pipeline, evaluation tools and initial UI. RewindAI adds a learning workspace and product workflow; see the source and commit history for the precise changes. 原作者的技术说明保留在 [docs/UPSTREAM_VIDEORAG.md](docs/UPSTREAM_VIDEORAG.md)。
-
-The repository owner has confirmed that they authored the supplied base project or have permission to modify and republish it. No specific open-source licence has been selected in this repository yet; consult the owner before reuse. Upstream model weights, datasets, videos and third-party dependencies have their own terms.
+No specific open-source licence has been selected for this repository yet; consult the owner before reuse. Model weights, datasets, videos and third-party dependencies have their own terms.
 
 ## Links · 项目链接
 
 - RewindAI: <https://github.com/laizhen1/RewindAI>
-- VideoRAG: <https://github.com/zhuzhenxiang93-create/VideoRAG>
 - Whisper: <https://github.com/openai/whisper>
 - FAISS: <https://github.com/facebookresearch/faiss>
 
