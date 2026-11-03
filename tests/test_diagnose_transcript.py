@@ -1,4 +1,4 @@
-from scripts.diagnose_transcript import diagnose, overlap
+from scripts.diagnose_transcript import coverage, diagnose, overlap
 
 
 def test_overlap_requires_positive_duration():
@@ -22,4 +22,20 @@ def test_diagnostic_reports_first_and_any_overlap():
                                    "evidence_end_seconds": 14}])[0]
     assert result["first_hit_overlaps"] is False
     assert result["any_hit_overlaps"] is True
+    assert result["best_hit_reference_coverage"] == 1.0
+
+
+def test_coverage_and_unanswerable_result():
+    assert coverage({"start_time": 19, "end_time": 30}, 10, 20) == 0.1
+
+    class Pipeline:
+        def ask(self, question):
+            class Result:
+                def to_dict(self):
+                    return {"abstained": True, "evidence": []}
+            return Result()
+
+    row = diagnose(Pipeline(), [{"question": "Not in video?", "expected_answerable": False}])[0]
+    assert row["correct_abstention"] is True
+    assert "any_hit_overlaps" not in row
 
