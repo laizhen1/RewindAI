@@ -47,6 +47,22 @@ class LibraryApiTests(unittest.TestCase):
         self.assertEqual(reopened.get("/api/bookmarks").get_json()["bookmarks"], [])
         self.assertEqual(self.client.delete(f"/api/bookmarks/{item['id']}").status_code, 404)
 
+    def test_rename_and_delete_course_keep_video_and_bookmark(self):
+        course = self.client.post("/api/courses", json={"name": "Old"}).get_json()["id"]
+        self.client.put("/api/videos/demo/course", json={"course_id": course})
+        self.client.post("/api/bookmarks", json={"video_id": "demo", "segment_id": "demo_0001", "note": "keep"})
+        self.assertEqual(self.client.patch(f"/api/courses/{course}", json={"name": " "}).status_code, 400)
+        self.assertEqual(self.client.patch(f"/api/courses/{course}", json={"name": "  New  "}).get_json()["name"], "New")
+        self.assertEqual(self.client.delete(f"/api/courses/{course}", headers={"Origin": "https://bad.example"}).status_code, 403)
+        self.assertEqual(self.client.delete(f"/api/courses/{course}").status_code, 204)
+        reopened = create_app(build_demo_pipeline(), database_path=self.db).test_client()
+        data = reopened.get("/api/library").get_json()
+        self.assertEqual(data["courses"], [])
+        self.assertIsNone(data["videos"][0]["course_id"])
+        self.assertEqual(reopened.get("/api/bookmarks").get_json()["bookmarks"][0]["note"], "keep")
+        self.assertEqual(self.client.delete(f"/api/courses/{course}").status_code, 404)
+        self.assertEqual(self.client.patch(f"/api/courses/{course}", json={"name": "New"}).status_code, 404)
+
     def test_invalid_evidence_and_feedback_are_rejected(self):
         self.assertEqual(self.client.post("/api/courses", json={"name": " "}).status_code, 400)
         self.assertEqual(self.client.post("/api/ask", json=[]).status_code, 400)

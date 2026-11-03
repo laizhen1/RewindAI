@@ -173,6 +173,22 @@ def create_app(
             return jsonify({"error": "name must be between 1 and 120 characters"}), 400
         return jsonify(store.create_course(name.strip())), 201
 
+    @app.patch("/api/courses/<int:course_id>")
+    def rename_course(course_id: int):
+        payload = request.get_json(silent=True)
+        name = payload.get("name") if isinstance(payload, dict) else None
+        if not isinstance(name, str) or not name.strip() or len(name.strip()) > 120:
+            return jsonify({"error": "name must be between 1 and 120 characters"}), 400
+        if not store.rename_course(course_id, name.strip()):
+            return jsonify({"error": "course not found"}), 404
+        return jsonify({"id": course_id, "name": name.strip()})
+
+    @app.delete("/api/courses/<int:course_id>")
+    def delete_course(course_id: int):
+        if not store.delete_course(course_id):
+            return jsonify({"error": "course not found"}), 404
+        return "", 204
+
     @app.put("/api/videos/<video_id>/course")
     def assign_course(video_id: str):
         if pipeline.video_path(video_id) is None:

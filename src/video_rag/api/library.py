@@ -73,6 +73,16 @@ class LibraryStore:
             result = connection.execute("INSERT INTO courses (name) VALUES (?)", (name,))
             return {"id": result.lastrowid, "name": name}
 
+    def rename_course(self, course_id: int, name: str) -> bool:
+        with self.connect() as connection:
+            return connection.execute("UPDATE courses SET name = ? WHERE id = ?", (name, course_id)).rowcount > 0
+
+    def delete_course(self, course_id: int) -> bool:
+        """Unassign videos and remove the course together in one transaction."""
+        with self.connect() as connection:
+            connection.execute("DELETE FROM video_courses WHERE course_id = ?", (course_id,))
+            return connection.execute("DELETE FROM courses WHERE id = ?", (course_id,)).rowcount > 0
+
     def assignments(self) -> dict[str, int]:
         with self.connect() as connection:
             return {row["video_id"]: row["course_id"] for row in connection.execute(
