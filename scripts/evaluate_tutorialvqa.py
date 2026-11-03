@@ -5,11 +5,13 @@ import argparse
 import hashlib
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from video_rag.pipeline import VideoRAGPipeline
 from video_rag.schemas import VideoSegment
 from video_rag.transcript_baseline import build_transcript_segments
 
@@ -20,7 +22,8 @@ def partition_for_video(video_id: str) -> str:
     return "heldout" if int.from_bytes(digest[:8], "big") % 5 == 0 else "development"
 
 
-def evaluate(videos: list[dict], questions: list[dict], context_sentences: int = 0) -> dict:
+def evaluate(videos: list[dict], questions: list[dict], context_sentences: int = 0,
+             builder: Callable[[list[VideoSegment]], VideoRAGPipeline] = build_transcript_segments) -> dict:
     """Compute micro sentence overlap with inclusive annotated answer spans."""
     if type(context_sentences) is not int or not 0 <= context_sentences <= 5:
         raise ValueError("context_sentences must be an integer between 0 and 5")
@@ -40,7 +43,7 @@ def evaluate(videos: list[dict], questions: list[dict], context_sentences: int =
             segments = [VideoSegment(segment_id=str(index), video_id=str(vid), source_path="local-only",
                                      start_time=float(index), end_time=float(index + 1), transcript=text)
                         for index, text in enumerate(transcript)]
-            pipelines[vid] = build_transcript_segments(segments)
+            pipelines[vid] = builder(segments)
         answer = pipelines[vid].ask(row["question"])
         predicted = [int(e.segment.segment_id) for e in answer.evidence]
         reference = set(range(start, end + 1))
@@ -69,17 +72,31 @@ def main() -> int:
                         help="Adjacent transcript sentences on each side of a hit (0–5, default 0)")
     parser.add_argument("--video-partition", choices=("all", "development", "heldout"), default="all",
                         help="Deterministic video-ID partition; questions must come from the desired source split")
+    parser.add_argument("--semantic-model", type=Path, help="Optional local English ONNX model directory")
+    parser.add_argument("--semantic-threshold", type=float, default=0.4,
+                        help="Uncalibrated cosine cutoff for semantic mode (default 0.4)")
     args = parser.parse_args()
     try:
         videos = json.loads(args.videos.read_text(encoding="utf-8-sig"))
         questions = json.loads(args.questions.read_text(encoding="utf-8-sig"))
         if args.video_partition != "all":
             questions = [row for row in questions if partition_for_video(row["video_id"]) == args.video_partition]
-        result = evaluate(videos, questions, context_sentences=args.context_sentences)
-    except (OSError, KeyError, TypeError, ValueError) as exc:
+        builder = build_transcript_segments
+        if args.semantic_model:
+            from video_rag.retrieval.onnx_semantic import (
+                OnnxSentenceEncoder,
+                build_semantic_pipeline,
+            )
+
+            encoder = OnnxSentenceEncoder(args.semantic_model)
+            builder = lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold)
+        result = evaluate(videos, questions, context_sentences=args.context_sentences, builder=builder)
+    except (ImportError, OSError, KeyError, TypeError, ValueError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
     print(json.dumps({"warning": "Sentence-index experiment, not video time or answer accuracy; "
                       "labels assumed inclusive.", "video_partition": args.video_partition,
+                      "retrieval": "semantic_experimental" if args.semantic_model else "keyword",
+                      "semantic_threshold": args.semantic_threshold if args.semantic_model else None,
                       "metrics": result}, indent=2))
     return 0
 

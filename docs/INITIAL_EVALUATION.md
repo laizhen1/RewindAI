@@ -163,3 +163,20 @@ Both settings have 110 top-1 hits and 66 abstentions: surrounding context adds c
 python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_DEV_JSON --video-partition development --context-sentences 3
 python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_TEST_JSON --video-partition heldout --context-sentences 3
 ```
+
+### Keyword versus local semantic retrieval
+
+We ran the existing experimental CPU semantic mode on the same 294 questions from 18 video-disjoint test-side videos used above, with **no adjacent-sentence expansion**. The model was `Xenova/all-MiniLM-L6-v2`, quantized ONNX revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`. The cosine cutoff remained the previously used, uncalibrated 0.4; it was not tuned on this subset. Each method searched the same supplied transcript for the known source video and returned up to three sentences.
+
+| Method | TP | FP | FN | Precision | Recall | F1 | Top-1 in reference | Abstentions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Keyword | 211 | 324 | 2,007 | 0.394 | 0.095 | 0.153 | 110 / 294 | 66 |
+| Experimental semantic | 287 | 453 | 1,931 | 0.388 | 0.129 | 0.194 | 136 / 294 | 27 |
+
+On this sample, semantic retrieval returned more reference sentences and more non-reference sentences. These are micro sentence-overlap metrics against the dataset's inclusive reference ranges, not semantic correctness or video-time localization. All questions are treated as answerable, so fewer abstentions do not establish that semantic retrieval handles unanswerable questions safely. This subset is video-disjoint from the partition used in the adjacent-context experiment, but was included in earlier aggregate analysis; it is not a pristine held-out benchmark. The source consists of Photoshop instructional transcripts, not real lecture recordings or ASR output. The difference is exploratory, with no statistical significance or general performance claim.
+
+```powershell
+python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_TEST_JSON --video-partition heldout --semantic-model PATH_TO_LOCAL_MODEL_DIRECTORY --semantic-threshold 0.4
+```
+
+Install the optional semantic dependencies and supply the model files as described in the README. This evaluation reads input and model files locally.
