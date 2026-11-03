@@ -23,3 +23,13 @@ python scripts/diagnose_transcript.py --video "PATH_TO_VIDEO.webm" --subtitles "
 
 Different transcription/model versions can change outputs. Next, manually verify video evidence and negative labels, create questions from several independent videos, reserve videos not used during development, and report question-level and retrieval metrics separately. Include false-positive examples and human assessment of answer support.
 
+## Transcription comparison
+
+The same public video was transcribed on CPU using faster-whisper `base` and compared with the video's supplied English subtitles using `scripts/evaluate_transcription.py`. After case normalization and punctuation removal, the reference has 236 tokens and the hypothesis 231. Minimum-edit alignment yielded 228 matches, 3 substitutions, 5 deletions and 0 insertions: **word error rate 3.39%**, aligned-token precision **98.70%**, recall **96.61%** and F1 **97.64%**. Precision is matches divided by hypothesis tokens; recall is matches divided by reference tokens. WER counts substitutions, deletions and insertions divided by reference tokens, and can exceed 100%.
+
+This is a single short, curated public sample. The supplied captions are a convenient reference, not independently verified ground truth; timing, speaker names and semantic correctness were not evaluated. English words and individual CJK characters are used as tokens, so results across languages are not directly comparable. The test is **not** an accuracy claim about question answering or Canvas lectures.
+
+```powershell
+python scripts/evaluate_transcription.py --reference "PATH_TO_SUPPLIED.srt" --hypothesis "PATH_TO_GENERATED.srt"
+```
+
