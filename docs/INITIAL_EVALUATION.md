@@ -93,3 +93,7 @@ python scripts/compare_caption_inputs.py --video PATH_TO_VIDEO --reference-capti
 ```
 
 For the first video use `data/evaluation/public_sample_questions.pending.json`. The JSON output includes per-question ranges and the counts behind each metric. The tool processes the input files locally and does not upload them.
+
+### Experimental semantic workspace smoke test
+
+The optional semantic mode was also run locally with the same quantized MiniLM model and generated captions for the public ethics sample. The HTTP service reported `semantic_experimental`. At the illustrative threshold of 0.4, `medical professionals` abstained; `How can AI help doctors select therapy?` returned a first segment at 36–56 seconds. These two observations check serving and expose uncertain retrieval behavior; they do not establish answer correctness or provide new accuracy metrics. The mode does not replace the default keyword baseline.

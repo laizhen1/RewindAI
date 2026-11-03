@@ -68,6 +68,16 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 
 若视频没有字幕，可以另行安装 faster-whisper 并使用 [本地转字幕指南](docs/LOCAL_TRANSCRIPTION.md)。Windows 用户完成安装并缓存模型后，可双击 `Start-RewindAI-Transcribe.cmd` 选择视频进行本地转录，再打开搜索界面。默认使用本地缓存和 CPU，不向云端上传视频或音频；首次获取模型需显式允许下载。转录已在两段公开短视频上使用本地模型验证；课程录制的效果仍需评估。
 
+### 实验性英语语义搜索
+
+可选择本地 ONNX 英语向量模型尝试搜索相近表达。先安装 `python -m pip install -e ".[semantic]"`，并自行准备 [Xenova/all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2) 的 `tokenizer.json` 和 `onnx/model_quantized.onnx` 到同一模型目录，然后启动：
+
+```powershell
+python scripts/run_transcript.py --semantic-model PATH_TO_LOCAL_MODEL_DIRECTORY
+```
+
+语义模式仅在本机 CPU 推理，不下载模型或上传字幕。它使用尚未校准的余弦阈值 0.4，只针对英语实验，可能返回不相关片段；它不生成回答，也不理解视频画面。索引较多字幕时启动和导入可能变慢。结果需回看核对。此前小样本评估有较多误报，详见 [评估报告](docs/INITIAL_EVALUATION.md)。不传该参数时仍使用默认关键词搜索。
+
 ### 使用完整多模态模型
 
 完整流程涉及视频预处理、构建索引和启动真实服务。推荐 Ubuntu 22.04、Python 3.11+、FFmpeg、24 GB 以上 NVIDIA 显存、64 GB 内存与 100 GB 磁盘；具体资源取决于视频和模型配置。请先阅读 [本地视频导入指南](docs/LOCAL_VIDEO_IMPORT.md) 和 `config.toml`，再根据自己的设备验证。模型权重和依赖的首次获取可能需要联网。

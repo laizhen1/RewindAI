@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
@@ -18,6 +19,8 @@ def create_app(
     *,
     database_path: str | Path = "artifacts/rewindai/library.sqlite3",
     mode: str = "unknown",
+    transcript_builder: Callable[[list[VideoSegment]], VideoRAGPipeline] | None = None,
+    retrieval_type: str = "keyword",
 ) -> Flask:
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
@@ -28,6 +31,8 @@ def create_app(
     unavailable_videos: dict[str, str] = {}
     if mode == "transcript":
         from video_rag.transcript_baseline import build_transcript_segments
+
+        transcript_builder = transcript_builder or build_transcript_segments
 
         restored = list(pipeline.segments())
         loaded_ids = {segment.video_id for segment in restored}
@@ -48,7 +53,7 @@ def create_app(
             except (OSError, ValueError, TypeError, KeyError):
                 unavailable_videos[record["video_id"]] = Path(record["video_path"]).name
         if len(restored) > len(pipeline.segments()):
-            pipeline = build_transcript_segments(restored)
+            pipeline = transcript_builder(restored)
 
     @app.before_request
     def protect_local_workspace():
@@ -76,7 +81,7 @@ def create_app(
 
     @app.get("/api/health")
     def health():
-        return jsonify({"status": "ok", "mode": mode})
+        return jsonify({"status": "ok", "mode": mode, "retrieval_type": retrieval_type})
 
     @app.get("/api/library")
     def library():
@@ -116,7 +121,6 @@ def create_app(
         if len(video) > 4096 or len(subtitle) > 4096:
             return jsonify({"error": "Path is too long"}), 400
         from video_rag.transcript_baseline import (
-            build_transcript_segments,
             find_subtitles,
             segments_from_subtitles,
         )
@@ -132,7 +136,7 @@ def create_app(
                 current = pipeline.segments()
                 if any(segment.video_id == added[0].video_id for segment in current):
                     return jsonify({"error": "Video is already loaded"}), 409
-                replacement = build_transcript_segments([*current, *added])
+                replacement = transcript_builder([*current, *added])
                 store.remember_video(added[0].video_id, str(video_path), current_stat.st_size,
                                      current_stat.st_mtime_ns, json.dumps([segment.to_dict() for segment in added]))
                 pipeline = replacement

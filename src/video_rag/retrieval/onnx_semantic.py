@@ -50,7 +50,9 @@ class SemanticRetriever:
     def build(self, segments: list[VideoSegment]) -> None:
         items = [segment for segment in segments if segment.transcript.strip()]
         if not items:
-            raise ValueError("No transcript text to index")
+            self.ids = []
+            self.vectors = None
+            return
         self.ids = [segment.segment_id for segment in items]
         self.vectors = np.concatenate([
             self.encoder.encode([segment.transcript for segment in items[i:i + 32]])
@@ -76,3 +78,15 @@ class SemanticReranker:
         vectors = self.encoder.encode([query, *[segment.transcript for segment in segments]])
         return [float(value) for value in vectors[1:] @ vectors[0]]
 
+
+def build_semantic_pipeline(segments: list[VideoSegment], encoder: OnnxSentenceEncoder, threshold: float):
+    """Create an experimental local transcript index with a shared encoder."""
+    from video_rag.adapters import EvidenceGenerator
+    from video_rag.pipeline import VideoRAGPipeline
+
+    if not np.isfinite(threshold) or not -1 <= threshold <= 1:
+        raise ValueError("Semantic threshold must be finite and between -1 and 1")
+    pipeline = VideoRAGPipeline(retrievers=[SemanticRetriever(encoder)], reranker=SemanticReranker(encoder),
+                                generator=EvidenceGenerator(), minimum_rerank_score=threshold)
+    pipeline.build(segments)
+    return pipeline
