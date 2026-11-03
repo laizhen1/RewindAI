@@ -1,0 +1,52 @@
+{
+  "status": "subtitle_based_pending_human_video_review",
+  "source_video": "ai_ethics_kicampus.webm",
+  "source_subtitles": "ai_ethics_kicampus.en.srt",
+  "video_source_page": "https://commons.wikimedia.org/wiki/File:Ethics_of_AI_in_Digital_Medicine_%E2%80%93_Explanation_why_transparent_explainable_AI_is_important.webm",
+  "subtitle_source_page": "https://commons.wikimedia.org/wiki/TimedText:Ethics_of_AI_in_Digital_Medicine_%E2%80%93_Explanation_why_transparent_explainable_AI_is_important.webm.en.srt",
+  "notes": "Drafts based on the public subtitles; timestamps and answers have not been verified by watching the video. This file is not a verified dataset or an input to the existing evaluator.",
+  "questions": [
+    {
+      "question": "How can AI applications support medical professionals?",
+      "expected_answer": "They can help analyze symptoms and select a therapy.",
+      "evidence_start_seconds": 11.0,
+      "evidence_end_seconds": 18.9
+    },
+    {
+      "question": "What does the AI system do with the patient's symptoms?",
+      "expected_answer": "It collects the symptoms and converts them into data.",
+      "evidence_start_seconds": 19.0,
+      "evidence_end_seconds": 26.0
+    },
+    {
+      "question": "What must a physician understand to make an ethical decision?",
+      "expected_answer": "The process that led to the AI's recommendation.",
+      "evidence_start_seconds": 46.9,
+      "evidence_end_seconds": 56.1
+    },
+    {
+      "question": "What is photosynthesis?",
+      "expected_answerable": false
+    },
+    {
+      "question": "Who won the football world cup?",
+      "expected_answerable": false
+    },
+    {
+      "question": "What is the speed of light?",
+      "expected_answerable": false
+    },
+    {
+      "question": "Which treatment for diabetes does the AI recommend?",
+      "expected_answerable": false
+    },
+    {
+      "question": "What patient symptoms indicate lung cancer?",
+      "expected_answerable": false
+    },
+    {
+      "question": "Which medical hospital built this AI system?",
+      "expected_answerable": false
+    }
+  ]
+}
