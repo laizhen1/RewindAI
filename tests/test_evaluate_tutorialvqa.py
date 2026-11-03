@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.evaluate_tutorialvqa import evaluate
+from scripts.evaluate_tutorialvqa import evaluate, partition_for_video
 
 
 def test_sentence_counts_and_inclusive_end():
@@ -27,3 +27,9 @@ def test_context_expands_without_duplicates_and_respects_transcript_boundaries()
     assert result["f1"] == 1.0
     with pytest.raises(ValueError):
         evaluate(videos, questions, context_sentences=-1)
+
+
+def test_video_partition_is_stable_and_video_wise():
+    assignments = {str(i): partition_for_video(str(i)) for i in range(100)}
+    assert set(assignments.values()) == {"development", "heldout"}
+    assert assignments == {key: partition_for_video(key) for key in assignments}

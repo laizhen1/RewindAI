@@ -145,3 +145,21 @@ This is an exploratory comparison, not a generalization result: we inspected the
 ```powershell
 python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_DEV_OR_TEST_JSON --context-sentences 3
 ```
+
+### Video-disjoint exploratory split
+
+The original TutorialVQA development and test files share videos. To avoid overlap between the videos used for choosing the context setting and those used for the next comparison, the evaluator now supports `--video-partition`. It hashes the UTF-8 video ID with SHA-256, interprets the first eight bytes as a big-endian integer, and assigns IDs divisible by five to `heldout`; all others are `development`. This partition is deterministic and does not use question labels.
+
+From the original development file, the development partition contains 936 questions from 58 videos. Among context sizes 0, 1, 2 and 3, micro F1 was respectively 0.216, 0.344, 0.383 and 0.388; we selected 3. The heldout partition of the original test file contains 294 questions from 18 videos, none shared with the development partition. Its results:
+
+| Context on each side | TP | FP | FN | Precision | Recall | F1 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0 | 211 | 324 | 2,007 | 0.394 | 0.095 | 0.153 |
+| 3 | 828 | 2,140 | 1,390 | 0.279 | 0.373 | 0.319 |
+
+Both settings have 110 top-1 hits and 66 abstentions: surrounding context adds coverage but does not change retrieval ranking. The numbers reflect supplied transcript sentences, not video timestamps or answer correctness. Crucially, these are **not a pristine held-out benchmark**: the earlier experiment inspected aggregate results from all videos, including these 18, and the video partition was created afterward. No per-video data were excluded from the earlier aggregate. A future untouched video set and independently reviewed timestamps are still required for confirmatory claims.
+
+```powershell
+python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_DEV_JSON --video-partition development --context-sentences 3
+python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_TEST_JSON --video-partition heldout --context-sentences 3
+```

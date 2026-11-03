@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -11,6 +12,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from video_rag.schemas import VideoSegment
 from video_rag.transcript_baseline import build_transcript_segments
+
+
+def partition_for_video(video_id: str) -> str:
+    """Assign videos deterministically, keeping every question for a video together."""
+    digest = hashlib.sha256(str(video_id).encode("utf-8")).digest()
+    return "heldout" if int.from_bytes(digest[:8], "big") % 5 == 0 else "development"
 
 
 def evaluate(videos: list[dict], questions: list[dict], context_sentences: int = 0) -> dict:
@@ -60,15 +67,20 @@ def main() -> int:
     parser.add_argument("--questions", type=Path, required=True, help="Locally obtained TutorialVQA split JSON")
     parser.add_argument("--context-sentences", type=int, default=0,
                         help="Adjacent transcript sentences on each side of a hit (0–5, default 0)")
+    parser.add_argument("--video-partition", choices=("all", "development", "heldout"), default="all",
+                        help="Deterministic video-ID partition; questions must come from the desired source split")
     args = parser.parse_args()
     try:
         videos = json.loads(args.videos.read_text(encoding="utf-8-sig"))
         questions = json.loads(args.questions.read_text(encoding="utf-8-sig"))
+        if args.video_partition != "all":
+            questions = [row for row in questions if partition_for_video(row["video_id"]) == args.video_partition]
         result = evaluate(videos, questions, context_sentences=args.context_sentences)
     except (OSError, KeyError, TypeError, ValueError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
     print(json.dumps({"warning": "Sentence-index experiment, not video time or answer accuracy; "
-                                  "labels assumed inclusive.", "metrics": result}, indent=2))
+                      "labels assumed inclusive.", "video_partition": args.video_partition,
+                      "metrics": result}, indent=2))
     return 0
 
 
