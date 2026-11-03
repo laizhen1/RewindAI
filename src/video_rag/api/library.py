@@ -132,3 +132,7 @@ class LibraryStore:
                 "SELECT id, question, segment_id, rating, comment, created_at "
                 "FROM feedback ORDER BY id DESC LIMIT ?", (limit,)
             )]
+
+    def delete_feedback(self, feedback_id: int) -> bool:
+        with self.connect() as connection:
+            return connection.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,)).rowcount > 0

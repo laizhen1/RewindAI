@@ -237,6 +237,12 @@ def create_app(
     def list_feedback():
         return jsonify({"feedback": store.recent_feedback()})
 
+    @app.delete("/api/feedback/<int:feedback_id>")
+    def delete_feedback(feedback_id: int):
+        if not store.delete_feedback(feedback_id):
+            return jsonify({"error": "feedback not found"}), 404
+        return "", 204
+
     @app.post("/api/feedback")
     def feedback():
         payload = request.get_json(silent=True)
