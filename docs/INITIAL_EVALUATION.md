@@ -180,3 +180,13 @@ python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions 
 ```
 
 Install the optional semantic dependencies and supply the model files as described in the README. This evaluation reads input and model files locally.
+
+### Video-level uncertainty diagnostic
+
+To show how much the keyword result can vary with the videos included, we resampled the 18 test-side videos with replacement 2,000 times, keeping all questions belonging to each sampled video together. With seed 42, the 2.5th–97.5th percentile ranges were precision **0.312–0.478**, recall **0.075–0.131**, and F1 **0.122–0.204**; the original point estimates were 0.394, 0.095, and 0.153. Each replicate aggregates sentence TP/FP/FN before computing metrics.
+
+These are exploratory bootstrap ranges for this small, non-random sample of Photoshop tutorials; they are not guaranteed population confidence intervals, do not correct label errors or previous test-set exposure, and do not assess differences between models. All earlier restrictions on sentence-index measurements apply. The fixed seed and number of replicates make the calculation reproducible:
+
+```powershell
+python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_TEST_JSON --video-partition heldout --bootstrap-samples 2000 --seed 42
+```

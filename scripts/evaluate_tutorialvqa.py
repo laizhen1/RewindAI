@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import random
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -23,14 +24,18 @@ def partition_for_video(video_id: str) -> str:
 
 
 def evaluate(videos: list[dict], questions: list[dict], context_sentences: int = 0,
-             builder: Callable[[list[VideoSegment]], VideoRAGPipeline] = build_transcript_segments) -> dict:
+             builder: Callable[[list[VideoSegment]], VideoRAGPipeline] = build_transcript_segments,
+             bootstrap_samples: int = 0, seed: int = 42) -> dict:
     """Compute micro sentence overlap with inclusive annotated answer spans."""
     if type(context_sentences) is not int or not 0 <= context_sentences <= 5:
         raise ValueError("context_sentences must be an integer between 0 and 5")
+    if type(bootstrap_samples) is not int or not 0 <= bootstrap_samples <= 10000:
+        raise ValueError("bootstrap_samples must be an integer between 0 and 10000")
     lookup = {v["video_id"]: v for v in videos}
     if len(lookup) != len(videos) or not questions:
         raise ValueError("Duplicate video IDs or empty question set")
     pipelines = {}
+    per_video: dict[str, list[int]] = {}
     tp = fp = fn = abstained = top1_overlap = 0
     for row in questions:
         vid = row["video_id"]
@@ -50,18 +55,42 @@ def evaluate(videos: list[dict], questions: list[dict], context_sentences: int =
         found = {index for hit in predicted
                  for index in range(max(0, hit - context_sentences),
                                     min(len(transcript), hit + context_sentences + 1))}
-        tp += len(found & reference)
-        fp += len(found - reference)
-        fn += len(reference - found)
+        counts = [len(found & reference), len(found - reference), len(reference - found)]
+        tp += counts[0]
+        fp += counts[1]
+        fn += counts[2]
+        total = per_video.setdefault(vid, [0, 0, 0])
+        for index, count in enumerate(counts):
+            total[index] += count
         abstained += int(answer.abstained)
         top1_overlap += int(bool(predicted) and predicted[0] in reference)
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
-    return {"question_count": len(questions), "video_count": len(pipelines), "context_sentences": context_sentences,
-            "tp": tp, "fp": fp, "fn": fn,
-            "precision": precision, "recall": recall, "f1": 2 * precision * recall / (precision + recall)
-            if precision + recall else 0.0, "top1_overlap_count": top1_overlap,
-            "top1_overlap_rate": top1_overlap / len(questions), "abstained": abstained}
+    result = {"question_count": len(questions), "video_count": len(pipelines), "context_sentences": context_sentences,
+              "tp": tp, "fp": fp, "fn": fn,
+              "precision": precision, "recall": recall, "f1": 2 * precision * recall / (precision + recall)
+              if precision + recall else 0.0, "top1_overlap_count": top1_overlap,
+              "top1_overlap_rate": top1_overlap / len(questions), "abstained": abstained}
+    if bootstrap_samples:
+        if len(per_video) < 2:
+            raise ValueError("Video bootstrap requires at least two videos")
+        rng = random.Random(seed)
+        units = list(per_video.values())
+        distributions = {"precision": [], "recall": [], "f1": []}
+        for _ in range(bootstrap_samples):
+            sampled = [rng.choice(units) for _ in units]
+            a, b, c = (sum(unit[i] for unit in sampled) for i in range(3))
+            p = a / (a + b) if a + b else 0.0
+            r = a / (a + c) if a + c else 0.0
+            distributions["precision"].append(p)
+            distributions["recall"].append(r)
+            distributions["f1"].append(2 * p * r / (p + r) if p + r else 0.0)
+        intervals = {}
+        for key, values in distributions.items():
+            values.sort()
+            intervals[key] = [values[int((len(values) - 1) * 0.025)], values[int((len(values) - 1) * 0.975)]]
+        result["video_bootstrap"] = {"samples": bootstrap_samples, "seed": seed, "percentile_95": intervals}
+    return result
 
 
 def main() -> int:
@@ -75,6 +104,9 @@ def main() -> int:
     parser.add_argument("--semantic-model", type=Path, help="Optional local English ONNX model directory")
     parser.add_argument("--semantic-threshold", type=float, default=0.4,
                         help="Uncalibrated cosine cutoff for semantic mode (default 0.4)")
+    parser.add_argument("--bootstrap-samples", type=int, default=0,
+                        help="Video-level bootstrap resamples for exploratory 95%% intervals (0–10000)")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     try:
         videos = json.loads(args.videos.read_text(encoding="utf-8-sig"))
@@ -90,7 +122,8 @@ def main() -> int:
 
             encoder = OnnxSentenceEncoder(args.semantic_model)
             builder = lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold)
-        result = evaluate(videos, questions, context_sentences=args.context_sentences, builder=builder)
+        result = evaluate(videos, questions, context_sentences=args.context_sentences, builder=builder,
+                          bootstrap_samples=args.bootstrap_samples, seed=args.seed)
     except (ImportError, OSError, KeyError, TypeError, ValueError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
     print(json.dumps({"warning": "Sentence-index experiment, not video time or answer accuracy; "

@@ -47,3 +47,15 @@ def test_custom_pipeline_builder_is_used():
     result = evaluate(videos, questions, builder=builder)
     assert len(calls) == 1
     assert result["tp"] == 2
+
+
+def test_video_bootstrap_is_reproducible_and_requires_multiple_videos():
+    videos = [{"video_id": "1", "transcript": ["apple"]}, {"video_id": "2", "transcript": ["orange"]}]
+    questions = [{"video_id": "1", "question": "apple", "answer_start": 0, "answer_end": 0},
+                 {"video_id": "2", "question": "missing", "answer_start": 0, "answer_end": 0}]
+    a = evaluate(videos, questions, bootstrap_samples=100, seed=7)
+    b = evaluate(videos, questions, bootstrap_samples=100, seed=7)
+    assert a["video_bootstrap"] == b["video_bootstrap"]
+    assert a["video_bootstrap"]["percentile_95"]["recall"] == [0.0, 1.0]
+    with pytest.raises(ValueError):
+        evaluate(videos, questions[:1], bootstrap_samples=10)
