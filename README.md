@@ -66,7 +66,7 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 
 也可以省略所有 `--subtitles`，程序会为每个视频寻找同名的 `.srt` 或 `.vtt` 文件。文件只在本机读取，加载后可以在网页中将视频归入课程并选择单视频搜索。
 
-若视频没有字幕，可以另行安装 faster-whisper 并使用 [本地转字幕指南](docs/LOCAL_TRANSCRIPTION.md)。默认使用本地缓存和 CPU，不向云端上传视频或音频；首次获取模型需显式允许下载。转录脚本有模拟测试，但真实模型转录尚未验证。
+若视频没有字幕，可以另行安装 faster-whisper 并使用 [本地转字幕指南](docs/LOCAL_TRANSCRIPTION.md)。Windows 用户完成安装并缓存模型后，可双击 `Start-RewindAI-Transcribe.cmd` 选择视频进行本地转录，再打开搜索界面。默认使用本地缓存和 CPU，不向云端上传视频或音频；首次获取模型需显式允许下载。转录已在两段公开短视频上使用本地模型验证；课程录制的效果仍需评估。
 
 ### 使用完整多模态模型
 
