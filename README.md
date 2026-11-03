@@ -48,6 +48,8 @@ python -m ruff check src/video_rag/api scripts/ingest_local.py tests/test_ingest
 
 ### 使用已有字幕（低配置）
 
+在 Windows 安装好环境后，双击 `Start-RewindAI-Workspace.cmd`，然后打开 `http://127.0.0.1:5000`；也可以运行 `python scripts/run_transcript.py`。无需在启动命令中指定视频：在网页左侧输入本机视频与字幕路径即可加载。之前通过网页添加且文件未发生改变的视频会从本地数据库恢复。还没有加载视频时，先添加视频再搜索。关闭启动窗口即可停止服务。
+
 如果你有本地视频及其配套的 UTF-8 `.srt` 或 `.vtt` 字幕，可以在项目环境中运行：
 
 ```bash
