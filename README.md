@@ -56,6 +56,14 @@ python scripts/run_transcript.py --video /path/to/lecture.mp4 --subtitles /path/
 
 此模式无需下载模型、无需联网，适合资源有限的电脑。它只进行**关键词匹配和字幕原文摘录**，不是语音识别、AI 生成或视频画面理解；不会自行生成字幕，也不能保证跨语言语义检索。只能处理外置字幕文件。如果字幕不足以回答问题，应该回看视频核对。单独运行时默认打开 `http://127.0.0.1:5000`。
 
+要同时学习多个本地视频，可以按相同顺序重复指定视频和字幕：
+
+```bash
+python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --subtitles lecture1.srt --subtitles lecture2.srt
+```
+
+也可以省略所有 `--subtitles`，程序会为每个视频寻找同名的 `.srt` 或 `.vtt` 文件。文件只在本机读取，加载后可以在网页中将视频归入课程并选择单视频搜索。
+
 若视频没有字幕，可以另行安装 faster-whisper 并使用 [本地转字幕指南](docs/LOCAL_TRANSCRIPTION.md)。默认使用本地缓存和 CPU，不向云端上传视频或音频；首次获取模型需显式允许下载。转录脚本有模拟测试，但真实模型转录尚未验证。
 
 ### 使用完整多模态模型
