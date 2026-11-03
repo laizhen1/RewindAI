@@ -76,6 +76,8 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 python scripts/run_transcript.py --semantic-model PATH_TO_LOCAL_MODEL_DIRECTORY
 ```
 
+Windows 用户也可以在准备好该模型后双击 `Start-RewindAI-Semantic.cmd`。启动器默认查找项目的 `artifacts/hf-cache` 中的固定版本 `08a308f628bc9d6774b7922f319eb1b65afa1a82`；如果模型放在其他位置，可先设置 `REWINDAI_SEMANTIC_MODEL_DIR` 指向模型目录。启动器不下载模型。
+
 语义模式仅在本机 CPU 推理，不下载模型或上传字幕。它使用尚未校准的余弦阈值 0.4，只针对英语实验，可能返回不相关片段；它不生成回答，也不理解视频画面。索引较多字幕时启动和导入可能变慢。结果需回看核对。此前小样本评估有较多误报，详见 [评估报告](docs/INITIAL_EVALUATION.md)。不传该参数时仍使用默认关键词搜索。
 
 ### 使用完整多模态模型
@@ -90,7 +92,7 @@ python scripts/ingest_local.py /path/to/authorized-video.mp4 --language en
 
 该命令依次调用预处理和索引脚本，将结果保存到新的 `artifacts/ingestions/` 子目录，不复制原视频。默认启用模型中心离线模式；模型不在本地时需要显式允许下载。命令输出真实服务启动示例。此流程尚未在真实模型与课程视频上端到端验证。
 
-本项目区分**本地索引**和**模型训练**：提取片段并建立检索索引通常不会改变模型权重。使用任何课程视频或个人资料前，请确认你有权使用。课程录制、转录、索引、收藏和反馈默认应保留在本地，不要上传到公开仓库；若计划使用云模型，须先确认数据会发往何处以及相应授权。
+本项目区分**本地索引**和**模型训练**：提取片段并建立检索索引通常不会改变模型权重。使用任何课程视频或个人资料前，请确认你有权使用。课程录像、转录、索引、问题、收藏、反馈及包含课程内容的评估结果应保留在本地，不上传 GitHub、云模型或其他第三方。`.gitignore` 排除了常见媒体、字幕、数据库和 `artifacts/`、`local_data/`，但不能识别散落在其他位置或改名后的所有私人内容；发布前仍须检查。
 
 ## Architecture · 系统流程
 
