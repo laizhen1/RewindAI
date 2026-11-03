@@ -32,6 +32,11 @@ class LibraryStore:
                     segment_id TEXT, rating TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
+                CREATE TABLE IF NOT EXISTS local_transcript_videos (
+                    video_id TEXT PRIMARY KEY, video_path TEXT NOT NULL,
+                    video_size INTEGER NOT NULL, video_mtime_ns INTEGER NOT NULL,
+                    segments_json TEXT NOT NULL
+                );
             """)
 
     @contextmanager
@@ -48,6 +53,15 @@ class LibraryStore:
     def courses(self) -> list[dict]:
         with self.connect() as connection:
             return [dict(row) for row in connection.execute("SELECT id, name FROM courses ORDER BY id")]
+
+    def local_videos(self) -> list[dict]:
+        with self.connect() as connection:
+            return [dict(row) for row in connection.execute("SELECT * FROM local_transcript_videos ORDER BY rowid")]
+
+    def remember_video(self, video_id: str, path: str, size: int, mtime_ns: int, segments_json: str) -> None:
+        with self.connect() as connection:
+            connection.execute("INSERT INTO local_transcript_videos VALUES (?, ?, ?, ?, ?)",
+                               (video_id, path, size, mtime_ns, segments_json))
 
     def create_course(self, name: str) -> dict:
         with self.connect() as connection:
@@ -106,3 +120,4 @@ class LibraryStore:
                 (question, segment_id, rating, comment),
             )
             return int(result.lastrowid)
+
