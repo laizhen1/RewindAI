@@ -1,4 +1,4 @@
-from scripts.diagnose_transcript import coverage, diagnose, overlap
+from scripts.diagnose_transcript import coverage, diagnose, metrics, overlap
 
 
 def test_overlap_requires_positive_duration():
@@ -38,4 +38,17 @@ def test_coverage_and_unanswerable_result():
     row = diagnose(Pipeline(), [{"question": "Not in video?", "expected_answerable": False}])[0]
     assert row["correct_abstention"] is True
     assert "any_hit_overlaps" not in row
+
+
+def test_metrics_count_wrong_evidence_as_false_positive_and_false_negative():
+    rows = [
+        {"expected_answerable": True, "abstained": False, "first_hit_reference_coverage": 0.9},
+        {"expected_answerable": True, "abstained": False, "first_hit_reference_coverage": 0.1},
+        {"expected_answerable": False, "abstained": False},
+        {"expected_answerable": False, "abstained": True},
+        {"expected_answerable": True, "abstained": True},
+    ]
+    result = metrics(rows)
+    assert (result["tp"], result["fp"], result["fn"], result["tn"]) == (1, 2, 2, 1)
+    assert result["precision"] == result["recall"] == result["f1"] == 1 / 3
 
