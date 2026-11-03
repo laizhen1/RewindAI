@@ -35,6 +35,8 @@ python scripts/run_demo.py
 
 在浏览器打开 `http://127.0.0.1:5000`。演示数据是两条预设片段，并非读取真实课堂视频。首次启动无真实视频文件时，视频播放和时间跳转无法展示实际画面。
 
+在 Windows 上完成环境安装后，也可以双击 `Start-RewindAI-Demo.cmd` 启动演示，然后在浏览器打开上面的本机地址。关闭命令窗口即可停止服务。
+
 测试与代码检查：
 
 ```bash
@@ -103,3 +105,4 @@ The repository owner has confirmed that they authored the supplied base project 
 - VideoRAG: <https://github.com/zhuzhenxiang93-create/VideoRAG>
 - Whisper: <https://github.com/openai/whisper>
 - FAISS: <https://github.com/facebookresearch/faiss>
+
