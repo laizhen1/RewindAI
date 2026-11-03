@@ -1,0 +1,321 @@
+from __future__ import annotations
+
+from collections import Counter
+from dataclasses import dataclass
+import json
+from pathlib import Path
+from datetime import datetime
+from typing import Any
+import re
+
+
+ALLOWED_TYPES = {"audio", "visual", "ocr", "multimodal", "unknown_route"}
+ALLOWED_STATUSES = {"verified", "generated_candidate"}
+ALLOWED_SPLITS = {"development", "validation", "test"}
+ALLOWED_UNANSWERABLE_REASONS = {
+    "entity_absent", "event_absent", "insufficient_visual_evidence",
+    "insufficient_audio_evidence", "ambiguous_reference", "outside_video_scope",
+}
+REQUIRED_FIELDS = {
+    "question_id",
+    "question",
+    "answer",
+    "answer_aliases",
+    "question_type",
+    "video_id",
+    "relevant_segment_ids",
+    "evidence_start",
+    "evidence_end",
+    "answerable",
+    "verification_status",
+    "annotation_source",
+}
+
+
+@dataclass(frozen=True)
+class ValidationReport:
+    question_count: int
+    verified_count: int
+    candidate_count: int
+    type_counts: dict[str, int]
+    split_counts: dict[str, int]
+    answerable_counts: dict[str, int]
+    errors: tuple[str, ...]
+    warnings: tuple[str, ...]
+
+    @property
+    def valid(self) -> bool:
+        return not self.errors
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "valid": self.valid,
+            "question_count": self.question_count,
+            "verified_count": self.verified_count,
+            "candidate_count": self.candidate_count,
+            "type_counts": self.type_counts,
+            "split_counts": self.split_counts,
+            "answerable_counts": self.answerable_counts,
+            "errors": list(self.errors),
+            "warnings": list(self.warnings),
+        }
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    records = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"line {line_number}: invalid JSON: {exc.msg}") from exc
+        record["_line_number"] = line_number
+        records.append(record)
+    return records
+
+
+def validate_questions(
+    questions: list[dict[str, Any]], segments: list[dict[str, Any]], *, require_verified_splits: bool = False
+) -> ValidationReport:
+    errors: list[str] = []
+    warnings: list[str] = []
+    ids: set[str] = set()
+    segment_by_id = {item["segment_id"]: item for item in segments}
+    status_counts: Counter[str] = Counter()
+    type_counts: Counter[str] = Counter()
+    split_counts: Counter[str] = Counter()
+    video_splits: dict[str, str] = {}
+    paraphrase_splits: dict[str, str] = {}
+    answerable_counts: Counter[str] = Counter()
+    video_duration_cache: dict[str, float] = {}
+
+    def normalized_text(value: str) -> str:
+        return re.sub(r"\s+", "", str(value)).lower()
+
+    def video_duration(video_id: str) -> float:
+        if video_id in video_duration_cache:
+            return video_duration_cache[video_id]
+        values = [segment for segment in segments if segment.get("video_id") == video_id]
+        fallback = max((float(segment["end_time"]) for segment in values), default=0.0)
+        measured = None
+        if values:
+            path = Path(str(values[0].get("source_path", "")))
+            if path.is_file():
+                try:
+                    import cv2
+
+                    capture = cv2.VideoCapture(str(path))
+                    fps = float(capture.get(cv2.CAP_PROP_FPS))
+                    frames = float(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+                    capture.release()
+                    if fps > 0 and frames > 0:
+                        measured = frames / fps
+                except ImportError:
+                    pass
+        video_duration_cache[video_id] = measured if measured is not None else fallback
+        return video_duration_cache[video_id]
+
+    for position, item in enumerate(questions, 1):
+        line = item.get("_line_number", position)
+        missing = sorted(REQUIRED_FIELDS - item.keys())
+        if missing:
+            errors.append(f"line {line}: missing fields {missing}")
+            continue
+        question_id = str(item["question_id"]).strip()
+        if not question_id or question_id in ids:
+            errors.append(f"line {line}: duplicate or empty question_id {question_id!r}")
+        ids.add(question_id)
+
+        question_type = item["question_type"]
+        type_counts[question_type] += 1
+        if question_type not in ALLOWED_TYPES:
+            errors.append(f"line {line}: unsupported question_type {question_type!r}")
+
+        status = item["verification_status"]
+        status_counts[status] += 1
+        if status not in ALLOWED_STATUSES:
+            errors.append(f"line {line}: unsupported verification_status {status!r}")
+        if status == "verified" and not str(item["annotation_source"]).strip():
+            errors.append(f"line {line}: verified item requires annotation_source")
+        if status == "verified":
+            if item.get("annotation_source") != "human_review":
+                errors.append(f"line {line}: verified item annotation_source must be 'human_review'")
+            if not str(item.get("reviewer_id", "")).strip():
+                errors.append(f"line {line}: verified item requires reviewer_id")
+            reviewed_at = item.get("reviewed_at")
+            try:
+                parsed = datetime.fromisoformat(str(reviewed_at).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError
+            except (TypeError, ValueError):
+                errors.append(f"line {line}: verified item requires timezone-aware reviewed_at")
+            if not str(item.get("review_event_id", "")).strip():
+                errors.append(f"line {line}: verified item requires append-only review_event_id")
+            split = item.get("split")
+            if split is not None:
+                split_counts[split] += 1
+                if split not in ALLOWED_SPLITS:
+                    errors.append(f"line {line}: invalid split {split!r}")
+                previous = video_splits.setdefault(item["video_id"], split)
+                if previous != split:
+                    errors.append(f"line {line}: video {item['video_id']!r} leaks across splits {previous!r}/{split!r}")
+                group = item.get("paraphrase_group_id")
+                if group:
+                    previous_group_split = paraphrase_splits.setdefault(str(group), split)
+                    if previous_group_split != split:
+                        errors.append(f"line {line}: paraphrase group {group!r} leaks across splits")
+            elif require_verified_splits:
+                errors.append(f"line {line}: verified item requires frozen split")
+
+        answerable = item["answerable"]
+        answerable_counts[str(answerable).lower()] += 1
+        if not isinstance(answerable, bool):
+            errors.append(f"line {line}: answerable must be boolean")
+        if answerable and not str(item["answer"]).strip():
+            errors.append(f"line {line}: answerable item requires answer")
+        aliases = item["answer_aliases"]
+        if not isinstance(aliases, list) or any(not isinstance(value, str) or not value.strip() for value in aliases):
+            errors.append(f"line {line}: answer_aliases must be a list of non-empty strings")
+        elif len({value.strip() for value in aliases}) != len(aliases):
+            errors.append(f"line {line}: answer_aliases must not contain duplicates")
+        elif answerable and str(item["answer"]).strip() not in {value.strip() for value in aliases}:
+            errors.append(f"line {line}: answer_aliases must include the canonical answer")
+        if not answerable and item["relevant_segment_ids"]:
+            errors.append(f"line {line}: unanswerable item must not contain relevant segments")
+
+        relevant = item["relevant_segment_ids"]
+        if answerable and not relevant:
+            errors.append(f"line {line}: answerable item requires relevant segments")
+        for segment_id in relevant:
+            segment = segment_by_id.get(segment_id)
+            if segment is None:
+                errors.append(f"line {line}: unknown segment {segment_id!r}")
+                continue
+            if segment["video_id"] != item["video_id"]:
+                errors.append(f"line {line}: segment {segment_id!r} belongs to another video")
+
+        start, end = item["evidence_start"], item["evidence_end"]
+        if answerable and not (
+            isinstance(start, (int, float))
+            and isinstance(end, (int, float))
+            and 0 <= start < end
+        ):
+            errors.append(f"line {line}: invalid evidence interval")
+        elif answerable:
+            if status == "verified" and float(end) > video_duration(item["video_id"]) + 0.05:
+                errors.append(f"line {line}: evidence interval exceeds actual video duration")
+            for segment_id in relevant:
+                segment = segment_by_id.get(segment_id)
+                if segment is not None and not (
+                    max(float(start), float(segment["start_time"]))
+                    < min(float(end), float(segment["end_time"]))
+                ):
+                    errors.append(f"line {line}: relevant segment {segment_id!r} does not overlap evidence interval")
+        if not answerable and (start is not None or end is not None):
+            errors.append(f"line {line}: unanswerable evidence interval must be null")
+
+        if status == "verified":
+            modalities = item.get("modality_evidence")
+            if not isinstance(modalities, dict):
+                errors.append(f"line {line}: verified item requires modality_evidence object")
+                modalities = {}
+
+            def valid_asr() -> bool:
+                value = modalities.get("asr")
+                if not (
+                    isinstance(value, dict) and bool(str(value.get("quote", "")).strip())
+                    and bool(value.get("segment_ids")) and value.get("human_verified") is True
+                ):
+                    return False
+                source_ids = value["segment_ids"]
+                if not set(source_ids).issubset(set(relevant)):
+                    return False
+                source_text = " ".join(
+                    segment_by_id[segment_id].get("transcript", "")
+                    for segment_id in source_ids if segment_id in segment_by_id
+                )
+                return normalized_text(value["quote"]) in normalized_text(source_text)
+
+            def valid_frame_timestamps(value: Any) -> bool:
+                if not isinstance(value, dict) or not value.get("frame_timestamps"):
+                    return False
+                known = {
+                    round(float(frame["timestamp"]), 3)
+                    for segment_id in relevant if segment_id in segment_by_id
+                    for frame in segment_by_id[segment_id].get("keyframes", [])
+                }
+                timestamps = value["frame_timestamps"]
+                return all(
+                    isinstance(timestamp, (int, float)) and round(float(timestamp), 3) in known
+                    and isinstance(start, (int, float)) and isinstance(end, (int, float))
+                    and float(start) <= float(timestamp) <= float(end)
+                    for timestamp in timestamps
+                )
+
+            def valid_visual() -> bool:
+                value = modalities.get("visual")
+                return (
+                    isinstance(value, dict) and valid_frame_timestamps(value)
+                    and bool(str(value.get("human_observation", "")).strip())
+                    and value.get("human_verified") is True
+                )
+
+            def valid_ocr() -> bool:
+                value = modalities.get("ocr")
+                return (
+                    isinstance(value, dict) and bool(str(value.get("text", "")).strip())
+                    and valid_frame_timestamps(value) and value.get("human_verified") is True
+                )
+
+            if not answerable:
+                if modalities:
+                    errors.append(f"line {line}: unanswerable item must not claim supporting modality evidence")
+                if item.get("unanswerable_reason") not in ALLOWED_UNANSWERABLE_REASONS:
+                    errors.append(f"line {line}: verified unanswerable item requires a valid unanswerable_reason")
+                checked = item.get("checked_time_ranges")
+                if not isinstance(checked, list) or not checked:
+                    errors.append(f"line {line}: verified unanswerable item requires checked_time_ranges")
+                else:
+                    video_end = video_duration(item["video_id"])
+                    valid_ranges = all(
+                        isinstance(value, list) and len(value) == 2
+                        and all(isinstance(point, (int, float)) for point in value)
+                        and 0 <= float(value[0]) < float(value[1]) <= video_end
+                        for value in checked
+                    )
+                    if not valid_ranges:
+                        errors.append(f"line {line}: checked_time_ranges contain an invalid range")
+                    else:
+                        ordered_ranges = sorted((float(value[0]), float(value[1])) for value in checked)
+                        if any(right[0] < left[1] for left, right in zip(ordered_ranges, ordered_ranges[1:])):
+                            errors.append(f"line {line}: checked_time_ranges overlap")
+                        if (
+                            ordered_ranges[0][0] > 0.5 or ordered_ranges[-1][1] < video_end - 0.5
+                            or any(right[0] - left[1] > 0.5 for left, right in zip(ordered_ranges, ordered_ranges[1:]))
+                        ):
+                            errors.append(f"line {line}: verified unanswerable review must cover the full video")
+            elif question_type == "audio" and not valid_asr():
+                errors.append(f"line {line}: verified audio item requires ASR quote and segment_ids")
+            elif question_type == "visual" and not valid_visual():
+                errors.append(f"line {line}: verified visual item requires frame timestamps")
+            elif question_type == "ocr" and not valid_ocr():
+                errors.append(f"line {line}: verified OCR item requires OCR text and frame timestamps")
+            elif question_type == "multimodal" and sum((valid_asr(), valid_visual(), valid_ocr())) < 2:
+                errors.append(f"line {line}: verified multimodal item requires at least two valid modality sources")
+
+    if type_counts and max(type_counts.values()) / sum(type_counts.values()) > 0.70:
+        warnings.append("question types are severely imbalanced (>70% in one type)")
+    if status_counts.get("verified", 0) == 0:
+        warnings.append("dataset contains no human-verified questions; do not use for resume metrics")
+
+    return ValidationReport(
+        question_count=len(questions),
+        verified_count=status_counts.get("verified", 0),
+        candidate_count=status_counts.get("generated_candidate", 0),
+        type_counts=dict(sorted(type_counts.items())),
+        split_counts=dict(sorted(split_counts.items())),
+        answerable_counts=dict(sorted(answerable_counts.items())),
+        errors=tuple(errors),
+        warnings=tuple(warnings),
+    )

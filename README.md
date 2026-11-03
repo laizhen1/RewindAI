@@ -18,7 +18,7 @@ RewindAI is an AI-powered learning workspace for finding and reviewing moments i
 - 区分演示模式和完整模式，避免把占位演示当作真实模型结果。
 - 在已有 VideoRAG 流水线上保留语音、关键帧、混合检索、重排和人工评测能力，完整模型运行仍需独立验证。
 
-**当前限制：**网页并不自动下载 Canvas 录像，也不直接完成上传、处理及索引；视频需要先通过本地处理流程导入。演示包未包含真实示例视频，播放器可能显示不可用。当前问答基于已加载的全部索引，不保证只检索某一课程。没有账号、多用户隔离或生产级鉴权。
+**当前限制：**网页并不自动下载 Canvas 录像，也不直接完成上传、处理及索引；视频需要先通过本地处理流程导入。演示包未包含真实示例视频，播放器可能显示不可用。当前问答基于已加载的全部索引，不保证只检索某一课程。服务仅接受本机 Host 和同源浏览器请求；没有账号、多用户隔离或生产级鉴权，远程使用需要本机 SSH 转发，不支持通过非本机域名直接访问。
 
 ## Quick start · 快速开始
 
@@ -87,4 +87,3 @@ The repository owner has confirmed that they authored the supplied base project 
 - VideoRAG: <https://github.com/zhuzhenxiang93-create/VideoRAG>
 - Whisper: <https://github.com/openai/whisper>
 - FAISS: <https://github.com/facebookresearch/faiss>
-

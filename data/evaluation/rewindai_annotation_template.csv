@@ -1,0 +1,1 @@
+question_id,video_id,question_type,answerable,question,reference_answer,evidence_start_seconds,evidence_end_seconds,evidence_frame_seconds,checked_scope,annotation_status,split,notes
