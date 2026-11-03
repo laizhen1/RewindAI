@@ -191,6 +191,11 @@ def build_transcript_library(sources: list[tuple[str | Path, str | Path]]) -> Vi
         raise ValueError("Each video may only be loaded once")
     segments = [segment for video, subtitles in sources
                 for segment in segments_from_subtitles(video, subtitles)]
+    return build_transcript_segments(segments)
+
+
+def build_transcript_segments(segments: list[VideoSegment]) -> VideoRAGPipeline:
+    """Build a new index before replacing the currently serving index."""
     pipeline = VideoRAGPipeline(
         retrievers=[TranscriptLexicalRetriever()],
         reranker=TranscriptReranker(),
