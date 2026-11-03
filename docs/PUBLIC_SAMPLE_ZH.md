@@ -15,3 +15,10 @@ python scripts/run_transcript.py --video /path/to/ai_ethics_kicampus.webm --subt
 ```
 
 字幕来自配套页面，但仍需观看视频确认字幕与画面。视频和字幕均保存在本地，不纳入此仓库。此模式使用关键词与原文摘录，不分析视频画面，也不是医疗建议。
+
+## 第二个公开学习视频
+
+- [Artificial intelligence explained in 2 minutes](https://commons.wikimedia.org/wiki/File:Artificial_intelligence_explained_in_2_minutes_-_What_exactly_is_AI%3F.webm)，作者 KI-Campus，时长约 2 分 23 秒。
+- 视频许可：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)。请保留作者署名、许可链接及修改说明，分享改编材料时遵循相同方式共享条件。
+- [英文字幕页面](https://commons.wikimedia.org/wiki/TimedText:Artificial_intelligence_explained_in_2_minutes_-_What_exactly_is_AI%3F.webm.en.srt)。视频和字幕保留在本地，不纳入仓库。
+
