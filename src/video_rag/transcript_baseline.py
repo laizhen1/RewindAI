@@ -179,11 +179,24 @@ def segments_from_subtitles(video_path: str | Path, subtitles_path: str | Path) 
 
 
 def build_transcript_pipeline(video_path: str | Path, subtitles_path: str | Path) -> VideoRAGPipeline:
+    return build_transcript_library([(video_path, subtitles_path)])
+
+
+def build_transcript_library(sources: list[tuple[str | Path, str | Path]]) -> VideoRAGPipeline:
+    """Index multiple distinct local videos in one in-memory learning library."""
+    if not sources:
+        raise ValueError("At least one video is required")
+    paths = [Path(video).expanduser().resolve() for video, _ in sources]
+    if len(set(paths)) != len(paths):
+        raise ValueError("Each video may only be loaded once")
+    segments = [segment for video, subtitles in sources
+                for segment in segments_from_subtitles(video, subtitles)]
     pipeline = VideoRAGPipeline(
         retrievers=[TranscriptLexicalRetriever()],
         reranker=TranscriptReranker(),
         generator=EvidenceGenerator(),
         minimum_rerank_score=0.01,
     )
-    pipeline.build(segments_from_subtitles(video_path, subtitles_path))
+    pipeline.build(segments)
     return pipeline
+
