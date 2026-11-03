@@ -96,6 +96,31 @@ class TranscriptBaselineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only be loaded once"):
             build_transcript_library([(self.video, self.srt), (self.video, other_srt)])
 
+    def test_course_search_filters_evidence_and_handles_empty_or_invalid_scope(self):
+        other = self.base / "other.mp4"
+        other.write_bytes(b"other video")
+        captions = other.with_suffix(".srt")
+        captions.write_text("1\n00:00:03,000 --> 00:00:06,000\nAttention uses vectors.\n", encoding="utf-8")
+        app = create_app(build_transcript_library([(self.video, self.srt), (other, captions)]),
+                         database_path=self.base / "courses.sqlite3", mode="transcript")
+        client = app.test_client()
+        videos = client.get("/api/library").get_json()["videos"]
+        first = next(video["id"] for video in videos if video["title"] == "lecture.mp4")
+        second = next(video["id"] for video in videos if video["title"] == "other.mp4")
+        course = client.post("/api/courses", json={"name": "Attention"}).get_json()["id"]
+        self.assertEqual(client.post("/api/ask", json={"question": "attention", "course_id": course}).status_code, 400)
+        self.assertEqual(client.put(f"/api/videos/{first}/course", json={"course_id": course}).status_code, 200)
+        response = client.post("/api/ask", json={"question": "attention", "course_id": course})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["evidence"])
+        self.assertTrue(all(item["video_id"] == first for item in response.get_json()["evidence"]))
+        self.assertEqual(client.put(f"/api/videos/{second}/course", json={"course_id": course}).status_code, 200)
+        response = client.post("/api/ask", json={"question": "vectors", "course_id": course})
+        self.assertEqual(response.get_json()["evidence"][0]["video_id"], second)
+        self.assertEqual(client.post("/api/ask", json={"question": "attention", "course_id": 999}).status_code, 404)
+        self.assertEqual(client.post("/api/ask", json={"question": "attention", "course_id": True}).status_code, 400)
+        self.assertEqual(client.post("/api/ask", json={"question": "attention", "course_id": course, "video_id": first}).status_code, 400)
+
     def test_local_import_adds_video_without_damaging_existing_index(self):
         pipeline = build_transcript_pipeline(self.video, self.srt)
         app = create_app(pipeline, database_path=self.base / "import.sqlite3", mode="transcript")
