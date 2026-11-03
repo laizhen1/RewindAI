@@ -156,6 +156,10 @@ class VideoRAGPipeline:
         """Return an indexed segment for server-side evidence validation."""
         return self._segments.get(segment_id)
 
+    def segments(self) -> tuple[VideoSegment, ...]:
+        """Return an immutable snapshot for building a replacement local index."""
+        return tuple(self._segments.values())
+
     def _abstention(
         self,
         started: float,
