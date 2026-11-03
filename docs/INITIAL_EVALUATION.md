@@ -19,6 +19,17 @@ An additional CPU experiment used [Xenova/all-MiniLM-L6-v2](https://huggingface.
 
 To repeat, install `pip install -e ".[semantic]"`, obtain that model revision's `tokenizer.json` and `onnx/model_quantized.onnx` into a local directory, then use `python scripts/diagnose_semantic.py --video VIDEO --subtitles SRT --questions data/evaluation/public_sample_questions.pending.json --model-dir LOCAL_MODEL_DIRECTORY --threshold 0.4`. The diagnostic itself reads model and video data locally; the model files and source videos are not committed. Model weights have their own Apache-2.0 licence. Do not tune a threshold on the final test set.
 
+### Second-video diagnostic
+
+A second [public KI-Campus video](PUBLIC_SAMPLE_ZH.md) was transcribed locally with the same speech model. Ten new questions, five answerable and five intended as unanswerable, were drafted from its published captions; their times and labels have not been independently verified. Using the same 50% reference-coverage rule and the previously selected semantic cutoff of 0.4:
+
+| Method | TP | FP | FN | TN | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Keyword | 2 | 5 | 3 | 3 | 0.286 | 0.400 | 0.333 |
+| Experimental semantic | 3 | 5 | 2 | 2 | 0.375 | 0.600 | 0.462 |
+
+The second video was not part of the first nine-question diagnostic, but the new questions were drafted with knowledge of the system and are not an independent test set. Wrong evidence on an answerable question counts as both FP and FN, so these counts sum to more than ten. The results vary across the two videos and show substantial false positives; neither approach establishes that an answer is supported. Labels are in [`ai_explained_questions.pending.json`](../data/evaluation/ai_explained_questions.pending.json). No further threshold tuning was performed on these questions.
+
 ## Reproduce
 
 Obtain the video as described in [PUBLIC_SAMPLE_ZH.md](PUBLIC_SAMPLE_ZH.md), generate a local subtitle with [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md), then run:
