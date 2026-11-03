@@ -16,6 +16,14 @@ python scripts/transcribe_local.py "C:\path\authorized-lecture.mp4" --language e
 
 Choose `--language zh` for Chinese, or omit it for automatic detection. The default is the multilingual `base` model, CPU with int8 computation, and `local_files_only=True`. Required model files must already be cached; the first run with an empty cache will fail without contacting the model hub. To explicitly allow model files to download, add `--allow-model-download`. This download can contact a model provider, but the command does not upload the input media. Existing offline environment settings may still prevent downloads.
 
+To transcribe and then open the local subtitle-search interface in one command:
+
+```powershell
+python scripts/rewind_local.py "C:\path\authorized-lecture.mp4" --language en
+```
+
+If you already have subtitles, provide `--subtitles "C:\path\lecture.srt"` to skip transcription. The launcher creates a fresh local subtitle file for each transcription, never overwrites an existing one, and stops if transcription fails. This mode is keyword search with excerpts, not AI-generated answers or visual analysis.
+
 `--model` accepts another faster-whisper model size or a local CTranslate2-compatible model directory. Local model directories must contain `tokenizer.json`; inspect model licenses and verify compatibility before use. Restricting model-hub access is not a network sandbox for arbitrary third-party libraries.
 
 The default output is `artifacts/transcripts/<input-name>.srt`. The command refuses to overwrite an existing file; choose another `.srt` path inside `artifacts/transcripts` with `--output`. These files may include sensitive information, so keep them out of public repositories. Review the course's copyright, participant privacy, and permissions for transcription before processing. Deleting recordings should include associated subtitles and derived files.
