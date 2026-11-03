@@ -6,6 +6,7 @@ from pathlib import Path
 
 from video_rag.api import create_app
 from video_rag.transcript_baseline import (
+    build_transcript_library,
     build_transcript_pipeline,
     find_subtitles,
     parse_subtitles,
@@ -80,6 +81,21 @@ class TranscriptBaselineTests(unittest.TestCase):
         missing = client.post("/api/ask", json={"question": "quantum entanglement"}).get_json()
         self.assertTrue(missing["abstained"])
 
+    def test_multiple_videos_are_separate_and_search_can_be_scoped(self):
+        other_video = self.base / "second.mp4"
+        other_video.write_bytes(b"other")
+        other_srt = self.base / "second.srt"
+        other_srt.write_text("1\n00:00:03,000 --> 00:00:06,000\nAttention uses vectors.\n", encoding="utf-8")
+        pipeline = build_transcript_library([(self.video, self.srt), (other_video, other_srt)])
+        videos = pipeline.videos()
+        self.assertEqual(len(videos), 2)
+        target = next(video["id"] for video in videos if video["title"] == "second.mp4")
+        result = pipeline.ask("attention", video_id=target)
+        self.assertFalse(result.abstained)
+        self.assertTrue(all(e.segment.video_id == target for e in result.evidence))
+        with self.assertRaisesRegex(ValueError, "only be loaded once"):
+            build_transcript_library([(self.video, self.srt), (self.video, other_srt)])
+
     def test_generic_question_words_and_partial_content_do_not_produce_answers(self):
         self.srt.write_text(
             "1\n00:00:01,000 --> 00:00:05,000\nThis is about attention and queries.\n\n"
@@ -108,3 +124,4 @@ class TranscriptBaselineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
