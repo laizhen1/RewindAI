@@ -96,6 +96,29 @@ class TranscriptBaselineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only be loaded once"):
             build_transcript_library([(self.video, self.srt), (self.video, other_srt)])
 
+    def test_local_import_adds_video_without_damaging_existing_index(self):
+        pipeline = build_transcript_pipeline(self.video, self.srt)
+        app = create_app(pipeline, database_path=self.base / "import.sqlite3", mode="transcript")
+        client = app.test_client()
+        other = self.base / "other.mp4"
+        other.write_bytes(b"another video")
+        captions = other.with_suffix(".srt")
+        captions.write_text("1\n00:00:03,000 --> 00:00:06,000\nEmbeddings represent meaning.\n", encoding="utf-8")
+        first_id = client.get("/api/library").get_json()["videos"][0]["id"]
+        response = client.post("/api/library/local-video", json={"video_path": str(other)})
+        self.assertEqual(response.status_code, 201)
+        new_id = response.get_json()["video_id"]
+        self.assertEqual(len(client.get("/api/library").get_json()["videos"]), 2)
+        self.assertEqual(client.post("/api/library/local-video", json={"video_path": str(other)}).status_code, 409)
+        bad = client.post("/api/library/local-video", json={"video_path": str(self.base / "missing.mp4")})
+        self.assertEqual(bad.status_code, 400)
+        result = client.post("/api/ask", json={"question": "embeddings", "video_id": new_id}).get_json()
+        self.assertFalse(result["abstained"])
+        self.assertEqual(result["evidence"][0]["video_id"], new_id)
+        self.assertTrue(client.get(f"/api/videos/{first_id}").status_code == 200)
+        demo = create_app(pipeline, database_path=self.base / "demo.sqlite3", mode="demo").test_client()
+        self.assertEqual(demo.post("/api/library/local-video", json={"video_path": str(other)}).status_code, 409)
+
     def test_generic_question_words_and_partial_content_do_not_produce_answers(self):
         self.srt.write_text(
             "1\n00:00:01,000 --> 00:00:05,000\nThis is about attention and queries.\n\n"
