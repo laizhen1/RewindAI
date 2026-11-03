@@ -26,6 +26,8 @@ data/processed/
 *.mp3
 *.m4a
 *.flac
+*.srt
+*.vtt
 *.sqlite
 *.sqlite3
 *.db

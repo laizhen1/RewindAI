@@ -18,8 +18,8 @@ def create_app(
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     store = LibraryStore(database_path)
-    if mode not in {"demo", "full", "unknown"}:
-        raise ValueError("mode must be demo, full or unknown")
+    if mode not in {"demo", "full", "transcript", "unknown"}:
+        raise ValueError("mode must be demo, full, transcript or unknown")
 
     @app.before_request
     def protect_local_workspace():

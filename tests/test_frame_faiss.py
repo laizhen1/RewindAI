@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from video_rag.retrieval.frame_faiss import FrameClipVisionRetriever, aggregate_frame_hits, collect_physical_frames
 from video_rag.schemas import Keyframe, VideoSegment
@@ -47,6 +48,7 @@ def test_invalid_aggregation_fails_closed():
 
 
 def test_builder_encodes_unique_frames_not_memberships(tmp_path):
+    pytest.importorskip("faiss", reason="FAISS is an optional model dependency")
     image = tmp_path / "shared.jpg"
     image.write_bytes(b"test fixture; encoder is mocked")
     shared = Keyframe(timestamp=17.0, path=str(image))
@@ -66,7 +68,7 @@ def test_builder_encodes_unique_frames_not_memberships(tmp_path):
 
 
 def test_search_returns_best_frame_timestamp_as_evidence(tmp_path):
-    import faiss
+    faiss = pytest.importorskip("faiss", reason="FAISS is an optional model dependency")
 
     class FakeQueryRetriever(FrameClipVisionRetriever):
         def _encode_query(self, query):

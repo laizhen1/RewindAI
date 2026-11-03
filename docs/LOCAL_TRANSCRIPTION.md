@@ -1,0 +1,23 @@
+# Local transcription with faster-whisper
+
+This optional command creates an SRT file from a video or audio file you are authorized to process. It performs inference on the local CPU; it does not send the recording to a hosted speech API and does not train or fine-tune a model. Subtitles are generated text and can contain mistakes: review them against the recording.
+
+Install the optional dependency in the project environment:
+
+```powershell
+python -m pip install faster-whisper
+```
+
+Run from the project root:
+
+```powershell
+python scripts/transcribe_local.py "C:\path\authorized-lecture.mp4" --language en
+```
+
+Choose `--language zh` for Chinese, or omit it for automatic detection. The default is the multilingual `base` model, CPU with int8 computation, and `local_files_only=True`. Required model files must already be cached; the first run with an empty cache will fail without contacting the model hub. To explicitly allow model files to download, add `--allow-model-download`. This download can contact a model provider, but the command does not upload the input media. Existing offline environment settings may still prevent downloads.
+
+`--model` accepts another faster-whisper model size or a local CTranslate2-compatible model directory. Local model directories must contain `tokenizer.json`; inspect model licenses and verify compatibility before use. Restricting model-hub access is not a network sandbox for arbitrary third-party libraries.
+
+The default output is `artifacts/transcripts/<input-name>.srt`. The command refuses to overwrite an existing file; choose another `.srt` path inside `artifacts/transcripts` with `--output`. These files may include sensitive information, so keep them out of public repositories. Review the course's copyright, participant privacy, and permissions for transcription before processing. Deleting recordings should include associated subtitles and derived files.
+
+This is a standalone transcription tool: the original `prepare_videos.py` does not automatically consume its SRT output. A separate integration would be required before these subtitles enter the video RAG index.

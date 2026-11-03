@@ -16,6 +16,7 @@ RewindAI is an AI-powered learning workspace for finding and reviewing moments i
 - 保存或删除片段收藏，为收藏编辑复习笔记。
 - 对回答和证据提交反馈，供后续分析。
 - 区分演示模式和完整模式，避免把占位演示当作真实模型结果。
+- 提供本地字幕检索模式：读取自备视频和 SRT/VTT 字幕，按时间戳查找和播放片段，无需模型或联网。
 - 在已有 VideoRAG 流水线上保留语音、关键帧、混合检索、重排和人工评测能力，完整模型运行仍需独立验证。
 
 **当前限制：**网页并不自动下载 Canvas 录像，也不直接完成上传、处理及索引；视频需要先通过本地处理流程导入。演示包未包含真实示例视频，播放器可能显示不可用。当前问答基于已加载的全部索引，不保证只检索某一课程。服务仅接受本机 Host 和同源浏览器请求；没有账号、多用户隔离或生产级鉴权，远程使用需要本机 SSH 转发，不支持通过非本机域名直接访问。
@@ -42,6 +43,20 @@ python -m ruff check src/video_rag/api scripts/ingest_local.py tests/test_ingest
 ```
 
 ## Real video workflow · 真实视频流程
+
+### 使用已有字幕（低配置）
+
+如果你有本地视频及其配套的 UTF-8 `.srt` 或 `.vtt` 字幕，可以在项目环境中运行：
+
+```bash
+python scripts/run_transcript.py --video /path/to/lecture.mp4 --subtitles /path/to/lecture.srt
+```
+
+此模式无需下载模型、无需联网，适合资源有限的电脑。它只进行**关键词匹配和字幕原文摘录**，不是语音识别、AI 生成或视频画面理解；不会自行生成字幕，也不能保证跨语言语义检索。只能处理外置字幕文件。如果字幕不足以回答问题，应该回看视频核对。单独运行时默认打开 `http://127.0.0.1:5000`。
+
+若视频没有字幕，可以另行安装 faster-whisper 并使用 [本地转字幕指南](docs/LOCAL_TRANSCRIPTION.md)。默认使用本地缓存和 CPU，不向云端上传视频或音频；首次获取模型需显式允许下载。转录脚本有模拟测试，但真实模型转录尚未验证。
+
+### 使用完整多模态模型
 
 完整流程涉及视频预处理、构建索引和启动真实服务。原项目推荐 Ubuntu 22.04、Python 3.11+、FFmpeg、24 GB 以上 NVIDIA 显存、64 GB 内存与 100 GB 磁盘；具体资源取决于视频和模型配置。请先阅读 [本地视频导入指南](docs/LOCAL_VIDEO_IMPORT.md)、[原始 VideoRAG 技术说明](docs/UPSTREAM_VIDEORAG.md) 和 `config.toml`，再根据自己的设备验证。模型权重和依赖的首次获取可能需要联网。
 
@@ -74,6 +89,7 @@ CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完�
 - [人工标注模板](data/evaluation/rewindai_annotation_template.csv)
 - [实验记录模板](data/evaluation/rewindai_experiment_template.md)
 - [完整产品和研发计划](docs/REWINDAI_PLAN_ZH.md)
+- [可用于本地演示的公开教育视频及许可](docs/PUBLIC_SAMPLE_ZH.md)
 
 ## Attribution · 来源与贡献
 
