@@ -11,3 +11,8 @@ class ApiTests(unittest.TestCase):
         response = client.post("/api/ask", json={"question": "CLIP有什么作用"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("evidence", response.get_json())
+        self.assertEqual(client.post("/api/ask", json={"question": "x", "video_id": "missing"}).status_code, 404)
+        scoped = client.post("/api/ask", json={"question": "CLIP", "video_id": "demo"})
+        self.assertEqual(scoped.status_code, 200)
+        self.assertTrue(all(item["video_id"] == "demo" for item in scoped.get_json()["evidence"]))
+
