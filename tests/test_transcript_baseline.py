@@ -153,6 +153,25 @@ class TranscriptBaselineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only be loaded once"):
             build_transcript_library([(self.video, self.srt), (self.video, other_srt)])
 
+    def test_context_is_adjacent_and_never_crosses_video_boundary(self):
+        other_video = self.base / "second.mp4"
+        other_video.write_bytes(b"other")
+        other_srt = self.base / "second.srt"
+        other_srt.write_text("1\n00:00:03,000 --> 00:00:06,000\nOther video.\n", encoding="utf-8")
+        pipeline = build_transcript_library([(self.video, self.srt), (other_video, other_srt)])
+        client = create_app(pipeline, database_path=self.base / "context.sqlite3", mode="transcript").test_client()
+        own = segments_from_subtitles(self.video, self.srt)
+        first = client.get(f"/api/segments/{own[0].segment_id}/context").get_json()["context"]
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first[0]["relation"], "next")
+        self.assertEqual(first[0]["segment_id"], own[1].segment_id)
+        self.assertNotIn("source_path", first[0])
+        last = client.get(f"/api/segments/{own[1].segment_id}/context").get_json()["context"]
+        self.assertEqual([item["relation"] for item in last], ["previous"])
+        self.assertEqual(client.get("/api/segments/missing/context").status_code, 404)
+        demo = create_app(pipeline, database_path=self.base / "context-demo.sqlite3", mode="demo").test_client()
+        self.assertEqual(demo.get(f"/api/segments/{own[0].segment_id}/context").status_code, 409)
+
     def test_course_search_filters_evidence_and_handles_empty_or_invalid_scope(self):
         other = self.base / "other.mp4"
         other.write_bytes(b"other video")

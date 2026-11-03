@@ -310,4 +310,24 @@ def create_app(
             return jsonify({"error": "video file is unavailable"}), 404
         return send_file(resolved, conditional=True)
 
+    @app.get("/api/segments/<segment_id>/context")
+    def segment_context(segment_id: str):
+        if mode != "transcript":
+            return jsonify({"error": "Context is only available in subtitle mode"}), 409
+        snapshot = pipeline.segments()
+        target = next((item for item in snapshot if item.segment_id == segment_id), None)
+        if target is None:
+            return jsonify({"error": "Segment not found"}), 404
+        ordered = sorted((item for item in snapshot if item.video_id == target.video_id),
+                         key=lambda item: (item.start_time, item.end_time, item.segment_id))
+        index = next(i for i, item in enumerate(ordered) if item.segment_id == segment_id)
+        context = []
+        for pos, relation in ((index - 1, "previous"), (index + 1, "next")):
+            if 0 <= pos < len(ordered):
+                item = ordered[pos]
+                context.append({"relation": relation, "segment_id": item.segment_id,
+                                "video_id": item.video_id, "start_time": item.start_time,
+                                "end_time": item.end_time, "transcript": item.transcript})
+        return jsonify({"context": context})
+
     return app
