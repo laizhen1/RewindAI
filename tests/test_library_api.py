@@ -65,6 +65,13 @@ class LibraryApiTests(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 201)
         self.assertIn("id", response.get_json())
+        rows = self.client.get("/api/feedback").get_json()["feedback"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["question"], "CLIP?")
+        self.assertEqual(rows[0]["segment_id"], "demo_0001")
+        self.assertEqual(rows[0]["comment"], "Wrong evidence")
+        reopened = create_app(build_demo_pipeline(), database_path=self.db).test_client()
+        self.assertEqual(reopened.get("/api/feedback").get_json()["feedback"], rows)
 
     def test_ask_does_not_expose_local_media_paths(self):
         response = self.client.post("/api/ask", json={"question": "CLIP有什么作用"})
