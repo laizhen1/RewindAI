@@ -52,3 +52,25 @@ As an additional check, the same local model was run on a second [public KI-Camp
 python scripts/evaluate_transcription.py --reference "PATH_TO_SUPPLIED.srt" --hypothesis "PATH_TO_GENERATED.srt"
 ```
 
+## Supplied captions versus local speech transcription
+
+As a paired input-sensitivity diagnostic, the same keyword retriever and provisional questions were run on both the published English captions and the locally generated faster-whisper `base` captions for each video. All other diagnostic settings were unchanged; metrics use the top-1 evidence and 50% reference-interval coverage rule described above.
+
+| Video | Caption input | TP | FP | FN | TN | Precision | Recall | F1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| AI medical ethics (9 questions) | Published captions | 3 | 3 | 0 | 3 | 0.500 | 1.000 | 0.667 |
+| AI medical ethics (9 questions) | Local Whisper base | 3 | 3 | 0 | 3 | 0.500 | 1.000 | 0.667 |
+| AI explained (10 questions) | Published captions | 4 | 2 | 1 | 3 | 0.667 | 0.800 | 0.727 |
+| AI explained (10 questions) | Local Whisper base | 2 | 5 | 3 | 3 | 0.286 | 0.400 | 0.333 |
+
+For example, on the second video the question about which tasks AI can do retrieved a top segment at 4.294–24.036 seconds with published captions, covering its 16.302–21.306 second draft reference; the generated captions yielded 0–14 seconds, which does not cover it. The question about how programmers provide instructions instead produced no result with published captions and a matching temporal segment with generated captions. These observations measure timestamp overlap only: they do not independently establish whether an answer is correct.
+
+The reference and generated subtitle files also differ in timing and cue boundaries, which determine how RewindAI groups text into segments. The comparison therefore combines differences in text, timing and segmentation; it cannot isolate transcription error as the cause. Questions and reference intervals were drafted with access to the supplied captions, creating potential label bias, and have not been independently checked. Both videos come from the same producer. The large swing on ten draft questions should not be reported as a population-level accuracy or a product benchmark. No threshold or retrieval settings were changed after observing the results.
+
+To repeat, run the following twice per video, first with the downloaded supplied captions and then with locally generated captions. Keep the same video and question file for both runs. The generated-caption procedure is in [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md).
+
+```powershell
+python scripts/diagnose_transcript.py --video PATH_TO_VIDEO --subtitles PATH_TO_CAPTIONS --questions data/evaluation/ai_explained_questions.pending.json
+```
+
+For the ethics video use `data/evaluation/public_sample_questions.pending.json`. Preserve the JSON output locally for per-question returned ranges and coverage; avoid publishing private videos, subtitles, questions or output. A stronger next test requires independently reviewed time intervals and answerability labels on held-out videos, plus a controlled experiment that fixes segmentation while changing transcript text.
