@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import sqlite3
 from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
@@ -8,6 +10,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 
 from video_rag.api.library import LibraryStore
 from video_rag.pipeline import VideoRAGPipeline
+from video_rag.schemas import VideoSegment
 
 
 def create_app(
@@ -22,6 +25,30 @@ def create_app(
     import_lock = Lock()
     if mode not in {"demo", "full", "transcript", "unknown"}:
         raise ValueError("mode must be demo, full, transcript or unknown")
+    unavailable_videos = 0
+    if mode == "transcript":
+        from video_rag.transcript_baseline import build_transcript_segments
+
+        restored = list(pipeline.segments())
+        loaded_ids = {segment.video_id for segment in restored}
+        for record in store.local_videos():
+            if record["video_id"] in loaded_ids:
+                continue
+            try:
+                stat = Path(record["video_path"]).stat()
+                if (stat.st_size, stat.st_mtime_ns) != (record["video_size"], record["video_mtime_ns"]):
+                    raise ValueError("Stored video changed")
+                entries = json.loads(record["segments_json"])
+                segments = [VideoSegment(**entry) for entry in entries]
+                if not segments or any(segment.video_id != record["video_id"] or
+                                       segment.source_path != record["video_path"] for segment in segments):
+                    raise ValueError("Stored segments are inconsistent")
+                restored.extend(segments)
+                loaded_ids.add(record["video_id"])
+            except (OSError, ValueError, TypeError, KeyError):
+                unavailable_videos += 1
+        if len(restored) > len(pipeline.segments()):
+            pipeline = build_transcript_segments(restored)
 
     @app.before_request
     def protect_local_workspace():
@@ -58,7 +85,8 @@ def create_app(
         for item in videos:
             item["course_id"] = assignments.get(item["id"])
             item["video_url"] = f"/api/videos/{item['id']}"
-        return jsonify({"courses": store.courses(), "videos": videos})
+        return jsonify({"courses": store.courses(), "videos": videos,
+                        "unavailable_saved_videos": unavailable_videos})
 
     @app.post("/api/library/local-video")
     def import_local_video():
@@ -82,14 +110,22 @@ def create_app(
         try:
             video_path = Path(video.strip()).expanduser().resolve()
             subtitle_path = Path(subtitle.strip()).expanduser().resolve() if subtitle.strip() else find_subtitles(video_path)
+            original_stat = video_path.stat()
             added = segments_from_subtitles(video_path, subtitle_path)
+            current_stat = video_path.stat()
+            if (original_stat.st_size, original_stat.st_mtime_ns) != (current_stat.st_size, current_stat.st_mtime_ns):
+                return jsonify({"error": "Video changed while importing; try again"}), 409
             with import_lock:
                 current = pipeline.segments()
                 if any(segment.video_id == added[0].video_id for segment in current):
                     return jsonify({"error": "Video is already loaded"}), 409
                 replacement = build_transcript_segments([*current, *added])
+                store.remember_video(added[0].video_id, str(video_path), current_stat.st_size,
+                                     current_stat.st_mtime_ns, json.dumps([segment.to_dict() for segment in added]))
                 pipeline = replacement
             return jsonify({"video_id": added[0].video_id, "segment_count": len(added)}), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": "Video is already saved; restore the original file and restart"}), 409
         except (OSError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
 
