@@ -1,6 +1,7 @@
 """Choose a local video and launch offline transcription and subtitle search."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -40,7 +41,13 @@ def main(argv: list[str] | None = None) -> int:
             return 0
     print("Transcribing locally with cached Whisper base on CPU. Model downloads are disabled.", flush=True)
     print("When ready, open http://127.0.0.1:5000/; close this window to stop.", flush=True)
-    return subprocess.call([sys.executable, str(ROOT / "scripts" / "rewind_local.py"), video], cwd=ROOT)
+    env = os.environ.copy()
+    project_cache = ROOT / "artifacts" / "hf-cache"
+    cache_reference = project_cache / "hub" / "models--Systran--faster-whisper-base" / "refs" / "main"
+    if cache_reference.is_file() and not any(env.get(key) for key in
+                                              ("HF_HOME", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE")):
+        env["HF_HOME"] = str(project_cache)
+    return subprocess.call([sys.executable, str(ROOT / "scripts" / "rewind_local.py"), video], cwd=ROOT, env=env)
 
 
 if __name__ == "__main__":
