@@ -48,3 +48,26 @@ class PipelineTests(unittest.TestCase):
         result = make_pipeline().ask("量子计算机")
         self.assertTrue(result.abstained)
         self.assertEqual(result.evidence, ())
+
+    def test_weak_candidates_are_not_returned_or_given_to_generator(self):
+        pipeline = make_pipeline(minimum_score=0.5)
+
+        class FixedReranker:
+            def score(self, query, segments):
+                return [0.9 if item.segment_id == "v1_0000" else 0.1 for item in segments]
+
+        class CaptureGenerator:
+            def __init__(self):
+                self.seen = []
+
+            def generate(self, query, segments):
+                self.seen = segments
+                return "answer"
+
+        capture = CaptureGenerator()
+        pipeline._reranker = FixedReranker()
+        pipeline._generator = capture
+        result = pipeline.ask("飞机蛋糕")
+        self.assertEqual([item.segment.segment_id for item in result.evidence], ["v1_0000"])
+        self.assertEqual([item.segment_id for item in capture.seen], ["v1_0000"])
+
