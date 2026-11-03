@@ -119,6 +119,20 @@ class TranscriptBaselineTests(unittest.TestCase):
         demo = create_app(pipeline, database_path=self.base / "demo.sqlite3", mode="demo").test_client()
         self.assertEqual(demo.post("/api/library/local-video", json={"video_path": str(other)}).status_code, 409)
 
+        # Recreate the app from the initial source to simulate a restart.
+        resumed = create_app(build_transcript_pipeline(self.video, self.srt),
+                             database_path=self.base / "import.sqlite3", mode="transcript").test_client()
+        self.assertEqual(len(resumed.get("/api/library").get_json()["videos"]), 2)
+        self.assertFalse(resumed.post("/api/ask", json={"question": "embeddings", "video_id": new_id}).get_json()["abstained"])
+        # A replacement video at the same path must not silently reuse stale evidence.
+        other.write_bytes(b"modified video content")
+        changed = create_app(build_transcript_pipeline(self.video, self.srt),
+                             database_path=self.base / "import.sqlite3", mode="transcript").test_client()
+        data = changed.get("/api/library").get_json()
+        self.assertEqual(len(data["videos"]), 1)
+        self.assertEqual(data["unavailable_saved_videos"], 1)
+        self.assertEqual(changed.post("/api/ask", json={"question": "embeddings", "video_id": new_id}).status_code, 404)
+
     def test_generic_question_words_and_partial_content_do_not_produce_answers(self):
         self.srt.write_text(
             "1\n00:00:01,000 --> 00:00:05,000\nThis is about attention and queries.\n\n"
