@@ -106,6 +106,25 @@ def create_app(
             del unavailable_videos[video_id]
         return "", 204
 
+    @app.delete("/api/library/videos/<video_id>")
+    def forget_loaded_video(video_id: str):
+        nonlocal pipeline
+        if mode != "transcript":
+            return jsonify({"error": "Only available in subtitle mode"}), 409
+        with import_lock:
+            current = pipeline.segments()
+            if not any(segment.video_id == video_id for segment in current):
+                return jsonify({"error": "Video not found in the loaded index"}), 404
+            remaining = [segment for segment in current if segment.video_id != video_id]
+            try:
+                replacement = transcript_builder(remaining)
+                # Sources passed at startup may not have a saved record.
+                store.forget_video(video_id)
+            except (sqlite3.Error, OSError, RuntimeError, ValueError):
+                return jsonify({"error": "Could not rebuild or save the local index"}), 500
+            pipeline = replacement
+        return "", 204
+
     @app.post("/api/library/local-video")
     def import_local_video():
         nonlocal pipeline

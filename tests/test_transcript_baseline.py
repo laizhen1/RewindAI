@@ -93,6 +93,51 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
         self.assertFalse(reopened.post("/api/ask", json={"question": "attention"}).get_json()["abstained"])
 
+    def test_removing_loaded_video_keeps_media_and_notes_allows_new_subtitles(self):
+        db = self.base / "remove.sqlite3"
+        client = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        video_id = client.post("/api/library/local-video", json={"video_path": str(self.video)}).get_json()["video_id"]
+        evidence = client.post("/api/ask", json={"question": "attention"}).get_json()["evidence"][0]
+        old_id = evidence["segment_id"]
+        client.post("/api/bookmarks", json={"video_id": video_id, "segment_id": old_id, "note": "keep me"})
+        self.assertEqual(client.delete(f"/api/library/videos/{video_id}").status_code, 204)
+        self.assertTrue(self.video.exists())
+        self.assertTrue(self.srt.exists())
+        saved = client.get("/api/bookmarks").get_json()["bookmarks"][0]
+        self.assertEqual(saved["note"], "keep me")
+        self.assertFalse(saved["available"])
+        self.assertEqual(client.delete(f"/api/library/videos/{video_id}").status_code, 404)
+        self.srt.write_text("1\n00:00:03,000 --> 00:00:06,000\nAttention is updated.\n", encoding="utf-8")
+        self.assertEqual(client.post("/api/library/local-video", json={"video_path": str(self.video)}).status_code, 201)
+        new = client.post("/api/ask", json={"question": "attention"}).get_json()["evidence"][0]
+        self.assertNotEqual(new["segment_id"], old_id)
+        self.assertFalse(client.get("/api/bookmarks").get_json()["bookmarks"][0]["available"])
+        reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
+
+    def test_removing_command_line_video_and_demo_rejection(self):
+        pipeline = build_transcript_pipeline(self.video, self.srt)
+        video_id = pipeline.videos()[0]["id"]
+        client = create_app(pipeline, database_path=self.base / "cli.sqlite3", mode="transcript").test_client()
+        self.assertEqual(client.delete(f"/api/library/videos/{video_id}").status_code, 204)
+        self.assertEqual(client.get("/api/library").get_json()["videos"], [])
+        demo = create_app(pipeline, database_path=self.base / "demo2.sqlite3", mode="demo").test_client()
+        self.assertEqual(demo.delete(f"/api/library/videos/{video_id}").status_code, 409)
+
+    def test_failed_rebuild_does_not_forget_video(self):
+        def fail_empty(segments):
+            if not segments:
+                raise ValueError("failed to build")
+            return build_transcript_segments(segments)
+        db = self.base / "fail.sqlite3"
+        client = create_app(build_transcript_segments([]), database_path=db, mode="transcript",
+                            transcript_builder=fail_empty).test_client()
+        video_id = client.post("/api/library/local-video", json={"video_path": str(self.video)}).get_json()["video_id"]
+        self.assertEqual(client.delete(f"/api/library/videos/{video_id}").status_code, 500)
+        self.assertEqual(client.get("/api/library").get_json()["videos"][0]["id"], video_id)
+        reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        self.assertEqual(reopened.get("/api/library").get_json()["videos"][0]["id"], video_id)
+
     def test_multiple_videos_are_separate_and_search_can_be_scoped(self):
         other_video = self.base / "second.mp4"
         other_video.write_bytes(b"other")
