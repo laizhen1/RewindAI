@@ -210,6 +210,10 @@ def create_app(
             return jsonify({"error": "bookmark not found"}), 404
         return "", 204
 
+    @app.get("/api/feedback")
+    def list_feedback():
+        return jsonify({"feedback": store.recent_feedback()})
+
     @app.post("/api/feedback")
     def feedback():
         payload = request.get_json(silent=True)
