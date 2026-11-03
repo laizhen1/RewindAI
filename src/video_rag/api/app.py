@@ -25,7 +25,7 @@ def create_app(
     import_lock = Lock()
     if mode not in {"demo", "full", "transcript", "unknown"}:
         raise ValueError("mode must be demo, full, transcript or unknown")
-    unavailable_videos = 0
+    unavailable_videos: dict[str, str] = {}
     if mode == "transcript":
         from video_rag.transcript_baseline import build_transcript_segments
 
@@ -46,7 +46,7 @@ def create_app(
                 restored.extend(segments)
                 loaded_ids.add(record["video_id"])
             except (OSError, ValueError, TypeError, KeyError):
-                unavailable_videos += 1
+                unavailable_videos[record["video_id"]] = Path(record["video_path"]).name
         if len(restored) > len(pipeline.segments()):
             pipeline = build_transcript_segments(restored)
 
@@ -86,7 +86,20 @@ def create_app(
             item["course_id"] = assignments.get(item["id"])
             item["video_url"] = f"/api/videos/{item['id']}"
         return jsonify({"courses": store.courses(), "videos": videos,
-                        "unavailable_saved_videos": unavailable_videos})
+                        "unavailable_saved_videos": len(unavailable_videos),
+                        "unavailable_videos": [{"id": key, "title": value} for key, value in unavailable_videos.items()]})
+
+    @app.delete("/api/library/unavailable-video/<video_id>")
+    def forget_unavailable_video(video_id: str):
+        if mode != "transcript":
+            return jsonify({"error": "Only available in subtitle mode"}), 409
+        with import_lock:
+            if video_id not in unavailable_videos:
+                return jsonify({"error": "Unavailable saved video not found"}), 404
+            if not store.forget_video(video_id):
+                return jsonify({"error": "Saved video not found"}), 404
+            del unavailable_videos[video_id]
+        return "", 204
 
     @app.post("/api/library/local-video")
     def import_local_video():
@@ -153,7 +166,13 @@ def create_app(
 
     @app.get("/api/bookmarks")
     def bookmarks():
-        return jsonify({"bookmarks": store.bookmarks()})
+        items = store.bookmarks()
+        for item in items:
+            segment = pipeline.segment(item["segment_id"])
+            item["available"] = bool(segment and Path(segment.source_path).is_file() and
+                                     segment.video_id == item["video_id"] and
+                                     segment.start_time == item["start_time"] and segment.end_time == item["end_time"])
+        return jsonify({"bookmarks": items})
 
     @app.post("/api/bookmarks")
     def add_bookmark():
@@ -247,4 +266,3 @@ def create_app(
         return send_file(resolved, conditional=True)
 
     return app
-
