@@ -52,27 +52,30 @@ class VideoRAGPipeline:
         for retriever in self._retrievers:
             retriever.search(query, 1)
 
-    def ask(self, query: str, *, video_id: str | None = None) -> Answer:
+    def ask(self, query: str, *, video_id: str | None = None, video_ids: set[str] | None = None) -> Answer:
         query = query.strip()
         if not query:
             raise ValueError("query must not be empty")
         if not self._segments:
             raise RuntimeError("Pipeline index is empty; call build() first")
+        if video_id is not None and video_ids is not None:
+            raise ValueError("Choose one video scope")
         if video_id is not None and not any(s.video_id == video_id for s in self._segments.values()):
             raise ValueError("video not found in the loaded index")
+        scope = {video_id} if video_id is not None else video_ids
 
         started = perf_counter()
         # Scoped queries must not lose the desired video to global top-k truncation.
         # Ask each segment-level retriever for its complete ranking, then filter
         # and renumber before fusion. This is more expensive for large indexes.
-        count = len(self._segments) if video_id is not None else self._recall_top_k
+        count = len(self._segments) if scope is not None else self._recall_top_k
         result_lists = [retriever.search(query, count) for retriever in self._retrievers]
-        if video_id is not None:
+        if scope is not None:
             result_lists = [
                 [SearchHit(hit.segment_id, hit.score, hit.source, rank, hit.metadata)
                  for rank, hit in enumerate(
                     (hit for hit in hits if hit.segment_id in self._segments
-                     and self._segments[hit.segment_id].video_id == video_id), start=1)]
+                     and self._segments[hit.segment_id].video_id in scope), start=1)]
                 for hits in result_lists
             ]
         recalled_at = perf_counter()
@@ -180,4 +183,3 @@ class VideoRAGPipeline:
                 "total": (finished - started) * 1000,
             },
         )
-
