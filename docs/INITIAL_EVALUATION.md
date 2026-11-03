@@ -74,3 +74,22 @@ python scripts/diagnose_transcript.py --video PATH_TO_VIDEO --subtitles PATH_TO_
 ```
 
 For the ethics video use `data/evaluation/public_sample_questions.pending.json`. Preserve the JSON output locally for per-question returned ranges and coverage; avoid publishing private videos, subtitles, questions or output. A stronger next test requires independently reviewed time intervals and answerability labels on held-out videos, plus a controlled experiment that fixes segmentation while changing transcript text.
+
+### Controlled window-boundary diagnostic
+
+To investigate segmentation sensitivity, we repeated the same provisional keyword evaluation using `scripts/compare_caption_inputs.py`. Both caption inputs were assigned to the same 20-second windows starting at zero; each whole caption cue was assigned to the window containing its midpoint. Empty windows were retained on both sides. This is an experimental comparison, not the application's default grouping.
+
+| Video | Caption input | TP | FP | FN | TN | Precision | Recall | F1 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| AI medical ethics | Published | 3 | 3 | 0 | 3 | 0.500 | 1.000 | 0.667 |
+| AI medical ethics | Whisper base | 3 | 3 | 0 | 3 | 0.500 | 1.000 | 0.667 |
+| AI explained | Published | 4 | 2 | 1 | 3 | 0.667 | 0.800 | 0.727 |
+| AI explained | Whisper base | 4 | 3 | 1 | 3 | 0.571 | 0.800 | 0.667 |
+
+The second video's generated-caption F1 changed from 0.333 under the default cue grouping to 0.667 under these fixed windows, while the published-caption score stayed at 0.727. This suggests segmentation choices deserve further investigation; it is not proof that segmentation alone caused the earlier difference. Caption content, timing errors, midpoint assignment, ranking, and fixed boundaries can still affect results, and a long cue can straddle a boundary despite being assigned wholly to one window. Twenty seconds was a diagnostic choice and was not selected on an independent validation set. All earlier caveats about provisional, caption-derived labels and tiny samples apply.
+
+```powershell
+python scripts/compare_caption_inputs.py --video PATH_TO_VIDEO --reference-captions PATH_TO_SUPPLIED.srt --generated-captions PATH_TO_GENERATED.srt --questions data/evaluation/ai_explained_questions.pending.json --window-seconds 20
+```
+
+For the first video use `data/evaluation/public_sample_questions.pending.json`. The JSON output includes per-question ranges and the counts behind each metric. The tool processes the input files locally and does not upload them.
