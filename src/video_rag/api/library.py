@@ -125,3 +125,10 @@ class LibraryStore:
                 (question, segment_id, rating, comment),
             )
             return int(result.lastrowid)
+
+    def recent_feedback(self, limit: int = 100) -> list[dict]:
+        with self.connect() as connection:
+            return [dict(row) for row in connection.execute(
+                "SELECT id, question, segment_id, rating, comment, created_at "
+                "FROM feedback ORDER BY id DESC LIMIT ?", (limit,)
+            )]
