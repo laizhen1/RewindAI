@@ -1,0 +1,19 @@
+{
+  "status": "caption_based_pending_independent_review",
+  "source_video_page": "https://commons.wikimedia.org/wiki/File:Artificial_intelligence_explained_in_2_minutes_-_What_exactly_is_AI%3F.webm",
+  "reference_subtitles_page": "https://commons.wikimedia.org/wiki/TimedText:Artificial_intelligence_explained_in_2_minutes_-_What_exactly_is_AI%3F.webm.en.srt",
+  "source_credit": "KI-Campus, CC BY-SA 4.0; annotations are provisional and require independent review.",
+  "questions": [
+    {"question": "What kinds of tasks can artificial intelligence do?", "evidence_start_seconds": 16.302, "evidence_end_seconds": 21.306},
+    {"question": "What must AI systems have to do their tasks?", "evidence_start_seconds": 21.306, "evidence_end_seconds": 26.246},
+    {"question": "How does a programmer provide instructions to a machine?", "evidence_start_seconds": 30.2, "evidence_end_seconds": 36.35},
+    {"question": "What can programs that learn from data do?", "evidence_start_seconds": 42.82, "evidence_end_seconds": 51.0},
+    {"question": "What can AI do with spoken language?", "evidence_start_seconds": 67.143, "evidence_end_seconds": 74.483},
+    {"question": "Which team won the football world cup?", "expected_answerable": false},
+    {"question": "What is the boiling temperature of water?", "expected_answerable": false},
+    {"question": "Which programming language is recommended for building AI?", "expected_answerable": false},
+    {"question": "What medical conditions can AI diagnose in this video?", "expected_answerable": false},
+    {"question": "How many GPUs are needed to train artificial intelligence?", "expected_answerable": false}
+  ]
+}
+
