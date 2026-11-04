@@ -147,11 +147,14 @@ def create_app(
         if len(video) > 4096 or len(subtitle) > 4096:
             return jsonify({"error": "Path is too long"}), 400
         from video_rag.transcript_baseline import (
+            VIDEO_SUFFIXES,
             find_subtitles,
             segments_from_subtitles,
         )
         try:
             video_path = Path(video.strip()).expanduser().resolve()
+            if not video_path.is_file() or video_path.suffix.lower() not in VIDEO_SUFFIXES:
+                raise ValueError("Video must be an existing local MP4, WebM, OGV, MOV or M4V file")
             subtitle_path = Path(subtitle.strip()).expanduser().resolve() if subtitle.strip() else find_subtitles(video_path)
             original_stat = video_path.stat()
             added = segments_from_subtitles(video_path, subtitle_path)
@@ -173,6 +176,8 @@ def create_app(
             return jsonify({"error": "Video is already saved; restore the original file and restart"}), 409
         except (OSError, ValueError) as exc:
             return jsonify({"error": str(exc)}), 400
+        except (sqlite3.Error, RuntimeError):
+            return jsonify({"error": "Could not rebuild or save the local index; existing videos remain available"}), 500
 
     @app.post("/api/courses")
     def create_course():

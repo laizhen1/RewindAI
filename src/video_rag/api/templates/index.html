@@ -51,7 +51,8 @@
   const subtitlePath = element("input", "field"); subtitlePath.type = "text"; subtitlePath.style.width = "100%"; subtitlePath.placeholder = "C:\\Videos\\lecture.srt"; subtitleLabel.append(subtitlePath);
   const importButton = element("button", "tiny-btn", "加载视频"); importButton.type = "submit";
   const importHint = element("p", "hint", "仅在本机读取；视频路径和字幕副本保存在本机。视频被移动或更改后可恢复原文件，或移除失效索引并重新加载。");
-  importForm.append(importTitle, videoLabel, subtitleLabel, importButton, importHint);
+  const importStatus = element("p", "hint", "尚未开始加载。"); importStatus.setAttribute("role", "status"); importStatus.setAttribute("aria-live", "polite");
+  importForm.append(importTitle, videoLabel, subtitleLabel, importButton, importStatus, importHint);
   $("courseForm").after(importForm);
   const removeVideo = button("移除当前视频索引", async () => {
     const selected = state.selectedVideo;
@@ -67,7 +68,32 @@
     } catch (err) { notice(err.message); } finally { removeVideo.disabled = false; }
   });
   removeVideo.classList.add("hidden"); $("assignWrap").after(removeVideo);
-  importForm.addEventListener("submit", async event => { event.preventDefault(); importButton.disabled = true; try { await api("/api/library/local-video", jsonOptions("POST", {video_path: videoPath.value, subtitle_path: subtitlePath.value})); videoPath.value = ""; subtitlePath.value = ""; await loadLibrary(); await loadBookmarks(); notice("视频已加载并保存在本机"); } catch (err) { notice(err.message); } finally { importButton.disabled = false; } });
+  function explainImportError(message) {
+    const known = {
+      "Video must be an existing local MP4, WebM, OGV, MOV or M4V file": "找不到视频或文件格式不受支持，请检查视频路径。",
+      "No same-name .srt or .vtt file; pass --subtitles explicitly": "没有找到同名字幕，请填写 SRT/VTT 字幕路径，或先在本机生成字幕。",
+      "Both .srt and .vtt sidecars exist; choose one with --subtitles": "同名 SRT 和 VTT 字幕都存在，请填写要使用的字幕路径。",
+      "Subtitles must be an existing local .srt or .vtt file": "找不到 SRT/VTT 字幕，请检查字幕路径。",
+      "Subtitles must be encoded as UTF-8": "字幕不是 UTF-8 编码，请转换后重试。",
+      "Subtitle file exceeds the 10 MiB limit": "字幕文件超过 10 MiB 上限。",
+      "Video is already loaded": "该视频已加载。如需更新字幕，请先移除当前索引。",
+      "Video changed while importing; try again": "加载时视频文件发生变化，请重新尝试。",
+      "Could not rebuild or save the local index; existing videos remain available": "无法建立或保存索引，已有视频仍可使用。请检查本机依赖与存储空间。"
+    };
+    return known[message] || message;
+  }
+  importForm.addEventListener("submit", async event => {
+    event.preventDefault(); importButton.disabled = true;
+    importStatus.className = "hint"; importStatus.textContent = "正在本机读取字幕并建立索引；视频较长或使用语义模式时可能需要一些时间。";
+    try {
+      const result = await api("/api/library/local-video", jsonOptions("POST", {video_path: videoPath.value, subtitle_path: subtitlePath.value}));
+      videoPath.value = ""; subtitlePath.value = "";
+      importStatus.textContent = `加载完成：已建立 ${result.segment_count} 个字幕片段。正在刷新列表……`;
+      try { await loadLibrary(); await loadBookmarks(); importStatus.textContent = `加载完成：已建立 ${result.segment_count} 个字幕片段，可以选择视频搜索。`; notice("视频已加载并保存在本机"); }
+      catch (err) { importStatus.className = "message"; importStatus.textContent = `视频已保存，但列表刷新失败：${err.message}。请刷新页面查看，勿重复导入。`; }
+    } catch (err) { importStatus.className = "message"; importStatus.textContent = `加载失败：${explainImportError(err.message)}`; }
+    finally { importButton.disabled = false; }
+  });
   const scopeLabel = element("label", "hint", "搜索范围 ");
   const searchScope = document.createElement("select");
   searchScope.className = "field";

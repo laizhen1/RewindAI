@@ -96,6 +96,27 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
         self.assertFalse(reopened.post("/api/ask", json={"question": "attention"}).get_json()["abstained"])
 
+    def test_import_errors_identify_video_and_keep_existing_index(self):
+        def builder(segments):
+            if len({segment.video_id for segment in segments}) > 1:
+                raise RuntimeError("internal detail")
+            return build_transcript_segments(segments)
+        db = self.base / "import_failure.sqlite3"
+        client = create_app(build_transcript_segments([]), database_path=db, mode="transcript", transcript_builder=builder).test_client()
+        missing = client.post("/api/library/local-video", json={"video_path": str(self.base / "missing.mp4")})
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn("Video must be an existing", missing.get_json()["error"])
+        self.assertEqual(client.post("/api/library/local-video", json={"video_path": str(self.video)}).status_code, 201)
+        other = self.base / "next.mp4"
+        other.write_bytes(b"video")
+        other.with_suffix(".srt").write_text("1\n00:00:01,000 --> 00:00:03,000\nexample\n", encoding="utf-8")
+        response = client.post("/api/library/local-video", json={"video_path": str(other)})
+        self.assertEqual(response.status_code, 500)
+        self.assertNotIn("internal detail", response.get_json()["error"])
+        self.assertEqual(len(client.get("/api/library").get_json()["videos"]), 1)
+        reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
+
     def test_removing_loaded_video_keeps_media_and_notes_allows_new_subtitles(self):
         db = self.base / "remove.sqlite3"
         client = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
