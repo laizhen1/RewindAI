@@ -58,3 +58,13 @@ The evaluator computes micro frame-level precision, recall and F1 for the top th
 ## Five-frame provisional diagnostic
 
 As a workflow check, five midpoint frames from the public ethics video were visually inspected by the assistant and five queries were drafted afterward, including one absent object. These labels were **not independently reviewed** and the queries were written with knowledge of the frames and some model behavior. Across 25 query–frame pairs, top-three ranking gave TP=9, FP=6, FN=0, TN=10: precision **0.600**, recall **1.000**, F1 **0.750**. The single absent query still returned three candidates. For the hand-and-pen query, the matching frame was third rather than first. This tiny, selectively designed diagnostic is not a benchmark or a portfolio accuracy claim; it shows both the end-to-end scoring workflow and the absence of safe abstention. Source images and draft labels were kept in ignored local artifacts.
+
+## Bounded sampling latency smoke test
+
+On 4 November 2026, the same public 97-second video was divided into 105 **synthetic 0.8-second segments**; the visual sampler selected 100. With the local quantized CLIP model on CPU, one run took **21.34 seconds** to load the model and build the index, followed by **0.023 seconds** for one query and three returned candidates. This checks the 100-frame path on this machine; closely spaced synthetic frames are not a representative hour-long lecture. Peak system memory, GPU use, audio transcription, visual accuracy and user-perceived browser latency were not measured. Different decoding formats, resolution and hardware can materially change the time.
+
+```powershell
+python scripts/benchmark_clip_sampling.py --video PATH_TO_VIDEO --model-dir PATH_TO_LOCAL_CLIP_MODEL --count 105 --step 0.8
+```
+
+The whole synthetic time range must fit inside the video. The benchmark reads the video locally, does not save frames, and is for timing rather than evaluation.
