@@ -23,6 +23,8 @@ The app does not automatically download Canvas recordings. Subtitle search retur
 
 The local library stores video paths, subtitle copies, course assignments, bookmarks and feedback. Unchanged videos are restored on restart. If a source moves or changes, affected searches and playback are blocked; restore the file or remove and rebuild its index. Original media and notes are preserved, although bookmarks for an old subtitle revision may no longer be playable. Updating an external subtitle file does not update the saved copy automatically. Video changes are detected using size and modification time, not a content hash, and already buffered media may continue playing. If an evidence start time exceeds video duration, the player warns about a possible mismatch; this check cannot validate other timestamps.
 
+Subtitle and experimental visual searches recheck the source after processing; a detected change discards the results. Frame previews are similarly rechecked. These lightweight checks cannot detect changes that preserve both file size and modification time, or changes after the final check.
+
 Search covers all indexed videos by default and can be scoped to the selected video or its course. Scoped search scans the index and may be slow for large collections. The demo does not include real media. Full multimodal mode requires preprocessing and indexes. The server accepts loopback Host values and same-origin browser requests, but has no accounts, multi-user isolation or production authentication; remote use requires an SSH tunnel to the local service.
 
 ## Quick start

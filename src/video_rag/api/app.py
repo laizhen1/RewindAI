@@ -403,6 +403,7 @@ def create_app(
         question = payload.get("question")
         if not isinstance(question, str) or not question.strip() or len(question) > 4000:
             return jsonify({"error": "question must contain 1 to 4000 characters"}), 400
+        search_pipeline = pipeline
         video_id = payload.get("video_id")
         course_id = payload.get("course_id")
         if course_id is not None and (type(course_id) is not int or course_id <= 0):
@@ -426,13 +427,15 @@ def create_app(
             return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
         try:
             if course_videos is not None:
-                result = pipeline.ask(question, video_ids=course_videos)
+                result = search_pipeline.ask(question, video_ids=course_videos)
             elif video_id is not None:
-                result = pipeline.ask(question, video_id=video_id)
+                result = search_pipeline.ask(question, video_id=video_id)
             else:
-                result = pipeline.ask(question)
+                result = search_pipeline.ask(question)
         except RuntimeError as exc:
             return jsonify({"error": str(exc)}), 503
+        if pipeline is not search_pipeline or invalid_sources(scope):
+            return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
         response = result.to_dict()
         for evidence in response["evidence"]:
             # Local source paths may contain personal directory names. Video access
@@ -486,6 +489,10 @@ def create_app(
                     visual_index = candidate
                     visual_key = scope_key
                 hits = visual_index.search(question.strip(), 3)
+                if invalid_sources({segment.video_id for segment in segments}):
+                    visual_index = None
+                    visual_key = None
+                    return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
                 lookup = {segment.segment_id: segment for segment in selected}
                 evidence = [{"segment_id": hit.segment_id, "video_id": lookup[hit.segment_id].video_id,
                              "start_time": lookup[hit.segment_id].start_time,
@@ -514,6 +521,8 @@ def create_app(
             if text_response.status_code != 200:
                 return text_response
             visual_response = app.make_response(visual_search())
+        if visual_response.status_code == 409 and (visual_response.get_json(silent=True) or {}).get("error", "").startswith("A video in this search has moved or changed"):
+            return visual_response
         if visual_response.status_code != 200:
             return jsonify({"transcript": text_response.get_json(), "visual": None,
                             "visual_error": (visual_response.get_json(silent=True) or {}).get("error", "Visual search failed")})
@@ -558,7 +567,8 @@ def create_app(
     def segment_frame(segment_id: str):
         if mode != "transcript":
             return jsonify({"error": "Frame preview is only available in subtitle mode"}), 409
-        segment = pipeline.segment(segment_id)
+        frame_pipeline = pipeline
+        segment = frame_pipeline.segment(segment_id)
         if segment is None:
             return jsonify({"error": "Segment not found"}), 404
         if not source_available(segment.video_id):
@@ -574,6 +584,8 @@ def create_app(
         except (av.error.FFmpegError, OSError, OverflowError, RuntimeError, ValueError):
             # Do not expose local file paths in decoding errors.
             return jsonify({"error": "Could not decode a frame near this segment"}), 422
+        if pipeline is not frame_pipeline or not source_available(segment.video_id):
+            return jsonify({"error": "Video moved or changed; restore it or remove and re-import its index"}), 409
         return Response(image, mimetype="image/png", headers={"Cache-Control": "no-store",
                                                                "X-Frame-Seconds": f"{actual:.3f}"})
 
