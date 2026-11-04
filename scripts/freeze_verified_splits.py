@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
 import hashlib
 import json
-from pathlib import Path
 import random
+from collections import Counter, defaultdict
+from pathlib import Path
 
 from video_rag.evaluation.dataset_validation import ALLOWED_TYPES, read_jsonl, validate_questions
-
+from video_rag.evaluation.private_output import check_immutable, private_output, write_immutable
 
 SPLITS = ("development", "validation", "test")
 RATIOS = {"development": 0.70, "validation": 0.15, "test": 0.15}
@@ -89,12 +89,15 @@ def assign_video_groups(questions: list[dict]) -> dict[str, str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Freeze deterministic video-disjoint verified splits.")
-    parser.add_argument("--questions", type=Path, default=Path("data/evaluation/questions.zh.verified.jsonl"))
+    parser.add_argument("--questions", type=Path, default=Path("artifacts/annotations/questions.zh.verified.jsonl"))
     parser.add_argument("--segments", type=Path, default=Path("artifacts/segments.supplement_a.jsonl"))
-    parser.add_argument("--output", type=Path, default=Path("data/evaluation/questions.zh.verified.split.jsonl"))
+    parser.add_argument("--output", type=Path, default=Path("artifacts/annotations/questions.zh.verified.split.jsonl"))
     parser.add_argument("--manifest", type=Path, default=Path("artifacts/evaluation/verified_split_manifest.json"))
     parser.add_argument("--minimum", type=int, default=100)
     args = parser.parse_args()
+    args.output, args.manifest = private_output(args.output), private_output(args.manifest)
+    if args.output == args.manifest:
+        raise ValueError("Output and manifest must be different files")
     questions = read_jsonl(args.questions)
     for item in questions:
         item.pop("_line_number", None)
@@ -114,10 +117,6 @@ def main() -> None:
     if any(missing_types.values()):
         raise ValueError(f"each split must contain every question type; missing={missing_types}")
     content = "".join(json.dumps(item, ensure_ascii=False) + "\n" for item in output_rows)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    if args.output.exists() and args.output.read_text(encoding="utf-8") != content:
-        raise ValueError("frozen split already exists with different content")
-    args.output.write_text(content, encoding="utf-8")
     distribution = {
         split: {
             "questions": sum(item["split"] == split for item in output_rows),
@@ -127,17 +126,17 @@ def main() -> None:
         for split in SPLITS
     }
     manifest = {
-        "schema_version": 1, "algorithm": "deterministic greedy stratification with video-disjoint groups",
-        "ratios": RATIOS, "input_sha256": sha256(args.questions), "output_sha256": sha256(args.output),
+        "schema_version": 1, "algorithm": "seeded randomized stratification with video-disjoint groups",
+        "ratios": RATIOS, "input_sha256": sha256(args.questions), "output_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
         "question_count": len(output_rows), "distribution": distribution,
         "test_policy": "held-out test SHA is frozen and must not be used for method or threshold selection",
         "validation": validation.to_dict(),
     }
     text = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
-    if args.manifest.exists() and args.manifest.read_text(encoding="utf-8") != text:
-        raise ValueError("frozen split manifest already exists with different content")
-    args.manifest.parent.mkdir(parents=True, exist_ok=True)
-    args.manifest.write_text(text, encoding="utf-8")
+    check_immutable(args.output, content)
+    check_immutable(args.manifest, text)
+    write_immutable(args.output, content)
+    write_immutable(args.manifest, text)
     print(text)
 
 

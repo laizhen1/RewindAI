@@ -3,12 +3,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import subprocess
 import sys
 import uuid
+from pathlib import Path
 
 from scripts.annotation_server import create_app
+from video_rag.evaluation.private_output import private_output
 from video_rag.evaluation.review_events import load_review_events
 
 
@@ -22,6 +23,7 @@ def main() -> None:
     parser.add_argument("--segments", type=Path, default=Path("artifacts/segments.supplement_a.jsonl"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation/annotation_smoke_latest.json"))
     args = parser.parse_args()
+    args.output = private_output(args.output)
     rows = [json.loads(line) for line in args.candidates.read_text(encoding="utf-8").splitlines() if line.strip()]
     candidate = next(item for item in rows if item["question_type"] == "audio" and not item.get("review_flags"))
     run_dir = Path("artifacts/smoke_annotation") / str(uuid.uuid4())
@@ -29,8 +31,6 @@ def main() -> None:
     candidate_path = run_dir / "candidate.jsonl"
     candidate_path.write_text(json.dumps(candidate, ensure_ascii=False) + "\n", encoding="utf-8")
     events_path = run_dir / "events.jsonl"
-    export_path = run_dir / "verified.jsonl"
-    export_report = run_dir / "export_report.json"
 
     def app_client():
         return create_app(
@@ -62,12 +62,14 @@ def main() -> None:
     accept_id = accept.get_json()["event_id"]
 
     def export() -> dict:
+        current_output = run_dir / f"verified-{uuid.uuid4().hex}.jsonl"
+        current_report = run_dir / f"export-{uuid.uuid4().hex}.json"
         subprocess.run([
             sys.executable, "scripts/export_verified_questions.py", "--candidates", str(candidate_path),
-            "--events", str(events_path), "--segments", str(args.segments), "--output", str(export_path),
-            "--report", str(export_report),
+            "--events", str(events_path), "--segments", str(args.segments), "--output", str(current_output),
+            "--report", str(current_report),
         ], check=True, capture_output=True, text=True)
-        return json.loads(export_report.read_text(encoding="utf-8"))
+        return json.loads(current_report.read_text(encoding="utf-8"))
 
     first_export = export()
     assert first_export["accepted"] == 1

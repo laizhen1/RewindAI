@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import hashlib
 import json
-from pathlib import Path
 import subprocess
+from datetime import UTC, datetime
+from pathlib import Path
+
+from video_rag.evaluation.private_output import private_output
 
 
 def sha256(path: Path) -> str:
@@ -20,12 +22,15 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, default=Path("artifacts/annotations/review_session_manifest.json"))
     parser.add_argument("--reviewer-id", default="project_owner_zzx")
     args = parser.parse_args()
+    args.events, args.manifest = private_output(args.events), private_output(args.manifest)
+    if args.events == args.manifest:
+        raise ValueError("Events and manifest must be different files")
     args.events.parent.mkdir(parents=True, exist_ok=True)
     args.events.touch(exist_ok=True)
     commit = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
     manifest = {
         "schema_version": 1,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "status": "formal_human_review_session",
         "reviewer_id": args.reviewer_id,
         "review_timestamp_timezone": "UTC",

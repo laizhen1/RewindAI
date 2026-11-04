@@ -86,3 +86,29 @@ def test_review_blocks_cross_origin_and_untrusted_host_without_writing(tmp_path)
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "no-store"
     assert client.post("/api/review", json=payload, headers={"Origin": "http://localhost"}).status_code == 200
+
+
+def test_verified_export_keeps_existing_files_and_accepts_identical_retry(tmp_path, monkeypatch):
+    import sys
+    import pytest
+    from scripts import export_verified_questions as exporter
+    from video_rag.evaluation.private_output import private_output
+    candidates, segments, events, question = fixture(tmp_path)
+    client = create_app(candidates, segments, events, "owner", allowed_video_root=tmp_path, allowed_frame_root=tmp_path).test_client()
+    response = client.post("/api/review", json={"question_id": "q1", "base_event_id": None, "action": "accept",
+        "reason": "played", "edited": question, "review_behavior": {"video_played": True, "playback_ranges": [[0, 5]]}})
+    assert response.status_code == 200
+    output, report = tmp_path / "private" / "verified.jsonl", tmp_path / "private" / "report.json"
+    monkeypatch.setattr(exporter, "private_output", lambda path: private_output(path, (tmp_path,)))
+    monkeypatch.setattr(sys, "argv", ["export", "--candidates", str(candidates), "--segments", str(segments),
+                                     "--events", str(events), "--output", str(output), "--report", str(report)])
+    exporter.main()
+    original = output.read_text(encoding="utf-8")
+    assert json.loads(report.read_text(encoding="utf-8"))["formal_metric_eligible"] is False
+    exporter.main()
+    assert output.read_text(encoding="utf-8") == original
+    report.write_text("do not overwrite", encoding="utf-8")
+    with pytest.raises(ValueError, match="already exists"):
+        exporter.main()
+    assert output.read_text(encoding="utf-8") == original
+    assert report.read_text(encoding="utf-8") == "do not overwrite"

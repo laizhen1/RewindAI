@@ -5,7 +5,7 @@ import argparse
 import json
 import math
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,7 +77,7 @@ def main():
             result.pop("results")
         report = {"warning": "Temporal coverage depends on label quality and does not establish answer correctness. "
                              "Reports and hashes may contain sensitive course information; keep them local.",
-                  "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                  "created_at_utc": datetime.now(UTC).isoformat(),
                   "label_status": data.get("status", "not provided"), "source_binding": source_binding,
                   "semantic_threshold": args.semantic_threshold, "min_coverage": args.min_coverage,
                   "aggregate_only": args.aggregate_only, "input_sha256": input_hashes, "comparison": result}

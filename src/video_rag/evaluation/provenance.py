@@ -25,7 +25,7 @@ def bind_sources(data: dict, video: Path, subtitles: Path) -> None:
 
 def verify_sources(data: dict, video: Path, subtitles: Path) -> str:
     if not isinstance(data, dict):
-        raise ValueError("Question file must contain a JSON object")
+        raise TypeError("Question file must contain a JSON object")
     binding = data.get("source_sha256")
     if binding is None:
         return "unbound"

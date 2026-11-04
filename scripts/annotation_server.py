@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
+import uuid
+from datetime import UTC, datetime
+from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
-import uuid
 
 from flask import Flask, jsonify, request, send_file
 
 from video_rag.evaluation.dataset_validation import read_jsonl, validate_questions
+from video_rag.evaluation.private_output import private_output
 from video_rag.evaluation.review_events import load_review_events
-
 
 HTML = r"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>VideoRAG人工复核</title>
 <style>body{font-family:sans-serif;background:#0e1322;color:#eef2ff;margin:0;padding:24px}main{max-width:1400px;margin:auto}.grid{display:grid;grid-template-columns:1.2fr 1fr;gap:20px}.card{background:#171e31;border:1px solid #33405f;border-radius:12px;padding:16px}video{width:100%;max-height:480px;background:#000}textarea{width:100%;height:430px;background:#0d1220;color:#dce6ff;border:1px solid #46577e;padding:10px;font:14px monospace}button{padding:10px 18px;margin:8px 8px 0 0;border:0;border-radius:8px;cursor:pointer}.accept{background:#2da66f;color:white}.reject{background:#bd4b55;color:white}.skip{background:#62739d;color:white}.evidence{white-space:pre-wrap;max-height:300px;overflow:auto}.frames img{max-width:220px;max-height:140px;margin:4px}input{padding:9px;width:55%;background:#0d1220;color:white;border:1px solid #46577e}</style></head>
@@ -176,7 +176,7 @@ def create_app(
             if payload.get("base_event_id") != previous_id:
                 return jsonify({"error": "stale review revision", "current_event_id": previous_id}), 409
             event_id = str(uuid.uuid4())
-            reviewed_at = datetime.now(timezone.utc).isoformat()
+            reviewed_at = datetime.now(UTC).isoformat()
             if action == "accept":
                 edited.update({
                     "verification_status": "verified", "annotation_source": "human_review",
@@ -218,7 +218,7 @@ def create_app(
                 "event_id": str(uuid.uuid4()), "sequence": len(all_events) + 1,
                 "previous_event_id": previous["event_id"], "question_id": question_id,
                 "action": "reopen", "reason": reason, "reviewer_id": reviewer_id,
-                "reviewed_at": datetime.now(timezone.utc).isoformat(), "candidate_file": str(candidates_path),
+                "reviewed_at": datetime.now(UTC).isoformat(), "candidate_file": str(candidates_path),
                 "candidate_file_sha256": candidate_sha, "candidate_before": candidate_by_id[question_id],
                 "annotation_after": None, "review_behavior": None,
             }
@@ -243,6 +243,7 @@ def main() -> None:
     args = parser.parse_args()
     if args.host not in {"127.0.0.1", "localhost"}:
         raise ValueError("annotation server must remain localhost-only; use an SSH tunnel")
+    args.events = private_output(args.events)
     create_app(
         args.candidates, args.segments, args.events, args.reviewer_id,
         allowed_video_root=Path("data/raw"), allowed_frame_root=Path("artifacts"),
