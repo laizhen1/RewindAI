@@ -30,10 +30,19 @@ def prepare(rows: list[dict], video_id: str, split: str | None = None) -> dict:
         raise ValueError("video_id is required")
     if split is not None and split not in SPLITS:
         raise ValueError("Invalid split")
-    selected = [r for r in rows if field(r, "video_id") == video_id.strip()
-                and (split is None or field(r, "split") == split)]
-    if not selected:
+    video_rows = [r for r in rows if field(r, "video_id") == video_id.strip()]
+    if not video_rows:
         raise ValueError("No matching annotations")
+    assigned = {field(row, "split") for row in video_rows}
+    if assigned - (SPLITS | {""}):
+        raise ValueError("Invalid split in selected video's rows")
+    if len(assigned) > 1:
+        raise ValueError("A video must not span multiple splits or mix assigned and unassigned rows")
+    existing_split = next(iter(assigned)) or None
+    if split is not None and existing_split != split:
+        raise ValueError("The requested split does not match every row for this video")
+    selected = video_rows
+    effective_split = split or existing_split
     questions = []
     seen = set()
     for row in selected:
@@ -65,7 +74,7 @@ def prepare(rows: list[dict], video_id: str, split: str | None = None) -> dict:
                 raise ValueError("Unanswerable questions must not include an evidence range")
             item["checked_scope"] = scope
         questions.append(item)
-    return {"status": "csv_import_unverified_draft", "video_id": video_id.strip(), "split": split,
+    return {"status": "csv_import_unverified_draft", "video_id": video_id.strip(), "split": effective_split,
             "notes": "CSV conversion does not establish human review, complete scope, or video-time correctness.",
             "questions": questions}
 

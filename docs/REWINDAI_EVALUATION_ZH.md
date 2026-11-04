@@ -83,3 +83,13 @@ python scripts/diagnose_transcript.py --video PATH_TO_VIDEO --subtitles PATH_TO_
 输出仅允许写入 `artifacts/` 或 `local_data/` 下的新 JSON 文件，不覆盖旧文件。转换器保留题目但始终标为 `csv_import_unverified_draft`，不核实视频 ID 与文件是否匹配，也不验证观看行为、证据内容或完整检查范围；调用者须自行核对。它不生成原复核工具所需的事件与 verified JSONL。题目、答案、视频、字幕和结果可能含私人课程资料，均应留在本机。
 
 为减少题目与素材配错，可在转换命令中同时传入 `--video PATH_TO_VIDEO --subtitles PATH_TO_SRT`。转换器在本机计算两个文件的 SHA-256 并写入草稿；时间诊断、语义诊断及两者对照会在运行前后检查指纹，不匹配时停止。未绑定的旧题集仍可运行，输出 `source_binding: unbound`，须人工核对。指纹绑定不证明题目、答案或时间戳正确；计算长视频哈希可能耗时，指纹及题目也应随私人资料保留在本机。
+
+### 检查视频划分
+
+转换 CSV 时，同一视频的所有行必须属于同一个 split，不能混用未分配和已分配行；未填任何 split 的题目只能作为未分组草稿。转换并绑定多个本地题目文件后，可以执行：
+
+```powershell
+python scripts/audit_temporal_splits.py --questions artifacts/evaluation/dev.json --questions artifacts/evaluation/test.json
+```
+
+工具检查跨 split 的相同视频 ID、已记录的视频 SHA-256 以及忽略大小写和空白差异的完全相同问题，只输出汇总数量。缺少指纹或不足两个 split 时结果为不确定；发现冲突或不确定时命令返回非零状态。它读取保存的指纹元数据，不会重新验证实际视频内容；诊断运行时才会验证绑定。它不能识别视频剪辑、重编码、同一课程相邻录像或问题改写，必须另行分组和人工检查。通过检查也不证明测试集独立或标签正确。

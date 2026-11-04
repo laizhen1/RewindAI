@@ -11,7 +11,7 @@ def row(**updates):
 
 
 def test_conversion_stays_draft_and_filters_video_and_split():
-    data = prepare([row(), row(question_id="q2", video_id="v2"), row(question_id="q3", split="validation"),
+    data = prepare([row(), row(question_id="q2", video_id="v2"),
                     row(question_id="q4", answerable="false", evidence_start_seconds="", evidence_end_seconds="", checked_scope="full video")],
                    "v1", "test")
     assert data["status"] == "csv_import_unverified_draft"
@@ -56,3 +56,13 @@ def test_source_binding_detects_changed_inputs_and_rejects_invalid_metadata(tmp_
     data["source_sha256"] = {"video": "not a hash"}
     with pytest.raises(ValueError, match="Invalid source"):
         verify_sources(data, video, subtitle)
+
+
+def test_video_cannot_be_split_across_partitions_or_unassigned_rows():
+    with pytest.raises(ValueError, match="multiple splits"):
+        prepare([row(), row(question_id="q2", split="validation")], "v1", "test")
+    with pytest.raises(ValueError, match="unassigned"):
+        prepare([row(), row(question_id="q2", split="")], "v1")
+    assert prepare([row()], "v1")["split"] == "test"
+    with pytest.raises(ValueError, match="does not match"):
+        prepare([row()], "v1", "development")
