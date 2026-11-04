@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.evaluate_clip_frames import evaluate, validate_label_header, validate_sources
 from video_rag.retrieval.onnx_clip import ClipFrameRetriever, OnnxClipEncoder
+from video_rag.retrieval.fusion import reciprocal_rank_fusion
 from video_rag.schemas import SearchHit
 from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
 
@@ -31,13 +32,25 @@ class TranscriptAdapter:
                 for rank, item in enumerate(response.evidence[:count], 1)]
 
 
+class FusedAdapter:
+    """Combine ranks, not uncalibrated lexical and CLIP score magnitudes."""
+    def __init__(self, transcript, visual):
+        self.transcript, self.visual = transcript, visual
+
+    def search(self, query, count):
+        return reciprocal_rank_fusion([self.transcript.search(query, count),
+                                       self.visual.search(query, count)], k=60, top_k=count)
+
+
 def compare(segments, labels, visual, *, allow_unreviewed=False):
     if len(segments) > 100:
         raise ValueError("At most 100 segments are supported; do not compare different sampled sets")
     validate_label_header(segments, labels, allow_unreviewed=allow_unreviewed)
-    transcript = evaluate(TranscriptAdapter(segments), segments, labels, allow_unreviewed=allow_unreviewed)
+    text = TranscriptAdapter(segments)
+    transcript = evaluate(text, segments, labels, allow_unreviewed=allow_unreviewed)
     visual_metrics = evaluate(visual, segments, labels, allow_unreviewed=allow_unreviewed)
-    return {"transcript": transcript, "visual": visual_metrics}
+    fused = evaluate(FusedAdapter(text, visual), segments, labels, allow_unreviewed=allow_unreviewed)
+    return {"transcript": transcript, "visual": visual_metrics, "fused_experimental": fused}
 
 
 def main():
@@ -62,7 +75,8 @@ def main():
     except (ImportError, OSError, KeyError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Comparison failed: {exc}\n")
     print(json.dumps({"warning": "Only sampled midpoint frames are labeled. Text and image searches are "
-                                 "separate; this is not fused multimodal retrieval or answer accuracy. "
+                                 "separate and fused by experimental reciprocal-rank ranking; "
+                                 "results do not measure answer accuracy. "
                                  "Output contains queries and must remain local for private media.",
                       "metrics": result}, indent=2))
     return 0

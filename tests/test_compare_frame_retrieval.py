@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.compare_frame_retrieval import compare
+from scripts.compare_frame_retrieval import compare, FusedAdapter
 from video_rag.schemas import SearchHit, VideoSegment
 
 
@@ -34,3 +34,16 @@ def test_no_predictions_with_positive_labels_has_zero_f1():
     assert result["visual"]["precision"] is None
     assert result["visual"]["recall"] == 0
     assert result["visual"]["f1"] == 0
+
+
+def test_fusion_deduplicates_agreement_without_mixing_raw_scores():
+    class Candidate:
+        def __init__(self, hits):
+            self.hits = hits
+        def search(self, query, count):
+            return self.hits[:count]
+    text = Candidate([SearchHit("a", 1000, "transcript", 1), SearchHit("b", 1, "transcript", 2)])
+    visual = Candidate([SearchHit("b", -4, "visual", 1), SearchHit("c", 10000, "visual", 2)])
+    hits = FusedAdapter(text, visual).search("question", 3)
+    assert [hit.segment_id for hit in hits] == ["b", "a", "c"]
+    assert hits[0].source == "transcript+visual"
