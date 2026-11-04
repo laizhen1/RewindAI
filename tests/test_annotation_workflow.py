@@ -72,3 +72,17 @@ def test_reopen_makes_item_pending_and_stale_tab_conflicts(tmp_path):
     state = client.get("/api/next").get_json()
     assert state["progress"]["pending"] == 1
     assert state["item"]["revision"] == reopened.get_json()["event_id"]
+
+
+def test_review_blocks_cross_origin_and_untrusted_host_without_writing(tmp_path):
+    candidates, segments, events, question = fixture(tmp_path)
+    client = create_app(candidates, segments, events, "owner", allowed_video_root=tmp_path, allowed_frame_root=tmp_path).test_client()
+    payload = {"question_id": "q1", "base_event_id": None, "action": "reject", "reason": "test", "edited": question}
+    assert client.get("/api/next", headers={"Host": "evil.example"}).status_code == 403
+    assert client.get("/api/next", headers={"Origin": "https://evil.example"}).status_code == 403
+    assert client.post("/api/review", json=payload, headers={"Origin": "https://evil.example"}).status_code == 403
+    assert not events.exists()
+    response = client.get("/api/next", headers={"Origin": "http://localhost"})
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert client.post("/api/review", json=payload, headers={"Origin": "http://localhost"}).status_code == 200

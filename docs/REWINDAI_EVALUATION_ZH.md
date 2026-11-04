@@ -40,7 +40,7 @@
 
 播放证据区间及其上下文后人工核查，标注全部实际覆盖证据的片段，并记录帧时间。无答案题不能只检查几个抽样片段后就断言整段无答案；应完整检查指定视频，或把题目范围明确限制在完整检查过的部分。对于歧义或需要视频外知识的题目，修改或排除并记录原因。
 
-复用仓库审计格式时，阅读 [原人工复核规范](ANNOTATION_GUIDE_ZH.md)：候选题需要通过复核事件与校验后才可称为 `verified`，不能手工伪造 `review_event_id` 或仅改状态。时间需以秒记录，证据区间须属于视频，且相关 segment 与区间重叠。CSV 模板只收集草稿，填写后仍须按原工具的 JSONL 格式转换、校验和复核；目前没有提供自动转换脚本。
+复用仓库审计格式时，阅读 [原人工复核规范](ANNOTATION_GUIDE_ZH.md)：候选题需要通过复核事件与校验后才可称为 `verified`，不能手工伪造 `review_event_id` 或仅改状态。时间需以秒记录，证据区间须属于视频，且相关 segment 与区间重叠。CSV 模板只收集草稿。可以用下方的时间诊断转换器生成单视频草稿 JSON；它不是原工具的 verified JSONL，不创建人工复核事件。正式标注仍须按原工具的格式校验和复核。
 
 ## 4. 视频级分组与冻结
 
@@ -70,3 +70,14 @@ JSON 包含 `questions` 数组；每条至少有 `question`。有答案的问题
 时间证据的 F1 按 `2TP / (2TP + FP + FN)` 计算：存在漏检但没有预测时，Precision 未定义而 F1 为 0；没有预测且没有正例时 F1 未定义。该指标只衡量时间范围覆盖，不代表回答正确。
 
 诊断输出还单独报告可回答问题中首条及任一返回片段达到覆盖阈值的数量、可回答问题的拒答数，以及无答案问题的拒答和返回候选数，各自包含分母和比例。任一返回片段的命中率只覆盖系统实际返回的候选，不等于标注了所有相关片段的标准 Recall@K。可选 `question_type` 字段用于分组；未标类型的题归为 `unlabeled`。零分母返回 `null`。输出包含问题和时间范围，私人课程评估必须留在本机。
+
+## 将本地 CSV 草稿转换为时间诊断输入
+
+使用 `data/evaluation/rewindai_annotation_template.csv` 的列填写本地 CSV；每题需要唯一 ID、视频 ID、题型、`true`/`false` 是否可回答。可回答题填写秒数范围；无答案题留空时间并填写实际完整检查过的 `checked_scope`。按单个视频和可选 split 转换：
+
+```powershell
+python scripts/prepare_temporal_questions.py --csv PATH_TO_LOCAL_CSV --video-id VIDEO_ID --split test --output artifacts/evaluation/local-draft.json
+python scripts/diagnose_transcript.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --questions artifacts/evaluation/local-draft.json
+```
+
+输出仅允许写入 `artifacts/` 或 `local_data/` 下的新 JSON 文件，不覆盖旧文件。转换器保留题目但始终标为 `csv_import_unverified_draft`，不核实视频 ID 与文件是否匹配，也不验证观看行为、证据内容或完整检查范围；调用者须自行核对。它不生成原复核工具所需的事件与 verified JSONL。题目、答案、视频、字幕和结果可能含私人课程资料，均应留在本机。

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 from threading import Lock
+from urllib.parse import urlsplit
 import uuid
 
 from flask import Flask, jsonify, request, send_file
@@ -48,6 +49,27 @@ def create_app(
     frame_root = (allowed_frame_root or Path("artifacts")).resolve()
     event_lock = Lock()
     app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = 256 * 1024
+
+    @app.before_request
+    def protect_local_review():
+        # Loopback binding alone does not stop cross-origin browser requests or DNS rebinding.
+        try:
+            host = urlsplit(f"http://{request.host}").hostname
+            if host not in {"localhost", "127.0.0.1", "::1"}:
+                return jsonify({"error": "local access only"}), 403
+            origin = request.headers.get("Origin")
+            if origin:
+                parsed = urlsplit(origin)
+                if (parsed.scheme, parsed.netloc.lower()) != (request.scheme, request.host.lower()):
+                    return jsonify({"error": "cross-origin access is not allowed"}), 403
+        except ValueError:
+            return jsonify({"error": "invalid request origin"}), 403
+
+    @app.after_request
+    def prevent_private_caching(response):
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     def event_state() -> tuple[list[dict], dict[str, dict]]:
         return load_review_events(events_path, candidate_sha256=candidate_sha, known_question_ids=set(candidate_by_id))
