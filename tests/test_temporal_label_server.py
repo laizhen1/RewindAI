@@ -51,6 +51,36 @@ def test_validates_missing_scope_ranges_types_and_local_origin(labeler):
     assert client.get("/").headers["Cache-Control"] == "no-store"
 
 
+def test_review_and_edit_keep_id_validate_and_reject_stale_updates(labeler):
+    client, _, output, _ = labeler
+    revision = client.get("/api/entries").get_json()["revision"]
+    payload = {"revision": revision, "question": "Original question", "question_type": "audio",
+               "answerable": True, "answer": "Original answer", "start": 3, "end": 8}
+    created = client.post("/api/entries", json=payload).get_json()
+    listing = client.get("/api/entries").get_json()
+    entry = listing["entries"][0]
+    assert entry["question"] == "Original question" and entry["annotation_status"] == "draft_unverified"
+    endpoint = f"/api/entries/{entry['question_id']}"
+    changed = {**payload, "revision": created["revision"], "question": "Corrected question", "start": 4}
+    updated = client.put(endpoint, json=changed)
+    assert updated.status_code == 200 and updated.get_json()["count"] == 1
+    assert client.put(endpoint, json=changed).status_code == 409
+    latest = client.get("/api/entries").get_json()
+    assert latest["entries"][0]["question_id"] == entry["question_id"]
+    assert latest["entries"][0]["question"] == "Corrected question"
+    assert client.put("/api/entries/missing", json={**changed, "revision": latest["revision"]}).status_code == 404
+    assert client.put(endpoint, json={**changed, "revision": latest["revision"], "end": 200}).status_code == 400
+    with output.open(encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f)); fields = list(rows[0])
+    rows[0]["evidence_frame_seconds"] = "5"
+    with output.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fields); writer.writeheader(); writer.writerows(rows)
+    latest = client.get("/api/entries").get_json()
+    assert client.put(endpoint, json={**changed, "revision": latest["revision"]}).status_code == 409
+    with output.open(encoding="utf-8", newline="") as f:
+        assert next(csv.DictReader(f))["evidence_frame_seconds"] == "5"
+
+
 def test_reopening_rejects_different_video_and_unbound_existing_file(labeler):
     _, video, output, tmp = labeler
     assert create_label_app(video, output, "sample", "development", 100, allowed_roots=(tmp / "private",))

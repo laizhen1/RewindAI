@@ -94,6 +94,9 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         rows = list(reader)
         if any(row.get("video_id") != video_id or row.get("split") != split for row in rows):
             raise ValueError("Annotation file belongs to another video or split")
+        ids = [row.get("question_id") for row in rows]
+        if any(not isinstance(value, str) or not value for value in ids) or len(set(ids)) != len(ids):
+            raise ValueError("Annotation IDs must be unique and nonempty")
         return rows, hashlib.sha256(raw).hexdigest()
 
     read_rows()  # Fail before serving an incompatible existing file.
@@ -136,7 +139,7 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         except (OSError, UnicodeError, ValueError):
             return jsonify({"error": "Unable to read the annotation file"}), 500
         return jsonify({"count": len(rows), "revision": revision, "split": split, "duration": duration,
-                        "evaluation_available": subtitles is not None and split != "test"})
+                        "evaluation_available": subtitles is not None and split != "test", "entries": rows})
 
     @app.post("/api/evaluate")
     def evaluate_drafts():
@@ -182,7 +185,8 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             return jsonify({"error": "Local evaluation failed; check draft labels and subtitle format"}), 400
 
     @app.post("/api/entries")
-    def append_entry():
+    @app.put("/api/entries/<question_id>")
+    def save_entry(question_id=None):
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({"error": "A question is required"}), 400
@@ -192,7 +196,7 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                 or not question.strip() or not isinstance(kind, str) or kind not in TYPES or type(answerable) is not bool):
             return jsonify({"error": "Provide a question and valid question type"}), 400
         row = dict.fromkeys(FIELDS, "")
-        row.update(question_id=uuid.uuid4().hex, video_id=video_id, question_type=kind,
+        row.update(question_id=question_id or uuid.uuid4().hex, video_id=video_id, question_type=kind,
                    answerable=str(answerable).lower(), question=question.strip(), split=split,
                    annotation_status="draft_unverified", reference_answer=answer.strip(), checked_scope=scope.strip())
         if answerable:
@@ -213,7 +217,17 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                 rows, revision = read_rows()
                 if payload.get("revision") != revision:
                     return jsonify({"error": "Annotations changed; reload the page before saving"}), 409
-                rows.append(row)
+                if question_id is None:
+                    rows.append(row)
+                else:
+                    positions = [i for i, old in enumerate(rows) if old["question_id"] == question_id]
+                    if not positions:
+                        return jsonify({"error": "Draft not found"}), 404
+                    old = rows[positions[0]]
+                    if (old["annotation_status"] != "draft_unverified" or old["evidence_frame_seconds"]
+                            or old["notes"] not in {"", "scope_declared_entire_video"}):
+                        return jsonify({"error": "This record has additional review data; edit it externally with the server stopped"}), 409
+                    rows[positions[0]] = row
                 temp_name = None
                 try:
                     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", dir=output.parent,
@@ -229,7 +243,7 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                 _, new_revision = read_rows()
         except (OSError, UnicodeError, ValueError, csv.Error):
             return jsonify({"error": "Could not save the local annotation"}), 500
-        return jsonify({"count": len(rows), "revision": new_revision}), 201
+        return jsonify({"count": len(rows), "revision": new_revision}), 201 if question_id is None else 200
 
     return app
 
