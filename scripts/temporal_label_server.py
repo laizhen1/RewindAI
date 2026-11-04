@@ -39,6 +39,19 @@ FIELDS = ("question_id", "video_id", "question_type", "answerable", "question", 
           "annotation_status", "split", "notes")
 
 
+def case_result(question: dict, row: dict) -> dict:
+    """Describe timestamp behavior without including transcript or answer text."""
+    if row["abstained"]:
+        status = "abstained"
+    elif not question["expected_answerable"]:
+        status = "candidate_on_unanswerable"
+    elif row["first_hit_reference_coverage"] >= 0.5:
+        status = "time_match"
+    else:
+        status = "time_mismatch"
+    return {"status": status, "returned_ranges": row["returned_ranges"]}
+
+
 def create_label_app(video: Path, output: Path, video_id: str, split: str, duration: float,
                      *, allowed_roots: tuple[Path, ...], subtitles: Path | None = None,
                      semantic_model: Path | None = None) -> Flask:
@@ -156,6 +169,9 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({"error": "A current annotation revision is required"}), 400
+        include_cases = payload.get("include_cases", False)
+        if type(include_cases) is not bool:
+            return jsonify({"error": "include_cases must be true or false"}), 400
         try:
             rows, revision = read_rows()
             if payload.get("revision") != revision:
@@ -191,24 +207,34 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                 encoder = OnnxSentenceEncoder(semantic_model)
                 semantic = build_semantic_pipeline(segments, encoder, 0.4)
                 comparison = compare(questions, keyword, semantic)
-                comparison.pop("results")
+                individual = comparison.pop("results")
                 keyword_result = comparison["keyword"]
                 semantic_result = comparison["semantic"]
                 pairs = {"answerable": comparison["paired_answerable"],
                          "unanswerable": comparison["paired_unanswerable"]}
             else:
                 results = diagnose(keyword, questions)
+                individual = [{"keyword": result, "semantic": None} for result in results]
                 keyword_result = {"metrics": metrics(results), "operating": operating_metrics(results),
                                   "by_question_type": comparison_by_question_type(results)}
                 semantic_result = pairs = None
             if (fingerprint(video) != binding["video_sha256"] or fingerprint(subtitles) != subtitle_hash
                     or tuple(fingerprint(path) for path in model_files) != model_hashes or read_rows()[1] != revision):
                 return jsonify({"error": "An input changed during evaluation; retry after checking it"}), 409
-            return jsonify({"warning": "Draft time-overlap diagnostic only; not answer accuracy or a verified test.",
-                            "split": split, **keyword_result, "semantic": semantic_result, "paired": pairs,
-                            "semantic_threshold": 0.4 if semantic_result is not None else None,
-                            "subtitle_last_end_seconds": max(segment.end_time for segment in segments),
-                            "video_duration_seconds": duration})
+            report = {"warning": "Draft time-overlap diagnostic only; not answer accuracy or a verified test.",
+                      "split": split, **keyword_result, "semantic": semantic_result, "paired": pairs,
+                      "semantic_threshold": 0.4 if semantic_result is not None else None,
+                      "subtitle_last_end_seconds": max(segment.end_time for segment in segments),
+                      "video_duration_seconds": duration}
+            if include_cases:
+                report["cases"] = [{"question_id": question["question_id"],
+                                    "reference_range": [question["evidence_start_seconds"], question["evidence_end_seconds"]]
+                                                       if question["expected_answerable"] else None,
+                                    "keyword": case_result(question, result["keyword"]),
+                                    "semantic": case_result(question, result["semantic"])
+                                                if result["semantic"] is not None else None}
+                                   for question, result in zip(questions, individual, strict=True)]
+            return jsonify(report)
         except (ImportError, OSError, UnicodeError, KeyError, TypeError, ValueError, RuntimeError, csv.Error):
             return jsonify({"error": "Local evaluation failed; check draft labels and subtitle format"}), 400
 
