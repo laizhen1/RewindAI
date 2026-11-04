@@ -22,3 +22,23 @@ python scripts/run_transcript.py --visual-model PATH_TO_LOCAL_CLIP_MODEL
 ```
 
 Use authorized videos only. For private lectures, keep videos, frames, transcripts, indexes, local queries and evaluation records on the computer and out of public repositories or external model services. To establish visual precision and recall, build and independently review a held-out set of visual and unanswerable queries with time-aligned video evidence before tuning a threshold.
+
+## Local frame-label evaluation
+
+Create a new local review directory under `artifacts/` or `local_data/` (the command refuses to overwrite existing directories):
+
+```powershell
+python scripts/prepare_clip_labels.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --output-dir artifacts/visual-review/my-video
+```
+
+This saves midpoint PNGs and `labels.json` locally. Frame `frame-000.png` corresponds to segment index 0, etc. Review every sampled frame and add objects to `queries`, for example `{ "query": "A hand holding a pen", "relevant_segment_indices": [3] }`. Use an empty list for a query that matches none of the sampled frames. The index applies to the numbered **sampled frames**, not the entire video. Record who reviewed the labels separately in your own private notes; after independent review, set `review_status` to `reviewed`. SHA-256 hashes bind the labels to the video and subtitle files. Keep the whole review directory private.
+
+```powershell
+python scripts/evaluate_clip_frames.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --model-dir PATH_TO_LOCAL_CLIP_MODEL --labels artifacts/visual-review/my-video/labels.json
+```
+
+The evaluator computes micro frame-level precision, recall and F1 for the top three candidate frames per query. It also reports the number of absent queries that still returned candidates. It refuses unreviewed labels by default; `--allow-unreviewed` explicitly marks provisional diagnostics and does not turn them into ground truth. No threshold is applied. The scoring treats each query-frame pair as positive or negative, and assumes the label list is complete; it is not video-time localization, object detection accuracy or answer correctness.
+
+## Five-frame provisional diagnostic
+
+As a workflow check, five midpoint frames from the public ethics video were visually inspected by the assistant and five queries were drafted afterward, including one absent object. These labels were **not independently reviewed** and the queries were written with knowledge of the frames and some model behavior. Across 25 query–frame pairs, top-three ranking gave TP=9, FP=6, FN=0, TN=10: precision **0.600**, recall **1.000**, F1 **0.750**. The single absent query still returned three candidates. For the hand-and-pen query, the matching frame was third rather than first. This tiny, selectively designed diagnostic is not a benchmark or a portfolio accuracy claim; it shows both the end-to-end scoring workflow and the absence of safe abstention. Source images and draft labels were kept in ignored local artifacts.
