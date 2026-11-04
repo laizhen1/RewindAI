@@ -112,3 +112,83 @@ def test_verified_export_keeps_existing_files_and_accepts_identical_retry(tmp_pa
         exporter.main()
     assert output.read_text(encoding="utf-8") == original
     assert report.read_text(encoding="utf-8") == "do not overwrite"
+
+
+def test_temporal_export_requires_latest_matching_review_and_correct_source(tmp_path):
+    import pytest
+    from scripts.reviewed_to_temporal import convert
+    from video_rag.evaluation.dataset_validation import read_jsonl
+    from video_rag.evaluation.provenance import verify_sources
+    candidates, segments_path, events, question = fixture(tmp_path)
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"public-test-video")
+    subtitles = tmp_path / "video.srt"
+    subtitles.write_text("1\n00:00:01,000 --> 00:00:04,000\nexample\n", encoding="utf-8")
+    client = create_app(candidates, segments_path, events, "owner", allowed_video_root=tmp_path, allowed_frame_root=tmp_path).test_client()
+    response = client.post("/api/review", json={"question_id": "q1", "base_event_id": None, "action": "accept",
+        "reason": "played", "edited": question, "review_behavior": {"video_played": True, "playback_ranges": [[0, 5]]}})
+    assert response.status_code == 200
+    event = json.loads(events.read_text(encoding="utf-8"))
+    frozen = [{**event["annotation_after"], "split": "test"}]
+    segments, candidate_rows = read_jsonl(segments_path), read_jsonl(candidates)
+    data = convert(frozen, segments, candidate_rows, events, candidates, "video", "test", video, subtitles)
+    assert data["formal_metric_eligible"] is False
+    assert data["questions"][0]["evidence_start_seconds"] == 1.0
+    assert verify_sources(data, video, subtitles) == "matched"
+    event["review_behavior"]["smoke_simulated"] = True
+    events.write_text(json.dumps(event) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Simulated"):
+        convert(frozen, segments, candidate_rows, events, candidates, "video", "test", video, subtitles)
+    event["review_behavior"].pop("smoke_simulated")
+    events.write_text(json.dumps(event) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="differs"):
+        convert([{**frozen[0], "question": "tampered"}], segments, candidate_rows, events, candidates, "video", "test", video, subtitles)
+    other = tmp_path / "other.mp4"
+    other.write_bytes(b"different")
+    with pytest.raises(ValueError, match="does not match"):
+        convert(frozen, segments, candidate_rows, events, candidates, "video", "test", other, subtitles)
+    reopened = client.post("/api/reopen", json={"question_id": "q1", "base_event_id": event["event_id"], "reason": "review again"})
+    assert reopened.status_code == 200
+    with pytest.raises(ValueError, match="latest accepted"):
+        convert(frozen, segments, candidate_rows, events, candidates, "video", "test", video, subtitles)
+
+
+def test_temporal_manifest_must_match_frozen_question_file(tmp_path):
+    import pytest
+    from scripts.reviewed_to_temporal import validate_manifest
+    from video_rag.evaluation.provenance import fingerprint
+    source = tmp_path / "frozen.jsonl"
+    source.write_text("{}\n", encoding="utf-8")
+    validate_manifest({"output_sha256": fingerprint(source)}, source)
+    source.write_text("changed\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="does not match"):
+        validate_manifest({"output_sha256": "f" * 64}, source)
+
+
+def test_review_linked_temporal_cli_writes_only_private_output(tmp_path, monkeypatch):
+    import sys
+    from scripts import reviewed_to_temporal as module
+    from video_rag.evaluation.provenance import fingerprint
+    candidates, segments, events, question = fixture(tmp_path)
+    video = tmp_path / "video.mp4"
+    video.write_bytes(b"video")
+    subs = tmp_path / "video.srt"
+    subs.write_text("1\n00:00:01,000 --> 00:00:04,000\nexample\n", encoding="utf-8")
+    client = create_app(candidates, segments, events, "owner", allowed_video_root=tmp_path, allowed_frame_root=tmp_path).test_client()
+    assert client.post("/api/review", json={"question_id": "q1", "base_event_id": None, "action": "accept",
+        "reason": "played", "edited": question, "review_behavior": {"video_played": True, "playback_ranges": [[0, 5]]}}).status_code == 200
+    event = json.loads(events.read_text(encoding="utf-8"))
+    frozen = tmp_path / "frozen.jsonl"
+    write_jsonl(frozen, [{**event["annotation_after"], "split": "test"}])
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({"output_sha256": fingerprint(frozen)}), encoding="utf-8")
+    output = tmp_path / "artifacts" / "eval" / "temporal.json"
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setattr(sys, "argv", ["reviewed_to_temporal", "--questions", str(frozen), "--segments", str(segments),
+        "--candidates", str(candidates), "--events", str(events), "--manifest", str(manifest), "--video", str(video),
+        "--subtitles", str(subs), "--video-id", "video", "--split", "test", "--output", str(output)])
+    assert module.main() == 0
+    result = json.loads(output.read_text(encoding="utf-8"))
+    assert result["formal_metric_eligible"] is False
+    assert result["source_sha256"]["video"] == fingerprint(video)
+    assert len(result["review_inputs_sha256"]) == 5

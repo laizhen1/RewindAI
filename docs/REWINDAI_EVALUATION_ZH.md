@@ -93,3 +93,17 @@ python scripts/audit_temporal_splits.py --questions artifacts/evaluation/dev.jso
 ```
 
 工具检查跨 split 的相同视频 ID、已记录的视频 SHA-256 以及忽略大小写和空白差异的完全相同问题，只输出汇总数量。缺少指纹或不足两个 split 时结果为不确定；发现冲突或不确定时命令返回非零状态。它读取保存的指纹元数据，不会重新验证实际视频内容；诊断运行时才会验证绑定。它不能识别视频剪辑、重编码、同一课程相邻录像或问题改写，必须另行分组和人工检查。通过检查也不证明测试集独立或标签正确。
+
+
+## 复核记录转为时间证据评估
+
+完成实际人工复核、导出并冻结视频级划分后，可以把其中一个视频和 split 的题目转换为本地时间诊断输入：
+
+```powershell
+python scripts/reviewed_to_temporal.py --questions PATH_TO_FROZEN_JSONL --manifest PATH_TO_SPLIT_MANIFEST --candidates PATH_TO_CANDIDATES_JSONL --events PATH_TO_REVIEW_EVENTS_JSONL --segments PATH_TO_SEGMENTS_JSONL --video PATH_TO_LOCAL_VIDEO --subtitles PATH_TO_LOCAL_SRT --video-id VIDEO_ID --split test --output artifacts/evaluation/reviewed-temporal.json
+python scripts/diagnose_transcript.py --video PATH_TO_LOCAL_VIDEO --subtitles PATH_TO_LOCAL_SRT --questions artifacts/evaluation/reviewed-temporal.json
+```
+
+转换时检查冻结文件与清单的 SHA-256、完整复核事件链、每题最新接受事件及其内容、split 一致性、视频 ID 和片段记录中的源文件路径；明确标为模拟的 smoke 复核会被拒绝。转换输出绑定当前视频和字幕哈希，且只能写入本地忽略目录中的新文件。
+
+这些都是一致性检查：本地事件和清单不是防篡改证明，无法证明人工复核独立或内容正确；片段记录的源路径也无法证明文件内容在复核时与转换时相同。转换所用字幕可以与复核时的字幕不同，因此需单独记录并核对版本。脚本不会把输出自动标记为正式指标，仍须人工核验和确保测试集不参与调参。私人录像、问题、哈希、日志与结果均保留在本机。
