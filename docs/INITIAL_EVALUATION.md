@@ -190,3 +190,22 @@ These are exploratory bootstrap ranges for this small, non-random sample of Phot
 ```powershell
 python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_TEST_JSON --video-partition heldout --bootstrap-samples 2000 --seed 42
 ```
+
+
+### Paired comparison of the two retrievers
+
+We repeated the keyword and semantic comparison on the same 294 questions from the same 18 videos, preserving the 0.4 semantic threshold and no context expansion. The point estimates and sentence counts exactly matched the earlier run. To examine variability in the **difference**, `scripts/compare_tutorialvqa.py` resampled the 18 videos as paired units 2,000 times (seed 42); all questions for a sampled video and both systems' results were kept together. Each resample aggregates sentence TP, FP and FN before computing each metric. The difference is semantic minus keyword:
+
+| Sentence overlap metric | Difference | Exploratory 2.5th–97.5th percentile range |
+| --- | ---: | ---: |
+| Precision | -0.007 | -0.063 to 0.049 |
+| Recall | +0.034 | +0.015 to +0.059 |
+| F1 | +0.041 | +0.014 to +0.071 |
+
+These are paired bootstrap ranges for this small, previously examined, non-random set of Photoshop tutorials. They do not correct biased labels, establish statistical significance or prove that semantic retrieval is better on lectures. The sentence-level reference spans and known-video search are not end-to-end answer accuracy; the absence of unanswerable questions remains a key limitation. Semantic retrieval also returned more non-reference sentences (453 versus 324), so the modest F1 difference should not be interpreted without that cost.
+
+```powershell
+python scripts/compare_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_TEST_JSON --semantic-model PATH_TO_LOCAL_MODEL_DIRECTORY --video-partition heldout --semantic-threshold 0.4 --samples 2000 --seed 42
+```
+
+The tool processes inputs locally and prints aggregate counts and paired differences, without writing questions or videos. Model and data dependencies retain their own licences.
