@@ -22,8 +22,16 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from flask import Flask, jsonify, render_template, request, send_file
 
+from scripts.diagnose_transcript import (
+    comparison_by_question_type,
+    diagnose,
+    metrics,
+    operating_metrics,
+)
 from scripts.prepare_temporal_questions import SPLITS, TYPES, prepare
 from video_rag.evaluation.private_output import private_output
+from video_rag.evaluation.provenance import fingerprint
+from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
 
 FIELDS = ("question_id", "video_id", "question_type", "answerable", "question", "reference_answer",
           "evidence_start_seconds", "evidence_end_seconds", "evidence_frame_seconds", "checked_scope",
@@ -31,7 +39,7 @@ FIELDS = ("question_id", "video_id", "question_type", "answerable", "question", 
 
 
 def create_label_app(video: Path, output: Path, video_id: str, split: str, duration: float,
-                     *, allowed_roots: tuple[Path, ...]) -> Flask:
+                     *, allowed_roots: tuple[Path, ...], subtitles: Path | None = None) -> Flask:
     video = Path(video).expanduser().resolve()
     output = private_output(output, roots=allowed_roots)
     if not video.is_file() or video.suffix.lower() not in {".mp4", ".webm", ".ogv", ".mov", ".m4v"}:
@@ -40,6 +48,10 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         raise ValueError("Invalid output, video ID or split")
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError("A valid video duration is required")
+    if subtitles is not None:
+        subtitles = Path(subtitles).expanduser().resolve()
+        if not subtitles.is_file() or subtitles.suffix.lower() not in {".srt", ".vtt"}:
+            raise ValueError("Provide existing timed SRT/VTT subtitles")
     initial = video.stat()
     version = (initial.st_size, initial.st_mtime_ns)
     digest = hashlib.sha256()
@@ -123,7 +135,51 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             rows, revision = read_rows()
         except (OSError, UnicodeError, ValueError):
             return jsonify({"error": "Unable to read the annotation file"}), 500
-        return jsonify({"count": len(rows), "revision": revision, "split": split, "duration": duration})
+        return jsonify({"count": len(rows), "revision": revision, "split": split, "duration": duration,
+                        "evaluation_available": subtitles is not None and split != "test"})
+
+    @app.post("/api/evaluate")
+    def evaluate_drafts():
+        if subtitles is None or split == "test":
+            return jsonify({"error": "Draft evaluation requires subtitles and is unavailable for the test split"}), 409
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "A current annotation revision is required"}), 400
+        try:
+            rows, revision = read_rows()
+            if payload.get("revision") != revision:
+                return jsonify({"error": "Annotations changed; reload before evaluating"}), 409
+            if not rows:
+                return jsonify({"error": "Add at least one draft question first"}), 400
+            if fingerprint(video) != binding["video_sha256"]:
+                return jsonify({"error": "Video changed; check the source before evaluating"}), 409
+            subtitle_hash = fingerprint(subtitles)
+            if any(not isinstance(row.get("answerable"), str) or not isinstance(row.get("reference_answer"), str)
+                   for row in rows):
+                return jsonify({"error": "Invalid draft labels"}), 400
+            if any((row["answerable"].strip().lower() == "false") == bool(row["reference_answer"].strip())
+                   for row in rows):
+                return jsonify({"error": "Check answers and answerability in the draft labels"}), 400
+            if any(row["answerable"].strip().lower() == "false" and row.get("notes") != "scope_declared_entire_video"
+                   for row in rows):
+                return jsonify({"error": "Unanswerable labels require a declaration that the entire video was checked"}), 400
+            questions = prepare(rows, video_id, split)["questions"]
+            if any(item["expected_answerable"] and item["evidence_end_seconds"] > duration for item in questions):
+                return jsonify({"error": "An evidence range exceeds the video duration"}), 400
+            segments = segments_from_subtitles(video, subtitles)
+            if max(segment.end_time for segment in segments) > duration + 1:
+                return jsonify({"error": "Subtitle timestamps exceed the video duration"}), 400
+            results = diagnose(build_transcript_segments(segments), questions)
+            if (fingerprint(video) != binding["video_sha256"] or fingerprint(subtitles) != subtitle_hash
+                    or read_rows()[1] != revision):
+                return jsonify({"error": "An input changed during evaluation; retry after checking it"}), 409
+            return jsonify({"warning": "Draft time-overlap diagnostic only; not answer accuracy or a verified test.",
+                            "split": split, "metrics": metrics(results), "operating": operating_metrics(results),
+                            "by_question_type": comparison_by_question_type(results),
+                            "subtitle_last_end_seconds": max(segment.end_time for segment in segments),
+                            "video_duration_seconds": duration})
+        except (OSError, UnicodeError, KeyError, TypeError, ValueError, RuntimeError, csv.Error):
+            return jsonify({"error": "Local evaluation failed; check draft labels and subtitle format"}), 400
 
     @app.post("/api/entries")
     def append_entry():
@@ -145,8 +201,10 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                     or not math.isfinite(start) or not math.isfinite(end) or not 0 <= start < end <= duration):
                 return jsonify({"error": "Provide an answer and an evidence range within the video"}), 400
             row.update(evidence_start_seconds=str(start), evidence_end_seconds=str(end))
-        elif not scope.strip() or answer.strip():
-            return jsonify({"error": "Describe the checked scope and leave the answer empty"}), 400
+        elif not scope.strip() or answer.strip() or payload.get("checked_entire_video") is not True:
+            return jsonify({"error": "Check the entire video, describe the scope, and leave the answer empty"}), 400
+        else:
+            row["notes"] = "scope_declared_entire_video"
         try:
             prepare([row], video_id, split)
             with lock:
@@ -182,6 +240,7 @@ def main() -> int:
     parser.add_argument("--video-id", required=True)
     parser.add_argument("--split", choices=sorted(SPLITS), required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--subtitles", type=Path, help="Optional local timed subtitles for draft evaluation")
     parser.add_argument("--port", type=int, default=5095)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
@@ -194,7 +253,7 @@ def main() -> int:
         with av.open(str(args.video)) as container:
             duration = container.duration / av.time_base if container.duration else 0
         app = create_label_app(args.video, args.output, args.video_id, args.split, duration,
-                               allowed_roots=(ROOT / "artifacts", ROOT / "local_data"))
+                               allowed_roots=(ROOT / "artifacts", ROOT / "local_data"), subtitles=args.subtitles)
     except (OSError, ValueError, av.error.FFmpegError) as exc:
         parser.exit(2, f"Cannot start local labeler ({type(exc).__name__}); check video and PyAV.\n")
     print(f"Local-only labeling: http://127.0.0.1:{args.port}/", flush=True)

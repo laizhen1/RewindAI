@@ -63,10 +63,14 @@
 安装 PyAV 后，可为单个视频启动标注页面（先选定开发、验证或测试划分，每个视频使用独立的新输出文件）：
 
 ```powershell
-python scripts/temporal_label_server.py --video PATH_TO_LOCAL_VIDEO --video-id lecture_dev --split development --output artifacts/evaluation/lecture-dev-drafts.csv
+python scripts/temporal_label_server.py --video PATH_TO_LOCAL_VIDEO --subtitles PATH_TO_LOCAL_SRT --video-id lecture_dev --split development --output artifacts/evaluation/lecture-dev-drafts.csv
 ```
 
-在同一台电脑打开 `http://127.0.0.1:5095/`。播放视频并检查上下文，填写问题和参考答案，用按钮记录当前播放时间作为证据起止；无答案题要写明完整检查过的范围。每个 CSV 同时只运行一个标注服务。页面只添加草稿，不能修改或删除已有记录；若需在外部编辑 CSV，先停止服务。输出 CSV 及旁边的 `.source.json` 含私人数据，应留在本机。启动时用视频 SHA-256 绑定输出；运行期间通过文件大小和修改时间检测变化，不能证明内容始终未变。页面无法验证用户是否观看或独立复核；这些题仍须人工核验，不能因为保存而称为正式标签。
+在同一台电脑打开 `http://127.0.0.1:5095/`。播放视频并检查上下文，填写问题和参考答案，用按钮记录当前播放时间作为证据起止；无答案题要求声明已针对该问题检查完整视频。页面无法验证用户是否观看或独立复核；这些题仍须人工核验，不能因为保存而称为正式标签。
+
+提供字幕后，开发集和验证集可在页面运行本地关键词检索诊断；测试集在此页面不可运行，以便保留给后续独立评估。诊断要求首条结果覆盖参考时间范围至少 50%，并报告时间证据 Precision、Recall、F1：有答案题返回错误时间时同时记为假阳性和假阴性。这些指标不代表回答正确率，标签质量和字幕覆盖范围都需核对。运行前后会计算视频和字幕的指纹，但这不能证明标注时使用的是同一份字幕。
+
+每个 CSV 同时只运行一个标注服务。页面只添加草稿，不能修改或删除已有记录；若需在外部编辑 CSV，先停止服务。输出 CSV 及旁边的 `.source.json` 含私人数据，应留在本机。启动时用视频 SHA-256 绑定输出；运行期间通过文件大小和修改时间检测变化，不能证明内容始终未变。
 
 对已经准备好的本地视频、字幕与问题 JSON，可运行：
 
