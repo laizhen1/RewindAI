@@ -12,7 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
-from scripts.diagnose_transcript import diagnose, metrics, operating_metrics
+from scripts.diagnose_transcript import (
+    comparison_by_question_type,
+    diagnose,
+    metrics,
+    operating_metrics,
+)
 from scripts.prepare_temporal_questions import write_output
 from video_rag.evaluation.provenance import fingerprint, verify_sources
 from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
@@ -41,8 +46,10 @@ def compare(questions, keyword, semantic, min_coverage=0.5):
             negative_pairs[label] += 1
         rows.append({"question": left["question"], "expected_answerable": left["expected_answerable"],
                      "comparison": label, "keyword": left, "semantic": right})
-    return {"keyword": {"metrics": metrics(a, min_coverage), "operating": operating_metrics(a, min_coverage)},
-            "semantic": {"metrics": metrics(b, min_coverage), "operating": operating_metrics(b, min_coverage)},
+    return {"keyword": {"metrics": metrics(a, min_coverage), "operating": operating_metrics(a, min_coverage),
+                        "by_question_type": comparison_by_question_type(a, min_coverage)},
+            "semantic": {"metrics": metrics(b, min_coverage), "operating": operating_metrics(b, min_coverage),
+                         "by_question_type": comparison_by_question_type(b, min_coverage)},
             "paired_answerable": pairs, "paired_unanswerable": negative_pairs, "results": rows}
 
 

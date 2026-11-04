@@ -124,6 +124,16 @@ def metrics_by_question_type(results: list[dict], min_coverage: float = 0.5) -> 
     return {name: operating_metrics(group, min_coverage) for name, group in sorted(groups.items())}
 
 
+def comparison_by_question_type(results: list[dict], min_coverage: float = 0.5) -> dict:
+    """Return evidence metrics and operating counts for each observed type."""
+    groups: dict[str, list[dict]] = {}
+    for row in results:
+        groups.setdefault(row.get("question_type", "unlabeled"), []).append(row)
+    return {name: {"metrics": metrics(group, min_coverage),
+                   "operating": operating_metrics(group, min_coverage)}
+            for name, group in sorted(groups.items())}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", type=Path, required=True)

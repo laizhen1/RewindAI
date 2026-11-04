@@ -32,9 +32,29 @@ def test_paired_counts_keep_wrong_evidence_and_absences_separate():
         compare([], keyword, semantic)
 
 
+def test_comparison_breaks_down_types_and_keeps_missing_denominators():
+    hit = [{"start_time": 0, "end_time": 5}]
+    wrong = [{"start_time": 10, "end_time": 15}]
+    questions = [
+        {"question": "a", "question_type": "audio", "evidence_start_seconds": 0, "evidence_end_seconds": 5},
+        {"question": "b", "question_type": "visual", "evidence_start_seconds": 0, "evidence_end_seconds": 5},
+        {"question": "c", "question_type": "visual", "expected_answerable": False},
+        {"question": "d", "expected_answerable": False},
+    ]
+    keyword = Pipeline({"a": hit, "b": wrong, "c": [], "d": []})
+    semantic = Pipeline({"a": [], "b": hit, "c": hit, "d": []})
+    result = compare(questions, keyword, semantic)
+    assert result["keyword"]["by_question_type"]["audio"]["metrics"]["f1"] == 1
+    visual = result["keyword"]["by_question_type"]["visual"]
+    assert (visual["metrics"]["fp"], visual["metrics"]["fn"], visual["metrics"]["tn"]) == (1, 1, 1)
+    assert result["semantic"]["by_question_type"]["visual"]["metrics"]["f1"] == 2 / 3
+    assert result["semantic"]["by_question_type"]["unlabeled"]["metrics"]["f1"] is None
+
+
 def test_local_aggregate_report_omits_questions_and_refuses_overwrite(tmp_path, monkeypatch):
     import json
     import sys
+
     from scripts import compare_time_retrieval as module
     from video_rag.retrieval import onnx_semantic
     root = tmp_path
