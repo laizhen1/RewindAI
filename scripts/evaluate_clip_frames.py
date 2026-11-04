@@ -28,7 +28,7 @@ def validate_sources(labels: dict, video: Path, subtitles: Path) -> None:
         raise ValueError("Label source hashes do not match this video and subtitle file")
 
 
-def evaluate(retriever, segments, labels: dict, *, allow_unreviewed: bool = False) -> dict:
+def validate_label_header(segments, labels: dict, *, allow_unreviewed: bool = False) -> None:
     if not isinstance(labels, dict) or not isinstance(labels.get("queries"), list) or not labels["queries"]:
         raise ValueError("Expected a nonempty queries list")
     status = labels.get("review_status")
@@ -40,6 +40,11 @@ def evaluate(retriever, segments, labels: dict, *, allow_unreviewed: bool = Fals
             any(type(value) not in (int, float) or not math.isfinite(value) or abs(value - target) > 0.001
                 for value, target in zip(expected, actual, strict=True))):
         raise ValueError("Label frame times do not match the current segmentation")
+
+
+def evaluate(retriever, segments, labels: dict, *, allow_unreviewed: bool = False) -> dict:
+    validate_label_header(segments, labels, allow_unreviewed=allow_unreviewed)
+    status = labels.get("review_status")
     lookup = {segment.segment_id: index for index, segment in enumerate(segments)}
     tp = fp = fn = tn = absent = false_positive_absent = 0
     rows = []
@@ -81,6 +86,7 @@ def main() -> int:
     try:
         segments = segments_from_subtitles(args.video, args.subtitles)
         labels = json.loads(args.labels.read_text(encoding="utf-8-sig"))
+        validate_label_header(segments, labels, allow_unreviewed=args.allow_unreviewed)
         validate_sources(labels, args.video, args.subtitles)
         retriever = ClipFrameRetriever(OnnxClipEncoder(args.model_dir))
         retriever.build(segments)

@@ -92,7 +92,7 @@ Windows 用户也可以在准备好该模型后双击 `Start-RewindAI-Semantic.c
 python scripts/run_transcript.py --visual-model PATH_TO_LOCAL_CLIP_MODEL
 ```
 
-打开本机工作台并加载已授权的视频和字幕，输入英文画面描述，点击“实验性画面搜索”。视觉索引、查询和帧处理都在本机 CPU 进行；代码不会上传课程视频。不要把私人截图、索引、字幕或模型输入提交到 GitHub。详细模型版本、已知限制和公开视频验证见 [画面搜索实验](docs/LOCAL_VISUAL_EXPERIMENT.md)。
+打开本机工作台并加载已授权的视频和字幕，输入英文画面描述，点击“实验性画面搜索”。视觉索引、查询和帧处理都在本机 CPU 进行；代码不会上传课程视频。不要把私人截图、索引、字幕或模型输入提交到 GitHub。可在本地网页逐帧标注正例与无匹配问题，再计算采样帧级指标。详细模型版本、标注流程、已知限制和公开视频验证见 [画面搜索实验](docs/LOCAL_VISUAL_EXPERIMENT.md)。
 
 ### 使用完整多模态模型
 

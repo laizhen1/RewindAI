@@ -31,7 +31,15 @@ Create a new local review directory under `artifacts/` or `local_data/` (the com
 python scripts/prepare_clip_labels.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --output-dir artifacts/visual-review/my-video
 ```
 
-This saves midpoint PNGs and `labels.json` locally. Frame `frame-000.png` corresponds to segment index 0, etc. Review every sampled frame and add objects to `queries`, for example `{ "query": "A hand holding a pen", "relevant_segment_indices": [3] }`. Use an empty list for a query that matches none of the sampled frames. The index applies to the numbered **sampled frames**, not the entire video. Record who reviewed the labels separately in your own private notes; after independent review, set `review_status` to `reviewed`. SHA-256 hashes bind the labels to the video and subtitle files. Keep the whole review directory private.
+This saves midpoint PNGs and `labels.json` locally. Open the local review interface to inspect and annotate the sampled frames:
+
+```powershell
+python scripts/visual_review_server.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --review-dir artifacts/visual-review/my-video
+```
+
+Visit `http://127.0.0.1:5094/` on the same computer. Enter a query, select **all** matching frames, or explicitly mark that none match, then save. Check all queries before marking the file reviewed. Editing a reviewed file makes it a draft again. The status is a reviewer declaration, not proof that the reviewer was independent or that the labels are correct. Reopening the page retains saved work; concurrent edits require reloading rather than silently overwriting each other. Close the server window when done.
+
+Alternatively edit `labels.json` yourself: frame `frame-000.png` corresponds to index 0, and a query is `{ "query": "A hand holding a pen", "relevant_segment_indices": [3] }`. Use an empty list if none of the sampled frames match. Indices refer to **sampled frames**, not the whole video. Record reviewer identity separately in private notes. SHA-256 hashes bind labels to the video and subtitle files, and are checked when opening the review and running evaluation. Keep the whole review directory private.
 
 ```powershell
 python scripts/evaluate_clip_frames.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --model-dir PATH_TO_LOCAL_CLIP_MODEL --labels artifacts/visual-review/my-video/labels.json

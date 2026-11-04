@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RewindAI · 本地画面标注</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#f4f7f2;color:#263b30;margin:0;padding:24px}main{max-width:1200px;margin:auto}section{background:white;border:1px solid #dce7dc;border-radius:12px;padding:18px;margin:16px 0}h1{margin:0 0 8px}p{line-height:1.6}.hint{color:#66786b;font-size:14px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}.frame{border:1px solid #dce7dc;border-radius:8px;padding:8px}.frame img{width:100%;height:auto;display:block}.frame label{display:block;font-size:14px;margin-top:8px}input[type=text]{width:min(100%,650px);box-sizing:border-box;padding:10px;border:1px solid #b9cbbb;border-radius:6px}button{padding:9px 12px;border:1px solid #86a78e;border-radius:7px;background:#fff;color:#1f4b35;cursor:pointer}button.primary{background:#235a41;color:#fff}button:disabled{opacity:.5}article{border-top:1px solid #e4ebe4;padding:12px 0}.message{color:#9c412d}.status{font-weight:700}label{cursor:pointer}
+</style></head><body><main>
+<h1>本地画面标注</h1><p class="hint">记录查询对应哪些采样帧；所有图片和标签仅保存在本机。采样帧不代表完整视频，请同时回看原视频。</p>
+<section><h2>1. 输入查询并选择所有匹配画面</h2><label for="query">英文画面描述</label><p><input id="query" type="text" maxlength="1000" placeholder="例如：A person holding a pen"></p>
+<p class="hint">选择全部符合描述的画面。如果没有任何采样帧符合，请勾选下方选项。</p><div id="frames" class="grid"></div>
+<p><label><input id="absent" type="checkbox"> 我已查看全部采样帧，没有任何一帧符合</label></p><button id="add" class="primary" type="button">添加查询并保存草稿</button></section>
+<section><h2>2. 检查查询和标注</h2><p class="hint">“已复核”是标记者的声明，系统无法确认标注是否独立或正确。任何修改会重新变为草稿。</p><p id="state" class="status">正在加载……</p><div id="queries"></div><button id="finish" type="button">确认全部已复核</button> <button id="reload" type="button">重新加载</button><p id="message" class="message" role="status"></p></section>
+</main><script>
+const $ = id => document.getElementById(id);
+let review = null;
+function el(tag, text) { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; return n; }
+async function api(url, options = {}) { const r = await fetch(url, options); const data = await r.json(); if (!r.ok) throw new Error(data.error || `请求失败 ${r.status}`); return data; }
+function message(text) { $("message").textContent = text; }
+function render() {
+  $("state").textContent = review.review_status === "reviewed" ? "状态：已复核（由标记者声明）" : "状态：草稿，尚未复核";
+  const frames = $("frames"); frames.replaceChildren(); review.frame_times.forEach((time,index) => { const box=el("div"); box.className="frame"; const image=el("img"); image.src=`/api/frames/${index}`; image.alt=`采样画面 ${index}`; image.loading="lazy"; const label=el("label"); const check=el("input"); check.type="checkbox"; check.value=String(index); check.className="frame-choice"; label.append(check,document.createTextNode(` 画面 ${index} · ${Number(time).toFixed(1)} 秒`)); box.append(image,label); frames.append(box); });
+  const list=$("queries"); list.replaceChildren(); if (!review.queries.length) list.append(el("p","尚无查询。")); review.queries.forEach((item,index) => { const row=el("article"); row.append(el("strong",item.query), el("p",item.relevant_segment_indices.length ? `匹配画面：${item.relevant_segment_indices.join(", ")}` : "无匹配采样帧")); const remove=el("button","移除此查询"); remove.type="button"; remove.addEventListener("click",async()=>{ if (!window.confirm("从标注中移除此查询？")) return; const next=review.queries.filter((_,i)=>i!==index); await save(next,false); }); row.append(remove); list.append(row); });
+}
+async function load() { try { review=await api("/api/review"); render(); message(""); } catch(e) { message(e.message); } }
+async function save(queries,reviewed) { try { const out=await api("/api/review",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({queries,reviewed,revision:review.revision})}); review.queries=queries; review.revision=out.revision; review.review_status=out.review_status; render(); message("已保存在本机。"); return true; } catch(e) { message(e.message); return false; } }
+$("add").addEventListener("click",async()=>{ if (!review) return; const query=$("query").value.trim(); const indices=[...document.querySelectorAll(".frame-choice:checked")].map(x=>Number(x.value)); const absent=$("absent").checked; if (!query || (!indices.length && !absent) || (indices.length && absent)) { message("请输入查询，并选择匹配画面或明确勾选无匹配。 "); return; } const next=[...review.queries,{query,relevant_segment_indices:indices}]; if (await save(next,false)) { $("query").value=""; $("absent").checked=false; } });
+$("finish").addEventListener("click",async()=>{ if (!review || !review.queries.length) { message("请先添加查询。"); return; } if (window.confirm("确认已逐项检查所有查询及采样帧，并将此标注标记为已复核？")) await save(review.queries,true); });
+$("reload").addEventListener("click",load); load();
+</script></body></html>
