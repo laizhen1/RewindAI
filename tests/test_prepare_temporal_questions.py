@@ -39,3 +39,20 @@ def test_local_output_only_and_never_overwrites(tmp_path):
         write_output(target, {}, (root,))
     with pytest.raises(ValueError):
         write_output(tmp_path / "outside.json", {}, (root,))
+
+
+def test_source_binding_detects_changed_inputs_and_rejects_invalid_metadata(tmp_path):
+    from video_rag.evaluation.provenance import bind_sources, verify_sources
+    video, subtitle = tmp_path / "lecture.mp4", tmp_path / "lecture.srt"
+    video.write_bytes(b"video")
+    subtitle.write_bytes(b"subtitle")
+    data = prepare([row()], "v1")
+    assert verify_sources(data, video, subtitle) == "unbound"
+    bind_sources(data, video, subtitle)
+    assert verify_sources(data, video, subtitle) == "matched"
+    subtitle.write_bytes(b"changed subtitle")
+    with pytest.raises(ValueError, match="does not match"):
+        verify_sources(data, video, subtitle)
+    data["source_sha256"] = {"video": "not a hash"}
+    with pytest.raises(ValueError, match="Invalid source"):
+        verify_sources(data, video, subtitle)

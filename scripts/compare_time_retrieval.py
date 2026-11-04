@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.diagnose_transcript import diagnose, metrics, operating_metrics
+from video_rag.evaluation.provenance import verify_sources
 from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
 
 
@@ -55,16 +56,18 @@ def main():
     try:
         from video_rag.retrieval.onnx_semantic import OnnxSentenceEncoder, build_semantic_pipeline
         data = json.loads(args.questions.read_text(encoding="utf-8-sig"))
+        source_binding = verify_sources(data, args.video, args.subtitles)
         segments = segments_from_subtitles(args.video, args.subtitles)
         encoder = OnnxSentenceEncoder(args.model_dir)
         keyword = build_transcript_segments(segments)
         semantic = build_semantic_pipeline(segments, encoder, args.semantic_threshold)
         result = compare(data["questions"], keyword, semantic, args.min_coverage)
+        verify_sources(data, args.video, args.subtitles)
     except (ImportError, OSError, KeyError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Comparison failed: {exc}\n")
     print(json.dumps({"warning": "Temporal coverage depends on label quality and does not establish answer correctness. "
                                   "Output includes questions; keep private material local.",
-                      "label_status": data.get("status", "not provided"), "semantic_threshold": args.semantic_threshold,
+                      "label_status": data.get("status", "not provided"), "source_binding": source_binding, "semantic_threshold": args.semantic_threshold,
                       "comparison": result}, indent=2))
     return 0
 

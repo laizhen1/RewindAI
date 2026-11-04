@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from diagnose_transcript import diagnose, metrics, metrics_by_question_type, operating_metrics
 
+from video_rag.evaluation.provenance import verify_sources
 from video_rag.adapters import EvidenceGenerator
 from video_rag.pipeline import VideoRAGPipeline
 from video_rag.retrieval.onnx_semantic import (
@@ -33,16 +34,18 @@ def main() -> int:
     args = parser.parse_args()
     if not -1 <= args.threshold <= 1:
         parser.error("threshold must be between -1 and 1")
+    data = json.loads(args.questions.read_text(encoding="utf-8-sig"))
+    source_binding = verify_sources(data, args.video, args.subtitles)
     encoder = OnnxSentenceEncoder(args.model_dir)
     pipeline = VideoRAGPipeline(retrievers=[SemanticRetriever(encoder)],
                                 reranker=SemanticReranker(encoder), generator=EvidenceGenerator(),
                                 minimum_rerank_score=args.threshold)
     pipeline.build(segments_from_subtitles(args.video, args.subtitles))
-    questions = json.loads(args.questions.read_text(encoding="utf-8-sig"))["questions"]
-    results = diagnose(pipeline, questions)
+    results = diagnose(pipeline, data["questions"])
+    verify_sources(data, args.video, args.subtitles)
     print(json.dumps({"warning": "Experimental English-only retrieval; threshold is not calibrated; "
                                   "metrics depend on label quality and do not evaluate answer correctness.",
-                      "threshold": args.threshold, "metrics": metrics(results),
+                      "threshold": args.threshold, "source_binding": source_binding, "metrics": metrics(results),
                       "operating_metrics": operating_metrics(results),
                       "by_question_type": metrics_by_question_type(results), "results": results}, indent=2))
     return 0

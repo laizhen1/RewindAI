@@ -9,9 +9,13 @@ import argparse
 import csv
 import json
 import math
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from video_rag.evaluation.provenance import bind_sources
+
 TYPES = {"audio", "visual", "ocr", "multimodal", "unknown_route"}
 SPLITS = {"development", "validation", "test"}
 
@@ -83,11 +87,17 @@ def main():
     parser.add_argument("--video-id", required=True)
     parser.add_argument("--split", choices=sorted(SPLITS))
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--video", type=Path, help="Optional local video to bind by SHA-256")
+    parser.add_argument("--subtitles", type=Path, help="Optional local subtitle file to bind by SHA-256")
     args = parser.parse_args()
+    if (args.video is None) != (args.subtitles is None):
+        parser.error("Provide both --video and --subtitles to bind sources")
     try:
         with args.csv.open(encoding="utf-8-sig", newline="") as source:
             rows = list(csv.DictReader(source))
         data = prepare(rows, args.video_id, args.split)
+        if args.video is not None:
+            bind_sources(data, args.video, args.subtitles)
         write_output(args.output, data, (ROOT / "artifacts", ROOT / "local_data"))
     except (OSError, TypeError, ValueError, csv.Error) as exc:
         parser.exit(2, f"Conversion failed: {exc}\n")

@@ -81,3 +81,5 @@ python scripts/diagnose_transcript.py --video PATH_TO_VIDEO --subtitles PATH_TO_
 ```
 
 输出仅允许写入 `artifacts/` 或 `local_data/` 下的新 JSON 文件，不覆盖旧文件。转换器保留题目但始终标为 `csv_import_unverified_draft`，不核实视频 ID 与文件是否匹配，也不验证观看行为、证据内容或完整检查范围；调用者须自行核对。它不生成原复核工具所需的事件与 verified JSONL。题目、答案、视频、字幕和结果可能含私人课程资料，均应留在本机。
+
+为减少题目与素材配错，可在转换命令中同时传入 `--video PATH_TO_VIDEO --subtitles PATH_TO_SRT`。转换器在本机计算两个文件的 SHA-256 并写入草稿；时间诊断、语义诊断及两者对照会在运行前后检查指纹，不匹配时停止。未绑定的旧题集仍可运行，输出 `source_binding: unbound`，须人工核对。指纹绑定不证明题目、答案或时间戳正确；计算长视频哈希可能耗时，指纹及题目也应随私人资料保留在本机。

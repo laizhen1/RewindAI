@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from video_rag.evaluation.provenance import verify_sources
 from video_rag.transcript_baseline import build_transcript_pipeline
 
 
@@ -132,11 +133,13 @@ def main() -> int:
     args = parser.parse_args()
     try:
         data = json.loads(args.questions.read_text(encoding="utf-8-sig"))
+        source_binding = verify_sources(data, args.video, args.subtitles)
         results = diagnose(build_transcript_pipeline(args.video, args.subtitles), data["questions"])
         summary = metrics(results, args.min_coverage)
+        verify_sources(data, args.video, args.subtitles)
     except (OSError, KeyError, TypeError, ValueError) as exc:
         parser.exit(2, f"Diagnostic failed: {exc}\n")
-    print(json.dumps({"warning": "Depends on label quality; temporal overlap is not answer correctness", "metrics": summary,
+    print(json.dumps({"warning": "Depends on label quality; temporal overlap is not answer correctness", "metrics": summary, "source_binding": source_binding,
                       "operating_metrics": operating_metrics(results, args.min_coverage),
                       "by_question_type": metrics_by_question_type(results, args.min_coverage), "results": results}, indent=2))
     return 0
