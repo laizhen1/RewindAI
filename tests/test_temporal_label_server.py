@@ -149,3 +149,36 @@ def test_local_diagnostic_rejects_subtitle_mutation(tmp_path, monkeypatch):
         return pipeline
     monkeypatch.setattr(module, "build_transcript_segments", mutate)
     assert client.post("/api/evaluate", json={"revision": result["revision"]}).status_code == 409
+
+
+def test_local_paired_comparison_keeps_queries_private_and_checks_model_revision(tmp_path, monkeypatch):
+    from video_rag.retrieval import onnx_semantic
+    from video_rag.transcript_baseline import build_transcript_segments
+
+    video = tmp_path / "sample.mp4"
+    video.write_bytes(b"video")
+    subs = tmp_path / "sample.srt"
+    subs.write_text("1\n00:00:03,000 --> 00:00:08,000\nAttention mechanism.\n", encoding="utf-8")
+    model = tmp_path / "model"
+    (model / "onnx").mkdir(parents=True)
+    (model / "tokenizer.json").write_bytes(b"tokenizer")
+    (model / "onnx" / "model_quantized.onnx").write_bytes(b"model")
+    monkeypatch.setattr(onnx_semantic, "OnnxSentenceEncoder", lambda directory: object())
+    monkeypatch.setattr(onnx_semantic, "build_semantic_pipeline", lambda segments, encoder, threshold: build_transcript_segments(segments))
+    app = create_label_app(video, tmp_path / "private" / "draft.csv", "sample", "development", 100,
+                           allowed_roots=(tmp_path / "private",), subtitles=subs, semantic_model=model)
+    client = app.test_client()
+    revision = client.get("/api/entries").get_json()["revision"]
+    saved = client.post("/api/entries", json={"revision": revision, "question": "attention", "question_type": "audio",
+                        "answerable": True, "answer": "private answer", "start": 3, "end": 8}).get_json()
+    response = client.post("/api/evaluate", json={"revision": saved["revision"]})
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result["metrics"]["f1"] == result["semantic"]["metrics"]["f1"] == 1
+    assert result["paired"]["answerable"]["both_hit"] == 1 and result["semantic_threshold"] == 0.4
+    assert "attention" not in response.get_data(as_text=True) and "private answer" not in response.get_data(as_text=True)
+    def mutate(segments, encoder, threshold):
+        (model / "tokenizer.json").write_bytes(b"changed")
+        return build_transcript_segments(segments)
+    monkeypatch.setattr(onnx_semantic, "build_semantic_pipeline", mutate)
+    assert client.post("/api/evaluate", json={"revision": saved["revision"]}).status_code == 409

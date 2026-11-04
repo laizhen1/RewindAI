@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from flask import Flask, jsonify, render_template, request, send_file
 
+from scripts.compare_time_retrieval import compare
 from scripts.diagnose_transcript import (
     comparison_by_question_type,
     diagnose,
@@ -39,7 +40,8 @@ FIELDS = ("question_id", "video_id", "question_type", "answerable", "question", 
 
 
 def create_label_app(video: Path, output: Path, video_id: str, split: str, duration: float,
-                     *, allowed_roots: tuple[Path, ...], subtitles: Path | None = None) -> Flask:
+                     *, allowed_roots: tuple[Path, ...], subtitles: Path | None = None,
+                     semantic_model: Path | None = None) -> Flask:
     video = Path(video).expanduser().resolve()
     output = private_output(output, roots=allowed_roots)
     if not video.is_file() or video.suffix.lower() not in {".mp4", ".webm", ".ogv", ".mov", ".m4v"}:
@@ -52,6 +54,12 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         subtitles = Path(subtitles).expanduser().resolve()
         if not subtitles.is_file() or subtitles.suffix.lower() not in {".srt", ".vtt"}:
             raise ValueError("Provide existing timed SRT/VTT subtitles")
+    model_files = ()
+    if semantic_model is not None:
+        semantic_model = Path(semantic_model).expanduser().resolve()
+        model_files = (semantic_model / "tokenizer.json", semantic_model / "onnx" / "model_quantized.onnx")
+        if not all(path.is_file() for path in model_files):
+            raise ValueError("Local semantic model files are missing")
     initial = video.stat()
     version = (initial.st_size, initial.st_mtime_ns)
     digest = hashlib.sha256()
@@ -157,6 +165,7 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             if fingerprint(video) != binding["video_sha256"]:
                 return jsonify({"error": "Video changed; check the source before evaluating"}), 409
             subtitle_hash = fingerprint(subtitles)
+            model_hashes = tuple(fingerprint(path) for path in model_files)
             if any(not isinstance(row.get("answerable"), str) or not isinstance(row.get("reference_answer"), str)
                    for row in rows):
                 return jsonify({"error": "Invalid draft labels"}), 400
@@ -172,16 +181,35 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             segments = segments_from_subtitles(video, subtitles)
             if max(segment.end_time for segment in segments) > duration + 1:
                 return jsonify({"error": "Subtitle timestamps exceed the video duration"}), 400
-            results = diagnose(build_transcript_segments(segments), questions)
+            keyword = build_transcript_segments(segments)
+            if semantic_model is not None:
+                from video_rag.retrieval.onnx_semantic import (
+                    OnnxSentenceEncoder,
+                    build_semantic_pipeline,
+                )
+
+                encoder = OnnxSentenceEncoder(semantic_model)
+                semantic = build_semantic_pipeline(segments, encoder, 0.4)
+                comparison = compare(questions, keyword, semantic)
+                comparison.pop("results")
+                keyword_result = comparison["keyword"]
+                semantic_result = comparison["semantic"]
+                pairs = {"answerable": comparison["paired_answerable"],
+                         "unanswerable": comparison["paired_unanswerable"]}
+            else:
+                results = diagnose(keyword, questions)
+                keyword_result = {"metrics": metrics(results), "operating": operating_metrics(results),
+                                  "by_question_type": comparison_by_question_type(results)}
+                semantic_result = pairs = None
             if (fingerprint(video) != binding["video_sha256"] or fingerprint(subtitles) != subtitle_hash
-                    or read_rows()[1] != revision):
+                    or tuple(fingerprint(path) for path in model_files) != model_hashes or read_rows()[1] != revision):
                 return jsonify({"error": "An input changed during evaluation; retry after checking it"}), 409
             return jsonify({"warning": "Draft time-overlap diagnostic only; not answer accuracy or a verified test.",
-                            "split": split, "metrics": metrics(results), "operating": operating_metrics(results),
-                            "by_question_type": comparison_by_question_type(results),
+                            "split": split, **keyword_result, "semantic": semantic_result, "paired": pairs,
+                            "semantic_threshold": 0.4 if semantic_result is not None else None,
                             "subtitle_last_end_seconds": max(segment.end_time for segment in segments),
                             "video_duration_seconds": duration})
-        except (OSError, UnicodeError, KeyError, TypeError, ValueError, RuntimeError, csv.Error):
+        except (ImportError, OSError, UnicodeError, KeyError, TypeError, ValueError, RuntimeError, csv.Error):
             return jsonify({"error": "Local evaluation failed; check draft labels and subtitle format"}), 400
 
     @app.post("/api/entries")
@@ -255,6 +283,7 @@ def main() -> int:
     parser.add_argument("--split", choices=sorted(SPLITS), required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--subtitles", type=Path, help="Optional local timed subtitles for draft evaluation")
+    parser.add_argument("--semantic-model", type=Path, help="Optional local ONNX model for paired comparison")
     parser.add_argument("--port", type=int, default=5095)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
@@ -267,7 +296,8 @@ def main() -> int:
         with av.open(str(args.video)) as container:
             duration = container.duration / av.time_base if container.duration else 0
         app = create_label_app(args.video, args.output, args.video_id, args.split, duration,
-                               allowed_roots=(ROOT / "artifacts", ROOT / "local_data"), subtitles=args.subtitles)
+                               allowed_roots=(ROOT / "artifacts", ROOT / "local_data"), subtitles=args.subtitles,
+                               semantic_model=args.semantic_model)
     except (OSError, ValueError, av.error.FFmpegError) as exc:
         parser.exit(2, f"Cannot start local labeler ({type(exc).__name__}); check video and PyAV.\n")
     print(f"Local-only labeling: http://127.0.0.1:{args.port}/", flush=True)
