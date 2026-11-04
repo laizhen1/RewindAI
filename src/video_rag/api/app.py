@@ -264,6 +264,11 @@ def create_app(
     def list_feedback():
         return jsonify({"feedback": store.recent_feedback()})
 
+    @app.get("/api/feedback/summary")
+    def feedback_summary():
+        groups = store.feedback_summary()
+        return jsonify({"groups": groups, "total": sum(group["count"] for group in groups)})
+
     @app.delete("/api/feedback/<int:feedback_id>")
     def delete_feedback(feedback_id: int):
         if not store.delete_feedback(feedback_id):

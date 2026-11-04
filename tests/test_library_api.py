@@ -109,6 +109,23 @@ class LibraryApiTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/feedback", json={"question": "x", "rating": "helpful"}).status_code, 201)
         self.assertEqual(self.client.get("/api/feedback").get_json()["feedback"][0]["target_type"], "answer")
 
+    def test_feedback_summary_counts_all_without_exposing_private_text(self):
+        self.assertEqual(self.client.get("/api/feedback/summary").get_json(), {"groups": [], "total": 0})
+        for target, rating in (("transcript", "helpful"), ("visual", "not_helpful")):
+            self.client.post("/api/feedback", json={"question": "private question", "comment": "private comment", "segment_id": "demo_0001", "target_type": target, "rating": rating})
+        with closing(sqlite3.connect(self.db)) as conn:
+            conn.executemany("INSERT INTO feedback (question, rating, target_type) VALUES (?, ?, ?)",
+                             [("private question", "helpful", "answer")] * 101)
+            conn.commit()
+        response = self.client.get("/api/feedback/summary")
+        data = response.get_json()
+        self.assertEqual(data["total"], 103)
+        self.assertEqual({(x["target_type"], x["rating"]): x["count"] for x in data["groups"]},
+                         {("answer", "helpful"): 101, ("transcript", "helpful"): 1, ("visual", "not_helpful"): 1})
+        self.assertNotIn("private", response.get_data(as_text=True))
+        self.assertEqual(len(self.client.get("/api/feedback").get_json()["feedback"]), 100)
+        self.assertEqual(self.client.get("/api/feedback/summary", headers={"Origin": "https://bad.example"}).status_code, 403)
+
     def test_feedback_migrates_old_database_without_losing_notes(self):
         old_db = Path(self.temp.name) / "old.sqlite3"
         with closing(sqlite3.connect(old_db)) as conn:
@@ -124,6 +141,7 @@ class LibraryApiTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["comment"], "keep me")
         self.assertEqual(rows[0]["target_type"], "legacy")
+        self.assertEqual(old.get("/api/feedback/summary").get_json()["groups"], [{"target_type": "legacy", "rating": "not_helpful", "count": 1}])
         reopened = create_app(build_demo_pipeline(), database_path=old_db).test_client()
         self.assertEqual(reopened.get("/api/feedback").get_json()["feedback"], rows)
 

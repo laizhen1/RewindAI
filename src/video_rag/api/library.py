@@ -144,6 +144,14 @@ class LibraryStore:
             )
             return int(result.lastrowid)
 
+    def feedback_summary(self) -> list[dict]:
+        """Count all local feedback without returning questions or comments."""
+        with self.connect() as connection:
+            return [dict(row) for row in connection.execute(
+                "SELECT target_type, rating, COUNT(*) AS count FROM feedback "
+                "GROUP BY target_type, rating ORDER BY target_type, rating"
+            )]
+
     def recent_feedback(self, limit: int = 100) -> list[dict]:
         with self.connect() as connection:
             return [dict(row) for row in connection.execute(
