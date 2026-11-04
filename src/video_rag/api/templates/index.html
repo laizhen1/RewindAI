@@ -41,6 +41,8 @@
   const $ = (id) => document.getElementById(id);
   const state = { courses: [], videos: [], unavailableVideos: [], bookmarks: [], selectedVideo: null, lastQuestion: "" };
   const player = $("player");
+  let pendingSeek = null;
+  function clearPendingSeek() { if (pendingSeek) player.removeEventListener("loadedmetadata", pendingSeek); pendingSeek = null; }
   const importForm = document.createElement("form");
   importForm.className = "hidden";
   importForm.style.marginTop = "16px";
@@ -60,7 +62,7 @@
     removeVideo.disabled = true;
     try {
       await api(`/api/library/videos/${encodeURIComponent(selected.id)}`, {method: "DELETE"});
-      state.selectedVideo = null; player.pause(); player.removeAttribute("src"); player.load();
+      state.selectedVideo = null; clearPendingSeek(); player.pause(); player.removeAttribute("src"); player.load();
       $("playerTitle").textContent = "选择一个视频开始学习"; $("playerStatus").textContent = "未选择";
       $("nowPlaying").textContent = "视频索引已移除，可重新加载。"; $("assignWrap").classList.add("hidden");
       $("answer").textContent = "视频索引已更新，请重新搜索。"; $("evidenceList").replaceChildren(); $("feedbackButtons").classList.add("hidden");
@@ -143,13 +145,15 @@
   function jsonOptions(method, data) { return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }; }
   function videoName(id) { const video = state.videos.find(v => idEq(v.id, id)); return video ? video.title : String(id); }
   function selectVideo(video, startTime = 0, autoplay = false) {
+    clearPendingSeek();
     state.selectedVideo = video; $("playerTitle").textContent = video.title || video.id; $("playerStatus").textContent = video.available ? "已就绪" : "视频文件不可用";
     $("nowPlaying").textContent = video.available ? `从 ${fmt(startTime)} 开始 · 点击播放或继续提问` : "视频源文件不可用，无法播放。";
     $("assignWrap").classList.remove("hidden"); renderCourseSelect(); renderLibrary();
     if (!video.available) { player.removeAttribute("src"); player.load(); return; }
     const seek = () => { player.currentTime = Math.max(0, Number(startTime) || 0); if (autoplay) player.play().catch(() => {}); };
     const url = safeVideoUrl(video.id);
-    if (player.getAttribute("src") !== url) { player.src = url; player.addEventListener("loadedmetadata", seek, { once: true }); player.load(); } else if (player.readyState >= 1) seek(); else player.addEventListener("loadedmetadata", seek, { once: true });
+    const waitForMetadata = () => { pendingSeek = () => { pendingSeek = null; seek(); }; player.addEventListener("loadedmetadata", pendingSeek, { once: true }); };
+    if (player.getAttribute("src") !== url) { player.src = url; waitForMetadata(); player.load(); } else if (player.readyState >= 1) seek(); else waitForMetadata();
   }
   function playItem(item) { if (item.available === false) { notice("这个收藏对应旧版字幕或视频，已保留备注，请重新收藏新片段。"); return; } const video = state.videos.find(v => idEq(v.id, item.video_id)); if (!video) { notice("该视频未在当前索引中，无法播放。"); return; } selectVideo(video, item.start_time, true); document.getElementById("playerHeading").scrollIntoView({ behavior: "smooth", block: "nearest" }); }
   function renderCourseSelect() { const select = $("courseSelect"); select.replaceChildren(); const empty = element("option", "", "未分类"); empty.value = ""; select.append(empty); state.courses.forEach(course => { const opt = element("option", "", course.name); opt.value = String(course.id); select.append(opt); }); select.value = state.selectedVideo?.course_id == null ? "" : String(state.selectedVideo.course_id); }

@@ -82,6 +82,11 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(data["evidence"][0]["start_time"], 2)
         self.assertNotIn("source_path", data["evidence"][0])
         self.assertEqual(client.get(data["evidence"][0]["video_url"]).data, b"fake video bytes for API test")
+        partial = client.get(data["evidence"][0]["video_url"], headers={"Range": "bytes=5-9"})
+        self.assertEqual(partial.status_code, 206)
+        self.assertEqual(partial.data, b"video")
+        self.assertEqual(partial.headers["Content-Range"], "bytes 5-9/29")
+        partial.close()
         missing = client.post("/api/ask", json={"question": "quantum entanglement"}).get_json()
         self.assertTrue(missing["abstained"])
 
