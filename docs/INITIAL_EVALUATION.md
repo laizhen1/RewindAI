@@ -209,3 +209,10 @@ python scripts/compare_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions P
 ```
 
 The tool processes inputs locally and prints aggregate counts and paired differences, without writing questions or videos. Model and data dependencies retain their own licences.
+
+
+### Temporal hits and abstentions reported separately
+
+The local diagnostic now also separates temporal evidence coverage on answerable questions from abstention on unanswerable questions, with explicit counts and denominators. On the same nine **unreviewed, caption-derived draft questions** for the public ethics video and the locally generated subtitles, three of three answerable drafts had a top-one segment covering at least half of the draft reference interval; all three also had such a segment among the returned results. There were zero answerable abstentions. Of the six intended unanswerable drafts, three were rejected and three returned candidates. This is the same provisional sample previously reported above, not an independent new test or answer-accuracy measurement.
+
+Optional `question_type` labels allow per-type reporting; missing labels appear as `unlabeled`. The returned-set hit rate is based on the results the pipeline actually returned, not a standard Recall@K over all relevant intervals. A zero denominator yields `null`. Question text and results remain local for private media.

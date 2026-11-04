@@ -1,4 +1,4 @@
-from scripts.diagnose_transcript import coverage, diagnose, metrics, overlap
+from scripts.diagnose_transcript import coverage, diagnose, metrics, metrics_by_question_type, operating_metrics, overlap
 
 
 def test_overlap_requires_positive_duration():
@@ -58,3 +58,23 @@ def test_f1_is_zero_for_missed_positive_and_undefined_for_no_positives():
     assert missed["precision"] is None and missed["recall"] == 0 and missed["f1"] == 0
     empty = metrics([{"expected_answerable": False, "abstained": True}])
     assert empty["precision"] is None and empty["recall"] is None and empty["f1"] is None
+
+
+def test_separate_temporal_hits_and_unanswerable_rejection_rates():
+    rows = [
+        {"expected_answerable": True, "abstained": False, "first_hit_reference_coverage": .2, "best_hit_reference_coverage": .8, "question_type": "audio"},
+        {"expected_answerable": True, "abstained": True, "first_hit_reference_coverage": 0, "best_hit_reference_coverage": 0, "question_type": "visual"},
+        {"expected_answerable": False, "abstained": False, "question_type": "visual"},
+        {"expected_answerable": False, "abstained": True},
+    ]
+    result = operating_metrics(rows)
+    assert result["top1_temporal_hits"] == 0
+    assert result["any_returned_temporal_hits"] == 1
+    assert result["any_returned_temporal_hit_rate"] == .5
+    assert result["answerable_abstention_rate"] == .5
+    assert result["unanswerable_abstention_rate"] == .5
+    assert result["unanswerable_candidate_rate"] == .5
+    groups = metrics_by_question_type(rows)
+    assert groups["audio"]["unanswerable_abstention_rate"] is None
+    assert groups["unlabeled"]["unanswerable_abstention_rate"] == 1
+    assert groups["visual"]["answerable_abstention_rate"] == 1

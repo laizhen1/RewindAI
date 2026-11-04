@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from diagnose_transcript import diagnose, metrics
+from diagnose_transcript import diagnose, metrics, metrics_by_question_type, operating_metrics
 
 from video_rag.adapters import EvidenceGenerator
 from video_rag.pipeline import VideoRAGPipeline
@@ -42,10 +42,11 @@ def main() -> int:
     results = diagnose(pipeline, questions)
     print(json.dumps({"warning": "Experimental English-only retrieval; threshold is not calibrated; "
                                   "metrics depend on label quality and do not evaluate answer correctness.",
-                      "threshold": args.threshold, "metrics": metrics(results), "results": results}, indent=2))
+                      "threshold": args.threshold, "metrics": metrics(results),
+                      "operating_metrics": operating_metrics(results),
+                      "by_question_type": metrics_by_question_type(results), "results": results}, indent=2))
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -33,6 +33,9 @@ def diagnose(pipeline, questions: list[dict]) -> list[dict]:
             start, end = float(item["evidence_start_seconds"]), float(item["evidence_end_seconds"])
             if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
                 raise ValueError("Invalid question or reference evidence range")
+        question_type = item.get("question_type")
+        if question_type is not None and (not isinstance(question_type, str) or not question_type.strip() or len(question_type) > 80):
+            raise ValueError("question_type must be a nonempty string of at most 80 characters")
         result = pipeline.ask(question).to_dict()
         hits = result["evidence"]
         row = {
@@ -41,6 +44,8 @@ def diagnose(pipeline, questions: list[dict]) -> list[dict]:
             "abstained": result["abstained"],
             "returned_ranges": [[hit["start_time"], hit["end_time"]] for hit in hits],
         }
+        if question_type is not None:
+            row["question_type"] = question_type.strip()
         if answerable:
             row.update({
                 "first_hit_overlaps": bool(hits and overlap(hits[0], start, end)),
@@ -83,6 +88,41 @@ def metrics(results: list[dict], min_coverage: float = 0.5) -> dict:
             "question_count": len(results)}
 
 
+def operating_metrics(results: list[dict], min_coverage: float = 0.5) -> dict:
+    """Separate answerable temporal hits from rejection of unanswerable questions."""
+    if not 0 < min_coverage <= 1:
+        raise ValueError("min_coverage must be in (0, 1]")
+    positive = [row for row in results if row["expected_answerable"]]
+    negative = [row for row in results if not row["expected_answerable"]]
+    first = sum(not row["abstained"] and row["first_hit_reference_coverage"] >= min_coverage for row in positive)
+    any_returned = sum(not row["abstained"] and row["best_hit_reference_coverage"] >= min_coverage for row in positive)
+    rejected_negative = sum(row["abstained"] for row in negative)
+    rejected_positive = sum(row["abstained"] for row in positive)
+    return {
+        "reference_coverage_threshold": min_coverage,
+        "answerable_questions": len(positive),
+        "top1_temporal_hits": first,
+        "top1_temporal_hit_rate": first / len(positive) if positive else None,
+        "any_returned_temporal_hits": any_returned,
+        "any_returned_temporal_hit_rate": any_returned / len(positive) if positive else None,
+        "answerable_abstentions": rejected_positive,
+        "answerable_abstention_rate": rejected_positive / len(positive) if positive else None,
+        "unanswerable_questions": len(negative),
+        "unanswerable_abstentions": rejected_negative,
+        "unanswerable_abstention_rate": rejected_negative / len(negative) if negative else None,
+        "unanswerable_returned_candidates": len(negative) - rejected_negative,
+        "unanswerable_candidate_rate": (len(negative) - rejected_negative) / len(negative) if negative else None,
+    }
+
+
+def metrics_by_question_type(results: list[dict], min_coverage: float = 0.5) -> dict:
+    """Only report groups actually labeled; unlabeled rows remain explicit."""
+    groups: dict[str, list[dict]] = {}
+    for row in results:
+        groups.setdefault(row.get("question_type", "unlabeled"), []).append(row)
+    return {name: operating_metrics(group, min_coverage) for name, group in sorted(groups.items())}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", type=Path, required=True)
@@ -96,8 +136,9 @@ def main() -> int:
         summary = metrics(results, args.min_coverage)
     except (OSError, KeyError, TypeError, ValueError) as exc:
         parser.exit(2, f"Diagnostic failed: {exc}\n")
-    print(json.dumps({"warning": "Depends on label quality; not semantic accuracy", "metrics": summary,
-                      "results": results}, indent=2))
+    print(json.dumps({"warning": "Depends on label quality; temporal overlap is not answer correctness", "metrics": summary,
+                      "operating_metrics": operating_metrics(results, args.min_coverage),
+                      "by_question_type": metrics_by_question_type(results, args.min_coverage), "results": results}, indent=2))
     return 0
 
 
