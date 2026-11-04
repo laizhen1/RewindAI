@@ -59,6 +59,40 @@ def create_app(
         if len(restored) > len(pipeline.segments()):
             pipeline = transcript_builder(restored)
 
+    # Bind transcript evidence to the source state observed at load/import time.
+    # Size and mtime are a lightweight change detector, not a content hash.
+    source_versions: dict[str, tuple[int, int] | None] = {}
+
+    def source_version(path: str) -> tuple[int, int] | None:
+        try:
+            source = Path(path)
+            if not source.is_file():
+                return None
+            stat = source.stat()
+            return stat.st_size, stat.st_mtime_ns
+        except OSError:
+            return None
+
+    if mode == "transcript":
+        for segment in pipeline.segments():
+            if segment.video_id not in source_versions:
+                source_versions[segment.video_id] = source_version(segment.source_path)
+
+    def source_available(video_id: str) -> bool:
+        source = pipeline.video_path(video_id)
+        if source is None:
+            return False
+        if mode != "transcript":
+            return Path(source).is_file()
+        baseline = source_versions.get(video_id)
+        return baseline is not None and source_version(source) == baseline
+
+    def invalid_sources(video_ids: set[str] | None = None) -> bool:
+        if mode != "transcript":
+            return False
+        ids = video_ids if video_ids is not None else {segment.video_id for segment in pipeline.segments()}
+        return any(not source_available(video_id) for video_id in ids)
+
     @app.before_request
     def protect_local_workspace():
         # This prototype stores private notes and offers local video access. Only
@@ -94,6 +128,8 @@ def create_app(
         videos = pipeline.videos()
         for item in videos:
             item["course_id"] = assignments.get(item["id"])
+            if mode == "transcript":
+                item["available"] = source_available(item["id"])
             item["video_url"] = f"/api/videos/{item['id']}"
         return jsonify({"courses": store.courses(), "videos": videos,
                         "unavailable_saved_videos": len(unavailable_videos),
@@ -128,6 +164,7 @@ def create_app(
             except (sqlite3.Error, OSError, RuntimeError, ValueError):
                 return jsonify({"error": "Could not rebuild or save the local index"}), 500
             pipeline = replacement
+            source_versions.pop(video_id, None)
             visual_index = None
             visual_key = None
         return "", 204
@@ -169,6 +206,7 @@ def create_app(
                 store.remember_video(added[0].video_id, str(video_path), current_stat.st_size,
                                      current_stat.st_mtime_ns, json.dumps([segment.to_dict() for segment in added]))
                 pipeline = replacement
+                source_versions[added[0].video_id] = (current_stat.st_size, current_stat.st_mtime_ns)
                 visual_index = None
                 visual_key = None
             return jsonify({"video_id": added[0].video_id, "segment_count": len(added)}), 201
@@ -224,7 +262,7 @@ def create_app(
         items = store.bookmarks()
         for item in items:
             segment = pipeline.segment(item["segment_id"])
-            item["available"] = bool(segment and Path(segment.source_path).is_file() and
+            item["available"] = bool(segment and source_available(segment.video_id) and
                                      segment.video_id == item["video_id"] and
                                      segment.start_time == item["start_time"] and segment.end_time == item["end_time"])
         return jsonify({"bookmarks": items})
@@ -329,6 +367,9 @@ def create_app(
                              and pipeline.video_path(key) is not None}
             if not course_videos:
                 return jsonify({"error": "No loaded videos in this course"}), 400
+        scope = course_videos if course_videos is not None else ({video_id} if video_id is not None else None)
+        if invalid_sources(scope):
+            return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
         try:
             if course_videos is not None:
                 result = pipeline.ask(question, video_ids=course_videos)
@@ -378,6 +419,8 @@ def create_app(
                     segments = tuple(segment for segment in segments if assignments.get(segment.video_id) == course_id)
                 if not segments:
                     return jsonify({"error": "No loaded videos in the selected scope"}), 400
+                if invalid_sources({segment.video_id for segment in segments}):
+                    return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
                 total = len(segments)
                 try:
                     selected = sample_visual_segments(segments, limit=100)
@@ -429,6 +472,8 @@ def create_app(
         if source is None:
             return jsonify({"error": "video not found"}), 404
         resolved = Path(source).resolve()
+        if mode == "transcript" and not source_available(video_id):
+            return jsonify({"error": "Video moved or changed; restore it or remove and re-import its index"}), 409
         if not resolved.is_file():
             return jsonify({"error": "video file is unavailable"}), 404
         return send_file(resolved, conditional=True)
@@ -441,6 +486,8 @@ def create_app(
         target = next((item for item in snapshot if item.segment_id == segment_id), None)
         if target is None:
             return jsonify({"error": "Segment not found"}), 404
+        if not source_available(target.video_id):
+            return jsonify({"error": "Video moved or changed; restore it or remove and re-import its index"}), 409
         ordered = sorted((item for item in snapshot if item.video_id == target.video_id),
                          key=lambda item: (item.start_time, item.end_time, item.segment_id))
         index = next(i for i, item in enumerate(ordered) if item.segment_id == segment_id)
@@ -460,8 +507,8 @@ def create_app(
         segment = pipeline.segment(segment_id)
         if segment is None:
             return jsonify({"error": "Segment not found"}), 404
-        if not Path(segment.source_path).is_file():
-            return jsonify({"error": "Video file is unavailable"}), 404
+        if not source_available(segment.video_id):
+            return jsonify({"error": "Video moved or changed; restore it or remove and re-import its index"}), 409
         try:
             import av
 

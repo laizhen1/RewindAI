@@ -122,6 +122,38 @@ class TranscriptBaselineTests(unittest.TestCase):
         reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
         self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
 
+    def test_changed_video_is_not_used_for_search_playback_or_frames(self):
+        other = self.base / "other.mp4"
+        other.write_bytes(b"other video")
+        other_subs = other.with_suffix(".srt")
+        other_subs.write_text("1\n00:00:01,000 --> 00:00:04,000\nunique oranges\n", encoding="utf-8")
+        pipeline = build_transcript_library([(self.video, self.srt), (other, other_subs)])
+        client = create_app(pipeline, database_path=self.base / "changed-live.sqlite3", mode="transcript",
+                            visual_builder=lambda segments: None).test_client()
+        original_id = next(v["id"] for v in client.get("/api/library").get_json()["videos"] if v["title"] == self.video.name)
+        other_id = next(v["id"] for v in client.get("/api/library").get_json()["videos"] if v["title"] == other.name)
+        evidence = client.post("/api/ask", json={"question": "attention", "video_id": original_id}).get_json()["evidence"][0]
+        segment_id = evidence["segment_id"]
+        client.post("/api/bookmarks", json={"video_id": original_id, "segment_id": segment_id, "note": "keep"})
+        self.video.write_bytes(b"replacement video bytes that differ")
+        videos = {v["id"]: v for v in client.get("/api/library").get_json()["videos"]}
+        self.assertFalse(videos[original_id]["available"])
+        self.assertTrue(videos[other_id]["available"])
+        self.assertFalse(client.get("/api/bookmarks").get_json()["bookmarks"][0]["available"])
+        self.assertEqual(client.post("/api/ask", json={"question": "attention"}).status_code, 409)
+        self.assertEqual(client.post("/api/ask", json={"question": "attention", "video_id": original_id}).status_code, 409)
+        self.assertEqual(client.get(f"/api/videos/{original_id}").status_code, 409)
+        self.assertEqual(client.get(f"/api/segments/{segment_id}/context").status_code, 409)
+        self.assertEqual(client.get(f"/api/segments/{segment_id}/frame").status_code, 409)
+        self.assertEqual(client.post("/api/visual-search", json={"question": "image", "video_id": original_id}).status_code, 409)
+        self.assertEqual(client.post("/api/compare-search", json={"question": "attention", "video_id": original_id}).status_code, 409)
+        unaffected = client.post("/api/ask", json={"question": "oranges", "video_id": other_id})
+        self.assertEqual(unaffected.status_code, 200)
+        self.assertFalse(unaffected.get_json()["abstained"])
+        self.assertEqual(client.delete(f"/api/library/videos/{original_id}").status_code, 204)
+        self.assertEqual(client.post("/api/ask", json={"question": "oranges"}).status_code, 200)
+        self.assertEqual(client.get("/api/bookmarks").get_json()["bookmarks"][0]["note"], "keep")
+
     def test_removing_loaded_video_keeps_media_and_notes_allows_new_subtitles(self):
         db = self.base / "remove.sqlite3"
         client = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
