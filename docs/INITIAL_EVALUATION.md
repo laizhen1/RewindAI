@@ -295,6 +295,10 @@ python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_LOCAL_DATASET_JSON --sa
 
 The script uses local files and prints aggregate statistics; it does not download or process video. Reusing this sample to select thresholds would invalidate any later claim that the same sample was untouched.
 
+### Query latency smoke check
+
+On 5 November 2026, the paired local comparison was rerun on the nine provisional ethics-sample questions with the generated captions and quantized MiniLM model described above. In this single run, keyword query time had a median of **0.13 ms** and nearest-rank P95 of **0.29 ms**; semantic query time had a median of **17.51 ms** and P95 of **19.25 ms**. Each method processed nine questions sequentially, with the keyword method run first. These times measure only the in-process query and result serialization after both indexes were built; model loading, indexing, transcription, browser and network latency are excluded. With only nine observations, P95 is the maximum, and these values are not a general performance benchmark. The draft labels remain unverified and this smoke check does not change the earlier quality conclusions.
+
 
 ### Searching the provided transcript for annotated time windows
 

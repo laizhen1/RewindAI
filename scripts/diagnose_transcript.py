@@ -6,6 +6,8 @@ import json
 import math
 import sys
 from pathlib import Path
+from statistics import median
+from time import perf_counter
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -37,12 +39,15 @@ def diagnose(pipeline, questions: list[dict]) -> list[dict]:
         question_type = item.get("question_type")
         if question_type is not None and (not isinstance(question_type, str) or not question_type.strip() or len(question_type) > 80):
             raise ValueError("question_type must be a nonempty string of at most 80 characters")
+        started = perf_counter()
         result = pipeline.ask(question).to_dict()
+        latency_ms = (perf_counter() - started) * 1000
         hits = result["evidence"]
         row = {
             "question": question,
             "expected_answerable": answerable,
             "abstained": result["abstained"],
+            "query_latency_ms": latency_ms,
             "returned_ranges": [[hit["start_time"], hit["end_time"]] for hit in hits],
         }
         if question_type is not None:
@@ -58,6 +63,15 @@ def diagnose(pipeline, questions: list[dict]) -> list[dict]:
             row["correct_abstention"] = bool(result["abstained"])
         results.append(row)
     return results
+
+
+def latency_summary(results: list[dict]) -> dict:
+    """Summarize sequential ask-and-serialization wall time, including first query."""
+    values = sorted(row["query_latency_ms"] for row in results)
+    if not values:
+        return {"count": 0, "mean_ms": None, "median_ms": None, "p95_ms": None}
+    return {"count": len(values), "mean_ms": sum(values) / len(values),
+            "median_ms": median(values), "p95_ms": values[math.ceil(.95 * len(values)) - 1]}
 
 
 def metrics(results: list[dict], min_coverage: float = 0.5) -> dict:
@@ -150,7 +164,7 @@ def main() -> int:
     except (OSError, KeyError, TypeError, ValueError) as exc:
         parser.exit(2, f"Diagnostic failed: {exc}\n")
     print(json.dumps({"warning": "Depends on label quality; temporal overlap is not answer correctness", "metrics": summary, "source_binding": source_binding,
-                      "operating_metrics": operating_metrics(results, args.min_coverage),
+                      "operating_metrics": operating_metrics(results, args.min_coverage), "query_latency": latency_summary(results),
                       "by_question_type": metrics_by_question_type(results, args.min_coverage), "results": results}, indent=2))
     return 0
 

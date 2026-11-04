@@ -1,4 +1,12 @@
-from scripts.diagnose_transcript import coverage, diagnose, metrics, metrics_by_question_type, operating_metrics, overlap
+from scripts.diagnose_transcript import (
+    coverage,
+    diagnose,
+    latency_summary,
+    metrics,
+    metrics_by_question_type,
+    operating_metrics,
+    overlap,
+)
 
 
 def test_overlap_requires_positive_duration():
@@ -23,6 +31,13 @@ def test_diagnostic_reports_first_and_any_overlap():
     assert result["first_hit_overlaps"] is False
     assert result["any_hit_overlaps"] is True
     assert result["best_hit_reference_coverage"] == 1.0
+    assert result["query_latency_ms"] >= 0
+
+
+def test_latency_summary_reports_nearest_rank_p95_and_empty():
+    assert latency_summary([]) == {"count": 0, "mean_ms": None, "median_ms": None, "p95_ms": None}
+    summary = latency_summary([{"query_latency_ms": value} for value in range(1, 21)])
+    assert summary == {"count": 20, "mean_ms": 10.5, "median_ms": 10.5, "p95_ms": 19}
 
 
 def test_coverage_and_unanswerable_result():

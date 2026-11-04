@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from scripts.diagnose_transcript import (
     comparison_by_question_type,
     diagnose,
+    latency_summary,
     metrics,
     operating_metrics,
 )
@@ -47,8 +48,10 @@ def compare(questions, keyword, semantic, min_coverage=0.5):
         rows.append({"question": left["question"], "expected_answerable": left["expected_answerable"],
                      "comparison": label, "keyword": left, "semantic": right})
     return {"keyword": {"metrics": metrics(a, min_coverage), "operating": operating_metrics(a, min_coverage),
+                        "query_latency": latency_summary(a),
                         "by_question_type": comparison_by_question_type(a, min_coverage)},
             "semantic": {"metrics": metrics(b, min_coverage), "operating": operating_metrics(b, min_coverage),
+                         "query_latency": latency_summary(b),
                          "by_question_type": comparison_by_question_type(b, min_coverage)},
             "paired_answerable": pairs, "paired_unanswerable": negative_pairs, "results": rows}
 
