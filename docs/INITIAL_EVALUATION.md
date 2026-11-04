@@ -294,3 +294,27 @@ python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_LOCAL_DATASET_JSON --sa
 ```
 
 The script uses local files and prints aggregate statistics; it does not download or process video. Reusing this sample to select thresholds would invalidate any later claim that the same sample was untouched.
+
+
+### Searching the provided transcript for annotated time windows
+
+To move closer to the actual retrieval task, `scripts/evaluate_ytcommentqa_full_transcript.py` searches all caption sentences supplied for each question's video, rather than supplying only the annotated snippet. It evaluates questions labeled script-answerable (including those also visually answerable); other modality labels and snippet-level unanswerable labels are excluded. No source video or audio is used. The reference window is the time span from the earliest to latest caption in the dataset's annotated evidence range. We count a hit when a returned sentence has **any positive-duration overlap** with that window. The top-three score is a question-level overlap rate, not precision or answer F1; the data do not establish every other relevant interval.
+
+On the same deterministic 20% video-ID sample, the strict run excluded any question with an invalid caption anywhere in its supplied transcript: 446 selected records included 218 other-label exclusions and 77 invalid transcripts, leaving **151 questions from 126 videos**. Both methods used identical questions, source captions and exclusions; the semantic ONNX model and uncalibrated 0.4 threshold were the same as above. A simple reference baseline selects the first three available captions in time order.
+
+| Method | Top-one overlap | Top-three overlap | No candidate |
+| --- | ---: | ---: | ---: |
+| Keyword | 31 / 151 (0.205) | 50 / 151 (0.331) | 55 / 151 |
+| Experimental semantic | 53 / 151 (0.351) | 80 / 151 (0.530) | 30 / 151 |
+| First three captions, no search | — | 11 / 151 (0.073) | — |
+
+For top-three overlap, both methods overlapped for 35 questions, only keyword for 15, only semantic for 45, and neither for 56. This is an exploratory paired comparison, not a significance test. An overlapping sentence may cover only a tiny part of a broad evidence window and may not answer the question; annotations can omit other valid locations. The prior snippet experiment used this same sample, so it is not an untouched final test. Caption sentence segmentation differs from the application's grouped subtitle segments, the videos are public YouTube instructional material rather than university lectures, and model pretraining overlap is unknown.
+
+Because 77 exclusions can introduce bias, an additional sensitivity run skipped invalid captions **outside** each valid reference range rather than rejecting the entire transcript. It retained **223 questions from 186 videos**, still excluding five with invalid reference captions; 72 retained transcripts were incomplete and 113 invalid cues were omitted. Keyword top-three overlap was **75 / 223 (0.336)**, semantic **117 / 223 (0.525)**, and the first-three baseline **12 / 223 (0.054)**. Missing cues can remove legitimate competing evidence and change ranks, so this does not establish the result on complete transcripts. The two runs have different denominators; neither represents answer accuracy, semantic correctness, visual performance or full-video unanswerable rejection.
+
+```powershell
+python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_DATASET_JSON --sample sample --compare-model PATH_TO_LOCAL_MINILM --semantic-threshold 0.4
+# Optional sensitivity run: append --allow-incomplete-captions
+```
+
+The local dataset and model files must already exist. The script prints aggregate counts only and does not download media. Reproduce with the data and model revisions documented above; independently annotated lecture videos and actual answer evaluation remain necessary.

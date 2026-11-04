@@ -49,3 +49,7 @@ def test_paired_comparison_distinguishes_each_method():
     result = compare(dataset, lambda segments: FakeSemantic(), sample="all")
     assert result["script_answerable_pairs"] == {"both_return": 0, "keyword_only": 1, "semantic_only": 1, "neither_return": 0}
     assert result["unanswerable_pairs"] == {"both_return": 0, "keyword_only": 1, "semantic_only": 1, "neither_return": 0}
+
+
+def test_boolean_labels_are_not_treated_as_integer_categories():
+    assert evaluate({"1": row([False])}, sample="all")["invalid_rows"] == 1

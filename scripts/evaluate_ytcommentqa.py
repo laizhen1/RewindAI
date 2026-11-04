@@ -70,7 +70,9 @@ def evaluate(rows: dict, *, sample: str = "sample", builder=build_transcript_seg
         if sample != "all" and partition(video) != sample:
             continue
         counts["selected_rows"] += 1
-        if labels not in ([0], [1], [2], [1, 2], [2, 1], [3]) or not isinstance(question, str) or not question.strip():
+        if (not isinstance(labels, list) or any(type(value) is not int for value in labels)
+                or labels not in ([0], [1], [2], [1, 2], [2, 1], [3])
+                or not isinstance(question, str) or not question.strip()):
             counts["invalid_row"] += 1
             continue
         # Visual-only and combined-required examples are neither positives nor
