@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from video_rag.api import create_app
-from video_rag.schemas import SearchHit
+from video_rag.schemas import SearchHit, VideoSegment
 from video_rag.transcript_baseline import (
     build_transcript_library,
     build_transcript_pipeline,
@@ -223,6 +223,56 @@ class TranscriptBaselineTests(unittest.TestCase):
         off = create_app(build_transcript_segments([]), database_path=self.base / "off.sqlite3", mode="transcript").test_client()
         self.assertFalse(off.get("/api/health").get_json()["visual_enabled"])
         self.assertEqual(off.post("/api/visual-search", json={"question": "image"}).status_code, 409)
+
+    def test_visual_search_scopes_and_rebuilds_after_course_assignment_changes(self):
+        other = self.base / "other.mp4"
+        other.write_bytes(b"other video")
+        captions = other.with_suffix(".srt")
+        captions.write_text("1\n00:00:03,000 --> 00:00:06,000\nDifferent video.\n", encoding="utf-8")
+        pipeline = build_transcript_library([(self.video, self.srt), (other, captions)])
+        builds = []
+        class FakeVisual:
+            def __init__(self, segments):
+                self.segments = segments
+            def search(self, question, limit):
+                return [SearchHit(segment.segment_id, 0.2, "visual", i + 1)
+                        for i, segment in enumerate(self.segments[:limit])]
+        def builder(segments):
+            builds.append(segments)
+            return FakeVisual(segments)
+        client = create_app(pipeline, database_path=self.base / "visual-scopes.sqlite3", mode="transcript",
+                            visual_builder=builder).test_client()
+        videos = {v["title"]: v["id"] for v in client.get("/api/library").get_json()["videos"]}
+        course = client.post("/api/courses", json={"name": "Class"}).get_json()["id"]
+        self.assertEqual(client.post("/api/visual-search", json={"question": "image", "course_id": course}).status_code, 400)
+        client.put(f"/api/videos/{videos['lecture.mp4']}/course", json={"course_id": course})
+        data = client.post("/api/visual-search", json={"question": "image", "course_id": course}).get_json()
+        self.assertTrue(data["evidence"])
+        self.assertTrue(all(item["video_id"] == videos["lecture.mp4"] for item in data["evidence"]))
+        client.put(f"/api/videos/{videos['other.mp4']}/course", json={"course_id": course})
+        data = client.post("/api/visual-search", json={"question": "image", "course_id": course}).get_json()
+        self.assertEqual({item["video_id"] for item in data["evidence"]}, set(videos.values()))
+        self.assertEqual(len(builds), 2)
+        data = client.post("/api/visual-search", json={"question": "image", "video_id": videos["other.mp4"]}).get_json()
+        self.assertEqual({item["video_id"] for item in data["evidence"]}, {videos["other.mp4"]})
+        self.assertEqual(client.post("/api/visual-search", json={"question": "x", "video_id": "missing"}).status_code, 404)
+        self.assertEqual(client.post("/api/visual-search", json={"question": "x", "course_id": True}).status_code, 400)
+        self.assertEqual(client.post("/api/visual-search", json={"question": "x", "course_id": course,
+                                                                  "video_id": videos["other.mp4"]}).status_code, 400)
+
+    def test_visual_limit_applies_to_selected_scope(self):
+        segments = [VideoSegment(f"a{i}", "large", str(self.video), float(i), float(i + 1), transcript="a")
+                    for i in range(101)]
+        segments.append(VideoSegment("small-0", "small", str(self.video), 0.0, 1.0, transcript="b"))
+        class FakeVisual:
+            def search(self, question, limit):
+                return [SearchHit("small-0", 0.2, "visual", 1)]
+        client = create_app(build_transcript_segments(segments), database_path=self.base / "limit.sqlite3",
+                            mode="transcript", visual_builder=lambda values: FakeVisual()).test_client()
+        self.assertEqual(client.post("/api/visual-search", json={"question": "image"}).status_code, 400)
+        response = client.post("/api/visual-search", json={"question": "image", "video_id": "small"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["evidence"][0]["video_id"], "small")
 
     def test_course_search_filters_evidence_and_handles_empty_or_invalid_scope(self):
         other = self.base / "other.mp4"

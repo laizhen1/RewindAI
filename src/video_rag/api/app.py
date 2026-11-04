@@ -31,6 +31,7 @@ def create_app(
         raise ValueError("mode must be demo, full, transcript or unknown")
     unavailable_videos: dict[str, str] = {}
     visual_index = None
+    visual_key = None
     if mode == "transcript":
         from video_rag.transcript_baseline import build_transcript_segments
 
@@ -111,7 +112,7 @@ def create_app(
 
     @app.delete("/api/library/videos/<video_id>")
     def forget_loaded_video(video_id: str):
-        nonlocal pipeline, visual_index
+        nonlocal pipeline, visual_index, visual_key
         if mode != "transcript":
             return jsonify({"error": "Only available in subtitle mode"}), 409
         with import_lock:
@@ -127,11 +128,12 @@ def create_app(
                 return jsonify({"error": "Could not rebuild or save the local index"}), 500
             pipeline = replacement
             visual_index = None
+            visual_key = None
         return "", 204
 
     @app.post("/api/library/local-video")
     def import_local_video():
-        nonlocal pipeline, visual_index
+        nonlocal pipeline, visual_index, visual_key
         if mode != "transcript":
             return jsonify({"error": "Local import is only available in subtitle mode"}), 409
         payload = request.get_json(silent=True)
@@ -164,6 +166,7 @@ def create_app(
                                      current_stat.st_mtime_ns, json.dumps([segment.to_dict() for segment in added]))
                 pipeline = replacement
                 visual_index = None
+                visual_key = None
             return jsonify({"video_id": added[0].video_id, "segment_count": len(added)}), 201
         except sqlite3.IntegrityError:
             return jsonify({"error": "Video is already saved; restore the original file and restart"}), 409
@@ -329,23 +332,41 @@ def create_app(
 
     @app.post("/api/visual-search")
     def visual_search():
-        nonlocal visual_index
+        nonlocal visual_index, visual_key
         if mode != "transcript" or visual_builder is None:
             return jsonify({"error": "Experimental visual search is not enabled"}), 409
         payload = request.get_json(silent=True)
         question = payload.get("question") if isinstance(payload, dict) else None
         if not isinstance(question, str) or not question.strip() or len(question) > 1000:
             return jsonify({"error": "question must contain 1 to 1000 characters"}), 400
+        video_id, course_id = payload.get("video_id"), payload.get("course_id")
+        if video_id is not None and (not isinstance(video_id, str) or not video_id):
+            return jsonify({"error": "video_id must be a non-empty string"}), 400
+        if course_id is not None and (type(course_id) is not int or course_id <= 0):
+            return jsonify({"error": "course_id must be a positive integer"}), 400
+        if video_id is not None and course_id is not None:
+            return jsonify({"error": "Choose a video or a course, not both"}), 400
         try:
             with import_lock:
                 segments = pipeline.segments()
+                if video_id is not None:
+                    if not any(segment.video_id == video_id for segment in segments):
+                        return jsonify({"error": "video not found in the loaded index"}), 404
+                    segments = tuple(segment for segment in segments if segment.video_id == video_id)
+                if course_id is not None:
+                    if not any(course["id"] == course_id for course in store.courses()):
+                        return jsonify({"error": "course not found"}), 404
+                    assignments = store.assignments()
+                    segments = tuple(segment for segment in segments if assignments.get(segment.video_id) == course_id)
                 if not segments:
-                    return jsonify({"error": "Load a video before searching"}), 400
+                    return jsonify({"error": "No loaded videos in the selected scope"}), 400
                 if len(segments) > 100:
-                    return jsonify({"error": "Visual prototype supports at most 100 segments"}), 400
-                if visual_index is None:
+                    return jsonify({"error": "Visual prototype supports at most 100 segments in the selected scope"}), 400
+                scope_key = tuple(sorted(segment.segment_id for segment in segments))
+                if visual_index is None or visual_key != scope_key:
                     candidate = visual_builder(list(segments))
                     visual_index = candidate
+                    visual_key = scope_key
                 hits = visual_index.search(question.strip(), 3)
                 lookup = {segment.segment_id: segment for segment in segments}
                 evidence = [{"segment_id": hit.segment_id, "video_id": lookup[hit.segment_id].video_id,
