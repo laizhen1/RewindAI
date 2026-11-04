@@ -82,6 +82,18 @@ Windows 用户也可以在准备好该模型后双击 `Start-RewindAI-Semantic.c
 
 语义模式仅在本机 CPU 推理，不下载模型或上传字幕。它使用尚未校准的余弦阈值 0.4，只针对英语实验，可能返回不相关片段；它不生成回答，也不理解视频画面。索引较多字幕时启动和导入可能变慢。结果需回看核对。此前小样本评估有较多误报，详见 [评估报告](docs/INITIAL_EVALUATION.md)。不传该参数时仍使用默认关键词搜索。
 
+### 实验性本地画面搜索
+
+可选的 CLIP 画面检索在 CPU 上运行，按每个字幕片段中点抽取一帧，用英文描述查找相似画面。它与字幕检索分别运行，需已有视频和字幕；不生成回答，也不保证画面能回答问题。由于尚未校准无匹配阈值，**即使没有相关画面也会返回候选**，必须点击画面和原视频核对。当前仅支持全部已加载视频、最多 100 个片段；首次搜索及视频库变化后需重新索引。
+
+安装 `python -m pip install -e ".[semantic]" "av>=11,<17"`，并将 [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32) 的 `tokenizer.json` 与 `onnx/model_quantized.onnx` 下载到本机模型目录（模型文件约 154 MB，遵循模型自身许可）。然后运行：
+
+```powershell
+python scripts/run_transcript.py --visual-model PATH_TO_LOCAL_CLIP_MODEL
+```
+
+打开本机工作台并加载已授权的视频和字幕，输入英文画面描述，点击“实验性画面搜索”。视觉索引、查询和帧处理都在本机 CPU 进行；代码不会上传课程视频。不要把私人截图、索引、字幕或模型输入提交到 GitHub。详细模型版本、已知限制和公开视频验证见 [画面搜索实验](docs/LOCAL_VISUAL_EXPERIMENT.md)。
+
 ### 使用完整多模态模型
 
 完整流程涉及视频预处理、构建索引和启动真实服务。推荐 Ubuntu 22.04、Python 3.11+、FFmpeg、24 GB 以上 NVIDIA 显存、64 GB 内存与 100 GB 磁盘；具体资源取决于视频和模型配置。请先阅读 [本地视频导入指南](docs/LOCAL_VIDEO_IMPORT.md) 和 `config.toml`，再根据自己的设备验证。模型权重和依赖的首次获取可能需要联网。

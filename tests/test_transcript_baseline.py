@@ -1,3 +1,4 @@
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -6,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from video_rag.api import create_app
+from video_rag.schemas import SearchHit
 from video_rag.transcript_baseline import (
     build_transcript_library,
     build_transcript_pipeline,
@@ -173,6 +175,7 @@ class TranscriptBaselineTests(unittest.TestCase):
         demo = create_app(pipeline, database_path=self.base / "context-demo.sqlite3", mode="demo").test_client()
         self.assertEqual(demo.get(f"/api/segments/{own[0].segment_id}/context").status_code, 409)
 
+    @unittest.skipUnless(importlib.util.find_spec("av"), "requires optional PyAV")
     def test_frame_preview_only_uses_indexed_video_and_hides_paths(self):
         pipeline = build_transcript_pipeline(self.video, self.srt)
         client = create_app(pipeline, database_path=self.base / "frame.sqlite3", mode="transcript").test_client()
@@ -190,6 +193,36 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(client.get("/api/segments/missing/frame").status_code, 404)
         demo = create_app(pipeline, database_path=self.base / "frame-demo.sqlite3", mode="demo").test_client()
         self.assertEqual(demo.get(f"/api/segments/{segment.segment_id}/frame").status_code, 409)
+
+    def test_experimental_visual_search_is_opt_in_and_invalidated_after_index_change(self):
+        builds = []
+        class FakeVisual:
+            def __init__(self, segments):
+                self.segments = segments
+            def search(self, question, limit):
+                return [SearchHit(self.segments[0].segment_id, 0.2, "visual", 1)]
+        def builder(segments):
+            builds.append(segments)
+            return FakeVisual(segments)
+        db = self.base / "visual.sqlite3"
+        app = create_app(build_transcript_segments([]), database_path=db, mode="transcript", visual_builder=builder)
+        client = app.test_client()
+        self.assertTrue(client.get("/api/health").get_json()["visual_enabled"])
+        self.assertEqual(client.post("/api/visual-search", json={"question": "image"}).status_code, 400)
+        added = client.post("/api/library/local-video", json={"video_path": str(self.video)}).get_json()
+        response = client.post("/api/visual-search", json={"question": "image"})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("source_path", response.get_json()["evidence"][0])
+        self.assertEqual(len(builds), 1)
+        client.post("/api/visual-search", json={"question": "another"})
+        self.assertEqual(len(builds), 1)
+        self.assertEqual(client.delete(f"/api/library/videos/{added['video_id']}").status_code, 204)
+        client.post("/api/library/local-video", json={"video_path": str(self.video)})
+        client.post("/api/visual-search", json={"question": "again"})
+        self.assertEqual(len(builds), 2)
+        off = create_app(build_transcript_segments([]), database_path=self.base / "off.sqlite3", mode="transcript").test_client()
+        self.assertFalse(off.get("/api/health").get_json()["visual_enabled"])
+        self.assertEqual(off.post("/api/visual-search", json={"question": "image"}).status_code, 409)
 
     def test_course_search_filters_evidence_and_handles_empty_or_invalid_scope(self):
         other = self.base / "other.mp4"

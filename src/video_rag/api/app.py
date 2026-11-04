@@ -21,6 +21,7 @@ def create_app(
     mode: str = "unknown",
     transcript_builder: Callable[[list[VideoSegment]], VideoRAGPipeline] | None = None,
     retrieval_type: str = "keyword",
+    visual_builder: Callable[[list[VideoSegment]], object] | None = None,
 ) -> Flask:
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
@@ -29,6 +30,7 @@ def create_app(
     if mode not in {"demo", "full", "transcript", "unknown"}:
         raise ValueError("mode must be demo, full, transcript or unknown")
     unavailable_videos: dict[str, str] = {}
+    visual_index = None
     if mode == "transcript":
         from video_rag.transcript_baseline import build_transcript_segments
 
@@ -81,7 +83,8 @@ def create_app(
 
     @app.get("/api/health")
     def health():
-        return jsonify({"status": "ok", "mode": mode, "retrieval_type": retrieval_type})
+        return jsonify({"status": "ok", "mode": mode, "retrieval_type": retrieval_type,
+                        "visual_enabled": visual_builder is not None})
 
     @app.get("/api/library")
     def library():
@@ -108,7 +111,7 @@ def create_app(
 
     @app.delete("/api/library/videos/<video_id>")
     def forget_loaded_video(video_id: str):
-        nonlocal pipeline
+        nonlocal pipeline, visual_index
         if mode != "transcript":
             return jsonify({"error": "Only available in subtitle mode"}), 409
         with import_lock:
@@ -123,11 +126,12 @@ def create_app(
             except (sqlite3.Error, OSError, RuntimeError, ValueError):
                 return jsonify({"error": "Could not rebuild or save the local index"}), 500
             pipeline = replacement
+            visual_index = None
         return "", 204
 
     @app.post("/api/library/local-video")
     def import_local_video():
-        nonlocal pipeline
+        nonlocal pipeline, visual_index
         if mode != "transcript":
             return jsonify({"error": "Local import is only available in subtitle mode"}), 409
         payload = request.get_json(silent=True)
@@ -159,6 +163,7 @@ def create_app(
                 store.remember_video(added[0].video_id, str(video_path), current_stat.st_size,
                                      current_stat.st_mtime_ns, json.dumps([segment.to_dict() for segment in added]))
                 pipeline = replacement
+                visual_index = None
             return jsonify({"video_id": added[0].video_id, "segment_count": len(added)}), 201
         except sqlite3.IntegrityError:
             return jsonify({"error": "Video is already saved; restore the original file and restart"}), 409
@@ -321,6 +326,36 @@ def create_app(
                 keyframe.pop("path", None)
             evidence["video_url"] = f"/api/videos/{evidence['video_id']}"
         return jsonify(response)
+
+    @app.post("/api/visual-search")
+    def visual_search():
+        nonlocal visual_index
+        if mode != "transcript" or visual_builder is None:
+            return jsonify({"error": "Experimental visual search is not enabled"}), 409
+        payload = request.get_json(silent=True)
+        question = payload.get("question") if isinstance(payload, dict) else None
+        if not isinstance(question, str) or not question.strip() or len(question) > 1000:
+            return jsonify({"error": "question must contain 1 to 1000 characters"}), 400
+        try:
+            with import_lock:
+                segments = pipeline.segments()
+                if not segments:
+                    return jsonify({"error": "Load a video before searching"}), 400
+                if len(segments) > 100:
+                    return jsonify({"error": "Visual prototype supports at most 100 segments"}), 400
+                if visual_index is None:
+                    candidate = visual_builder(list(segments))
+                    visual_index = candidate
+                hits = visual_index.search(question.strip(), 3)
+                lookup = {segment.segment_id: segment for segment in segments}
+                evidence = [{"segment_id": hit.segment_id, "video_id": lookup[hit.segment_id].video_id,
+                             "start_time": lookup[hit.segment_id].start_time,
+                             "end_time": lookup[hit.segment_id].end_time, "score": hit.score}
+                            for hit in hits if hit.segment_id in lookup]
+        except (OSError, RuntimeError, ValueError, ImportError):
+            return jsonify({"error": "Visual indexing or search failed; check local model and videos"}), 503
+        return jsonify({"evidence": evidence, "warning": "Visual similarity is not proof of relevance; "
+                                                       "results can be wrong even when nothing matches."})
 
     @app.get("/api/videos/<video_id>")
     def video(video_id: str):

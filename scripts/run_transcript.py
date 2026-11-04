@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("--save-startup-video", action="store_true",
                         help="Save the single startup video to the local library")
     parser.add_argument("--semantic-model", type=Path, help="Optional local English ONNX model directory")
+    parser.add_argument("--visual-model", type=Path, help="Optional experimental local CLIP ONNX model directory")
     parser.add_argument("--semantic-threshold", type=float, default=0.4,
                         help="Experimental uncalibrated cosine threshold (default 0.4)")
     args = parser.parse_args()
@@ -57,10 +58,20 @@ def main() -> None:
             builder = lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold)
             pipeline = builder(list(pipeline.segments()))
             retrieval_type = "semantic_experimental"
+        visual_builder = None
+        if args.visual_model:
+            from video_rag.retrieval.onnx_clip import ClipFrameRetriever, OnnxClipEncoder
+
+            visual_encoder = OnnxClipEncoder(args.visual_model)
+
+            def visual_builder(segments):
+                retriever = ClipFrameRetriever(visual_encoder)
+                retriever.build(segments)
+                return retriever
         if args.save_startup_video:
             pipeline = builder([]) if builder else build_transcript_segments([])
         app = create_app(pipeline, mode="transcript", transcript_builder=builder,
-                         retrieval_type=retrieval_type)
+                         retrieval_type=retrieval_type, visual_builder=visual_builder)
         if args.save_startup_video:
             video, subtitle = sources[0]
             response = app.test_client().post("/api/library/local-video", json={
