@@ -144,6 +144,17 @@ def find_subtitles(video: Path) -> Path:
     return matches[0]
 
 
+def group_subtitle_cues(cues: list[TimedText]) -> list[list[TimedText]]:
+    """Group time-ordered cues using the workspace's subtitle segmentation."""
+    groups: list[list[TimedText]] = []
+    for cue in cues:
+        if not groups or cue.end_time - groups[-1][0].start_time > 20 or cue.start_time - groups[-1][-1].end_time > 5:
+            groups.append([cue])
+        else:
+            groups[-1].append(cue)
+    return groups
+
+
 def segments_from_subtitles(video_path: str | Path, subtitles_path: str | Path) -> list[VideoSegment]:
     video = Path(video_path).expanduser().resolve()
     subtitles = Path(subtitles_path).expanduser().resolve()
@@ -161,12 +172,7 @@ def segments_from_subtitles(video_path: str | Path, subtitles_path: str | Path) 
 
     # Group successive cues while retaining the first and last real timestamps.
     # The video itself is not decoded or uploaded in this mode.
-    groups: list[list[TimedText]] = []
-    for cue in cues:
-        if not groups or cue.end_time - groups[-1][0].start_time > 20 or cue.start_time - groups[-1][-1].end_time > 5:
-            groups.append([cue])
-        else:
-            groups[-1].append(cue)
+    groups = group_subtitle_cues(cues)
     video_id = "video_" + hashlib.sha256(str(video).encode("utf-8")).hexdigest()[:16]
     stat = video.stat()
     revision = hashlib.sha256(

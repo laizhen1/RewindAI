@@ -333,3 +333,20 @@ The earlier overlap rule counts even a very short intersection. We repeated the 
 This exposes how a small overlap can coexist with low coverage of a broad annotated window. It is **not** answer correctness: the reference snippet can contain more context than needed, so a shorter clip may still support an answer, while a long overlapping clip may not. The returned-segment overlap fraction is not factual precision, because the dataset may omit other valid answer locations. A maximum of three individually indexed sentences also limits possible coverage, especially of long windows. The 77 excluded invalid transcripts, previously exposed sample, transcript-only setup, differing app segmentation, uncalibrated semantic threshold and YouTube-versus-lecture limitations described above still apply. The 50% cutoff is a diagnostic choice, not a validated success threshold.
 
 Run the same command in the preceding section; the output now contains `top3_reference_half_covered_count`, `mean_top3_reference_coverage` and `returned_segment_window_overlap_fraction`. Coverage checks use the union of the returned time intervals rather than adding overlaps twice.
+
+### Segmentation sensitivity on the same public transcripts
+
+The default evaluation indexes each supplied sentence independently. To approximate the workspace's grouping, `--segmentation workspace` applies the actual subtitle grouping routine to those same time-ordered sentences. On the same strict 151 questions and model settings, the exploratory results were:
+
+| Method and segmentation | Top-three overlap | At least half of reference window covered | Mean reference coverage | No candidate |
+| --- | ---: | ---: | ---: | ---: |
+| Keyword, sentence | 50 / 151 (0.331) | 16 / 151 (0.106) | 0.134 | 55 |
+| Keyword, workspace grouping | 61 / 151 (0.404) | 35 / 151 (0.232) | 0.235 | 48 |
+| Semantic, sentence | 80 / 151 (0.530) | 20 / 151 (0.132) | 0.183 | 30 |
+| Semantic, workspace grouping | 74 / 151 (0.490) | 36 / 151 (0.238) | 0.278 | 40 |
+
+The grouping changes the searchable text and the length of each returned interval; it can also span gaps between captions. Longer windows can therefore raise measured coverage without providing additional relevant words. The first-three baseline likewise selects grouped segments in workspace mode, despite the legacy `first_three_caption` output name. Source sentences are not necessarily the cues produced by actual SRT or speech recognition, and no actual video or lecture was processed. These metrics do not establish answer correctness, precision, recall, F1, or a general improvement. The sample was already explored; it must not be treated as an untouched test for choosing a segmentation strategy.
+
+```powershell
+python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_DATASET_JSON --sample sample --compare-model PATH_TO_LOCAL_MINILM --segmentation workspace
+```

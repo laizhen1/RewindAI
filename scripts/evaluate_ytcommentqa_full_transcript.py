@@ -18,12 +18,14 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.evaluate_ytcommentqa import evidence_segments, partition
-from video_rag.schemas import VideoSegment
-from video_rag.transcript_baseline import build_transcript_segments
+from video_rag.schemas import TimedText, VideoSegment
+from video_rag.transcript_baseline import build_transcript_segments, group_subtitle_cues
 
 
-def full_transcript(row, *, allow_incomplete=False):
+def full_transcript(row, *, allow_incomplete=False, segmentation="sentence"):
     """Represent each provided valid caption as one segment, preserving seconds."""
+    if segmentation not in {"sentence", "workspace"}:
+        raise ValueError("Invalid segmentation")
     reference = evidence_segments(row)
     video = row["videoID"]
     captions = row["caption"]
@@ -41,6 +43,12 @@ def full_transcript(row, *, allow_incomplete=False):
         segments.append(VideoSegment(segment_id=str(cue["id"]), video_id=video, source_path="not-downloaded",
                                      start_time=float(start), end_time=float(end), transcript=text))
     segments.sort(key=lambda segment: (segment.start_time, segment.end_time, segment.segment_id))
+    if segmentation == "workspace":
+        cues = [TimedText(s.start_time, s.end_time, s.transcript) for s in segments]
+        groups = group_subtitle_cues(cues)
+        segments = [VideoSegment(segment_id=f"{i:05d}", video_id=video, source_path="not-downloaded",
+                                 start_time=g[0].start_time, end_time=max(c.end_time for c in g),
+                                 transcript=" ".join(c.text for c in g)) for i, g in enumerate(groups)]
     return segments, (min(s.start_time for s in reference), max(s.end_time for s in reference)), skipped
 
 
@@ -70,7 +78,7 @@ def reference_coverage(segments, reference):
     return total / (end - start)
 
 
-def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, include_rows=False, allow_incomplete=False):
+def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, include_rows=False, allow_incomplete=False, segmentation="sentence"):
     if sample not in {"sample", "other", "all"} or not isinstance(dataset, dict):
         raise ValueError("Invalid dataset or sample")
     counts = Counter()
@@ -92,7 +100,7 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
             counts["excluded_other_labels"] += 1
             continue
         try:
-            segments, ref, skipped = full_transcript(row, allow_incomplete=allow_incomplete)
+            segments, ref, skipped = full_transcript(row, allow_incomplete=allow_incomplete, segmentation=segmentation)
         except (KeyError, TypeError, ValueError):
             counts["invalid_transcripts"] += 1
             continue
@@ -141,9 +149,9 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
     return result
 
 
-def compare(dataset, semantic_builder, *, sample="sample", allow_incomplete=False):
-    keyword = evaluate(dataset, sample=sample, include_rows=True, allow_incomplete=allow_incomplete)
-    semantic = evaluate(dataset, sample=sample, builder=semantic_builder, include_rows=True, allow_incomplete=allow_incomplete)
+def compare(dataset, semantic_builder, *, sample="sample", allow_incomplete=False, segmentation="sentence"):
+    keyword = evaluate(dataset, sample=sample, include_rows=True, allow_incomplete=allow_incomplete, segmentation=segmentation)
+    semantic = evaluate(dataset, sample=sample, builder=semantic_builder, include_rows=True, allow_incomplete=allow_incomplete, segmentation=segmentation)
     a, b = keyword.pop("_outcomes"), semantic.pop("_outcomes")
     if a.keys() != b.keys():
         raise ValueError("Methods were evaluated on different questions")
@@ -162,6 +170,8 @@ def main():
     parser.add_argument("--sample", choices=("sample", "other", "all"), default="sample")
     parser.add_argument("--compare-model", type=Path, help="Optional local English ONNX model directory")
     parser.add_argument("--semantic-threshold", type=float, default=0.4)
+    parser.add_argument("--segmentation", choices=("sentence", "workspace"), default="sentence",
+                        help="Use supplied sentences or the workspace's subtitle grouping")
     parser.add_argument("--allow-incomplete-captions", action="store_true",
                         help="Skip invalid non-reference cues and report incomplete transcripts")
     args = parser.parse_args()
@@ -176,14 +186,14 @@ def main():
                 raise ValueError("Invalid semantic threshold")
             encoder = OnnxSentenceEncoder(args.compare_model)
             result = compare(data, lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold),
-                             sample=args.sample, allow_incomplete=args.allow_incomplete_captions)
+                             sample=args.sample, allow_incomplete=args.allow_incomplete_captions, segmentation=args.segmentation)
         else:
-            result = evaluate(data, sample=args.sample, allow_incomplete=args.allow_incomplete_captions)
+            result = evaluate(data, sample=args.sample, allow_incomplete=args.allow_incomplete_captions, segmentation=args.segmentation)
     except (ImportError, OSError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
     print(json.dumps({"warning": "Temporal overlap and reference coverage do not establish answer correctness. "
                                  "Full provided transcripts are searched; actual videos and audio are not used.",
-                      "sample": args.sample, "allow_incomplete_captions": args.allow_incomplete_captions,
+                      "sample": args.sample, "segmentation": args.segmentation, "allow_incomplete_captions": args.allow_incomplete_captions,
                       "semantic_threshold": args.semantic_threshold if args.compare_model else None,
                       "metrics": result}, indent=2))
     return 0

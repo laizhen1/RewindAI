@@ -1,7 +1,13 @@
 from types import SimpleNamespace
 
-from scripts.evaluate_ytcommentqa_full_transcript import compare, evaluate, full_transcript, overlaps, reference_coverage
 from scripts.evaluate_ytcommentqa import partition
+from scripts.evaluate_ytcommentqa_full_transcript import (
+    compare,
+    evaluate,
+    full_transcript,
+    overlaps,
+    reference_coverage,
+)
 from video_rag.transcript_baseline import build_transcript_segments
 
 
@@ -76,3 +82,14 @@ def test_reference_coverage_merges_overlaps_and_clips_to_window():
     assert reference_coverage(segments, (10, 20)) == .7
     assert reference_coverage([], (10, 20)) == 0
     assert reference_coverage(segments[:2], (10, 20)) == .5
+
+
+def test_workspace_segmentation_matches_real_subtitle_grouping():
+    item = row([2])
+    item["caption"][3].update(start=30, end=31)
+    segments, ref, _ = full_transcript(item, segmentation="workspace")
+    assert [(s.start_time, s.end_time, s.transcript) for s in segments] == [
+        (0, 3, "orange fruit apple fruit other context"), (30, 31, "more fruit")]
+    assert ref == (1, 3)
+    result = compare({"1": item}, build_transcript_segments, sample="all", segmentation="workspace")
+    assert result["keyword"]["top3_reference_half_covered_count"] == 1
