@@ -68,3 +68,18 @@ python scripts/benchmark_clip_sampling.py --video PATH_TO_VIDEO --model-dir PATH
 ```
 
 The whole synthetic time range must fit inside the video. The benchmark reads the video locally, does not save frames, and is for timing rather than evaluation.
+
+
+## Paired subtitle versus frame diagnostic
+
+To compare both routes on the **same** locally labeled frames and questions, run:
+
+```powershell
+python scripts/compare_frame_retrieval.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --model-dir PATH_TO_LOCAL_CLIP_MODEL --labels PATH_TO_LOCAL_LABELS_JSON
+```
+
+The subtitle side uses the same keyword pipeline as the default workspace; the visual side uses local CLIP. Both are scored against exactly the same midpoint-frame labels and return at most three candidate segments. This measures whether each route finds segments whose **sampled frame** was labeled relevant; it does not measure transcript relevance, video-wide relevance, a fused audio-visual system, generated answers or answer accuracy. The script refuses more than 100 segments so that the compared candidate sets stay aligned. Source SHA-256 hashes are checked before and after evaluation; results contain queries and must stay local for private material. It refuses draft labels unless `--allow-unreviewed` is explicit.
+
+For an integration diagnostic on 4 November 2026, the assistant examined five sampled frames from the public ethics sample and wrote four visual queries afterward, one with no matching frame. These draft labels were not independently reviewed, and the questions were chosen after seeing the images. The subtitle route returned no candidates: TP=0, FP=0, FN=6; precision is undefined, recall **0**, F1 **0**. The visual route returned TP=5, FP=7, FN=1; precision **0.417**, recall **0.833**, F1 **0.556**. The one absent query returned visual candidates. This hand-picked four-query smoke test cannot support a portfolio accuracy claim or a general comparison: the questions favor visible content, the labels are subjective, and only one midpoint per segment was inspected.
+
+For these frame metrics, precision is undefined when there are no predicted positives; recall is undefined when there are no labeled positives. F1 is calculated as `2TP/(2TP+FP+FN)`: it is 0 for missed positives with no predictions, and undefined if there are no predicted or labeled positives. The labels are assumed complete only for the sampled frames.

@@ -68,8 +68,10 @@ def evaluate(retriever, segments, labels: dict, *, allow_unreviewed: bool = Fals
                      "scores": [hit.score for hit in hits], "relevant_indices": relevant})
     precision = tp / (tp + fp) if tp + fp else None
     recall = tp / (tp + fn) if tp + fn else None
-    f1 = (2 * precision * recall / (precision + recall) if precision is not None and recall is not None
-          and precision + recall else 0.0 if precision is not None and recall is not None else None)
+    # Count-based F1 remains zero when there are missed positives but no predictions;
+    # precision itself is undefined in that case. If both sides are empty, F1 is undefined.
+    f1_denominator = 2 * tp + fp + fn
+    f1 = 2 * tp / f1_denominator if f1_denominator else None
     return {"review_status": status, "queries": len(rows), "sampled_frames": len(segments),
             "tp": tp, "fp": fp, "fn": fn, "tn": tn, "precision": precision, "recall": recall, "f1": f1,
             "absent_queries": absent, "absent_queries_returning_candidates": false_positive_absent, "results": rows}
