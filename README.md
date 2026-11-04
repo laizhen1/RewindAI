@@ -12,7 +12,7 @@ RewindAI is a local learning workspace for finding and reviewing moments in lect
 
 - Organize indexed videos into courses; rename or delete courses without deleting videos or notes.
 - Search videos or a course and inspect timestamped evidence. Subtitle mode can display neighboring transcript segments and, with PyAV installed, a midpoint frame for manual review.
-- Save clips, edit review notes, and provide separate feedback on answers and evidence. Notes and feedback stay in the local database.
+- Save clips, edit review notes, filter saved clips by video name or note, and provide separate feedback on answers and evidence. Notes and feedback stay in the local database; filtering happens in the browser.
 - Add local videos with SRT/VTT subtitles, or transcribe an authorized video locally with a cached Whisper model. The interface displays processing and failure states.
 - Try optional local English semantic search and experimental visual search. A comparison view shows their results separately.
 - Explore the full pipeline's speech, keyframe, hybrid retrieval, reranking and evaluation components; the complete model workflow still needs independent end-to-end validation.
