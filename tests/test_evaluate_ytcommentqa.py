@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.evaluate_ytcommentqa import evaluate, evidence_segments, partition
+from scripts.evaluate_ytcommentqa import compare, evaluate, evidence_segments, partition
 
 
 def row(labels, question="apple", video="v"):
@@ -27,3 +27,25 @@ def test_bad_caption_rejected_and_counted():
     with pytest.raises(ValueError):
         evidence_segments(invalid)
     assert evaluate({"1": invalid}, sample="all")["invalid_evidence_captions"] == 1
+
+
+def test_paired_comparison_counts_same_questions_without_exposing_text():
+    from video_rag.transcript_baseline import build_transcript_segments
+    dataset = {"1": row([2]), "2": row([0]), "3": row([2], question="missing"), "4": row([0], question="missing")}
+    result = compare(dataset, build_transcript_segments, sample="all")
+    assert result["keyword"] == result["semantic"]
+    assert result["script_answerable_pairs"] == {"both_return": 1, "keyword_only": 0, "semantic_only": 0, "neither_return": 1}
+    assert result["unanswerable_pairs"] == {"both_return": 1, "keyword_only": 0, "semantic_only": 0, "neither_return": 1}
+    assert "_predictions" not in result["keyword"]
+    assert "apple fruit" not in str(result)
+
+
+def test_paired_comparison_distinguishes_each_method():
+    from types import SimpleNamespace
+    dataset = {"1": row([2]), "2": row([0]), "3": row([2], question="missing"), "4": row([0], question="missing")}
+    class FakeSemantic:
+        def ask(self, question):
+            return SimpleNamespace(evidence=[1] if question == "missing" else [])
+    result = compare(dataset, lambda segments: FakeSemantic(), sample="all")
+    assert result["script_answerable_pairs"] == {"both_return": 0, "keyword_only": 1, "semantic_only": 1, "neither_return": 0}
+    assert result["unanswerable_pairs"] == {"both_return": 0, "keyword_only": 1, "semantic_only": 1, "neither_return": 0}

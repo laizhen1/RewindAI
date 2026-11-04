@@ -52,12 +52,14 @@ def evidence_segments(row: dict) -> list[VideoSegment]:
     return segments
 
 
-def evaluate(rows: dict, *, sample: str = "sample") -> dict:
+def evaluate(rows: dict, *, sample: str = "sample", builder=build_transcript_segments,
+             include_predictions: bool = False) -> dict:
     if sample not in {"sample", "other", "all"} or not isinstance(rows, dict):
         raise ValueError("Invalid data or sample selection")
     counts = Counter()
     videos = set()
-    for row in rows.values():
+    predictions = {}
+    for row_id, row in rows.items():
         if not isinstance(row, dict):
             counts["invalid_row"] += 1
             continue
@@ -81,8 +83,10 @@ def evaluate(rows: dict, *, sample: str = "sample") -> dict:
         except (KeyError, TypeError, ValueError):
             counts["invalid_evidence_captions"] += 1
             continue
-        predicted = bool(build_transcript_segments(segments).ask(question).evidence)
+        predicted = bool(builder(segments).ask(question).evidence)
         positive = 2 in labels
+        if include_predictions:
+            predictions[row_id] = (positive, predicted)
         key = "tp" if positive and predicted else "fn" if positive else "fp" if predicted else "tn"
         counts[key] += 1
         videos.add(video)
@@ -90,26 +94,62 @@ def evaluate(rows: dict, *, sample: str = "sample") -> dict:
     p = tp / (tp + fp) if tp + fp else None
     r = tp / (tp + fn) if tp + fn else None
     f1 = 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None
-    return {"selected_rows": counts["selected_rows"], "evaluated_rows": tp + fp + fn + tn,
-            "evaluated_videos": len(videos), "excluded_visual_or_combined_only": counts["excluded_visual_or_combined_only"],
-            "invalid_evidence_captions": counts["invalid_evidence_captions"], "invalid_rows": counts["invalid_row"],
-            "tp": tp, "fp": fp, "fn": fn, "tn": tn, "precision": p, "recall": r, "f1": f1,
-            "unanswerable_returned_candidates": fp, "unanswerable_total": fp + tn}
+    result = {"selected_rows": counts["selected_rows"], "evaluated_rows": tp + fp + fn + tn,
+              "evaluated_videos": len(videos), "excluded_visual_or_combined_only": counts["excluded_visual_or_combined_only"],
+              "invalid_evidence_captions": counts["invalid_evidence_captions"], "invalid_rows": counts["invalid_row"],
+              "tp": tp, "fp": fp, "fn": fn, "tn": tn, "precision": p, "recall": r, "f1": f1,
+              "unanswerable_returned_candidates": fp, "unanswerable_total": fp + tn}
+    if include_predictions:
+        result["_predictions"] = predictions
+    return result
+
+
+def compare(rows, semantic_builder, *, sample="sample"):
+    keyword = evaluate(rows, sample=sample, include_predictions=True)
+    semantic = evaluate(rows, sample=sample, builder=semantic_builder, include_predictions=True)
+    a, b = keyword.pop("_predictions"), semantic.pop("_predictions")
+    if a.keys() != b.keys() or any(a[key][0] != b[key][0] for key in a):
+        raise ValueError("Methods were evaluated on different questions or labels")
+    positive = Counter()
+    negative = Counter()
+    for key in a:
+        truth, keyword_hit = a[key]
+        semantic_hit = b[key][1]
+        choice = "both_return" if keyword_hit and semantic_hit else "keyword_only" if keyword_hit else "semantic_only" if semantic_hit else "neither_return"
+        (positive if truth else negative)[choice] += 1
+    labels = ("both_return", "keyword_only", "semantic_only", "neither_return")
+    return {"keyword": keyword, "semantic": semantic,
+            "script_answerable_pairs": {key: positive[key] for key in labels},
+            "unanswerable_pairs": {key: negative[key] for key in labels}}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, required=True, help="Locally obtained YTCommentQA dataset.json")
     parser.add_argument("--sample", choices=("sample", "other", "all"), default="sample")
+    parser.add_argument("--compare-model", type=Path, help="Optional local English ONNX model directory")
+    parser.add_argument("--semantic-threshold", type=float, default=0.4, help="Uncalibrated cosine cutoff")
     args = parser.parse_args()
     try:
         dataset = json.loads(args.dataset.read_text(encoding="utf-8-sig"))
-        result = evaluate(dataset, sample=args.sample)
-    except (OSError, TypeError, ValueError) as exc:
+        if args.compare_model:
+            from video_rag.retrieval.onnx_semantic import (
+                OnnxSentenceEncoder,
+                build_semantic_pipeline,
+            )
+            if not math.isfinite(args.semantic_threshold) or not -1 <= args.semantic_threshold <= 1:
+                raise ValueError("Semantic threshold must be finite and between -1 and 1")
+            encoder = OnnxSentenceEncoder(args.compare_model)
+            result = compare(dataset, lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold),
+                             sample=args.sample)
+        else:
+            result = evaluate(dataset, sample=args.sample)
+    except (ImportError, OSError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
     print(json.dumps({"warning": "Annotated evidence snippets only; predicted answerability is proxied by "
                                  "retrieval returning a candidate, not evidence sufficiency or answer correctness. "
-                                 "Video files were not used.", "sample": args.sample, "metrics": result}, indent=2))
+                                 "Video files were not used.", "sample": args.sample,
+                      "semantic_threshold": args.semantic_threshold if args.compare_model else None, "metrics": result}, indent=2))
     return 0
 
 

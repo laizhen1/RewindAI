@@ -274,3 +274,23 @@ python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_LOCAL_DATASET_JSON --sa
 ```
 
 `other` and `all` are available for exploration. The script reads the dataset locally and outputs aggregate counts only; model/video downloads and private material are not involved. Attribution: Saelyne Yang, Sunghyun Park, Yunseok Jang and Moontae Lee, *YTCommentQA: Video Question Answerability in Instructional Videos*, AAAI 2024, DOI 10.1609/aaai.v38i17.29906.
+
+
+### Paired semantic versus keyword proxy on the same snippets
+
+We repeated the same fixed sample and exclusions using local CPU `Xenova/all-MiniLM-L6-v2` quantized ONNX revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`. The semantic path used the pre-existing, uncalibrated cosine cutoff of 0.4; no cutoff was selected on this sample. Both systems saw the same annotated caption snippets, one sentence per indexed segment, and both used the presence of any returned candidate as a positive proxy.
+
+| Method | TP | FP | FN | TN | Precision | Recall | F1 | Unanswerable snippets returning candidates |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Keyword | 92 | 6 | 131 | 55 | 0.939 | 0.413 | 0.573 | 6 / 61 |
+| Experimental semantic | 137 | 8 | 86 | 53 | 0.945 | 0.614 | 0.745 | 8 / 61 |
+
+Among 223 script-answerable snippets, both returned candidates for 73, only keyword for 19, only semantic for 64, and neither for 67. Among the 61 snippet-level unanswerable questions, both returned candidates for 3, only keyword for 3, only semantic for 5, and neither for 50. These are paired presence/absence counts, not judgments that the returned text supports the answer. Semantic retrieval returned candidates on more positives and on two more negatives in this sample; there is no inference here about statistical significance or user benefit.
+
+The test is exploratory: the labeled evidence window is supplied in advance, making the task easier and different from finding it in a whole video. False positive means a candidate was returned on a snippet labeled unanswerable; false negative means no candidate was returned on a script-answerable snippet. The source questions are YouTube instructional comments rather than lectures, labels can be imperfect, and prior pretraining overlap is unknown. The excluded 145 visual-only/combined-only cases and 17 invalid-caption cases remain excluded. These metrics do not measure answer correctness, full-video retrieval, visual reasoning or real lecture performance.
+
+```powershell
+python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_LOCAL_DATASET_JSON --sample sample --compare-model PATH_TO_LOCAL_MINILM --semantic-threshold 0.4
+```
+
+The script uses local files and prints aggregate statistics; it does not download or process video. Reusing this sample to select thresholds would invalidate any later claim that the same sample was untouched.
