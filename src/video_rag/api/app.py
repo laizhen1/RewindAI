@@ -4,7 +4,7 @@ import json
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from urllib.parse import urlsplit
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
@@ -27,7 +27,7 @@ def create_app(
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     store = LibraryStore(database_path)
-    import_lock = Lock()
+    import_lock = RLock()
     if mode not in {"demo", "full", "transcript", "unknown"}:
         raise ValueError("mode must be demo, full, transcript or unknown")
     unavailable_videos: dict[str, str] = {}
@@ -194,22 +194,24 @@ def create_app(
 
     @app.delete("/api/courses/<int:course_id>")
     def delete_course(course_id: int):
-        if not store.delete_course(course_id):
-            return jsonify({"error": "course not found"}), 404
+        with import_lock:
+            if not store.delete_course(course_id):
+                return jsonify({"error": "course not found"}), 404
         return "", 204
 
     @app.put("/api/videos/<video_id>/course")
     def assign_course(video_id: str):
-        if pipeline.video_path(video_id) is None:
-            return jsonify({"error": "video not found in the loaded index"}), 404
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict) or "course_id" not in payload:
             return jsonify({"error": "course_id is required"}), 400
         course_id = payload["course_id"]
         if course_id is not None and (type(course_id) is not int or course_id <= 0):
             return jsonify({"error": "course_id must be a positive integer or null"}), 400
-        if not store.assign(video_id, course_id):
-            return jsonify({"error": "course not found"}), 404
+        with import_lock:
+            if pipeline.video_path(video_id) is None:
+                return jsonify({"error": "video not found in the loaded index"}), 404
+            if not store.assign(video_id, course_id):
+                return jsonify({"error": "course not found"}), 404
         return jsonify({"video_id": video_id, "course_id": course_id})
 
     @app.get("/api/bookmarks")
@@ -383,6 +385,28 @@ def create_app(
                         "sampled": len(selected) < total,
                         "warning": "Visual similarity is not proof of relevance; results can be wrong "
                                    "even when nothing matches. Unindexed segments are not searched."})
+
+    @app.post("/api/compare-search")
+    def compare_search():
+        """Show transcript and visual candidates separately, without claiming an answer."""
+        if mode != "transcript" or visual_builder is None:
+            return jsonify({"error": "Experimental visual search is not enabled"}), 409
+        payload = request.get_json(silent=True)
+        question = payload.get("question") if isinstance(payload, dict) else None
+        if not isinstance(question, str) or not question.strip() or len(question) > 1000:
+            return jsonify({"error": "question must contain 1 to 1000 characters"}), 400
+        # The same lock prevents library or course assignments from changing
+        # between the two searches. The visual handler re-enters this RLock.
+        with import_lock:
+            text_response = app.make_response(ask())
+            if text_response.status_code != 200:
+                return text_response
+            visual_response = app.make_response(visual_search())
+        if visual_response.status_code != 200:
+            return jsonify({"transcript": text_response.get_json(), "visual": None,
+                            "visual_error": (visual_response.get_json(silent=True) or {}).get("error", "Visual search failed")})
+        return jsonify({"transcript": text_response.get_json(), "visual": visual_response.get_json(),
+                        "visual_error": None})
 
     @app.get("/api/videos/<video_id>")
     def video(video_id: str):

@@ -277,6 +277,35 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(response.get_json()["evidence"][0]["video_id"], "small")
         self.assertFalse(response.get_json()["sampled"])
 
+    def test_compare_search_keeps_modalities_separate_and_handles_visual_failure(self):
+        pipeline = build_transcript_pipeline(self.video, self.srt)
+        class FakeVisual:
+            def __init__(self, segments):
+                self.segments = segments
+            def search(self, question, limit):
+                return [SearchHit(self.segments[-1].segment_id, 0.2, "visual", 1)]
+        client = create_app(pipeline, database_path=self.base / "compare.sqlite3", mode="transcript",
+                            visual_builder=lambda segments: FakeVisual(segments)).test_client()
+        result = client.post("/api/compare-search", json={"question": "attention"})
+        self.assertEqual(result.status_code, 200)
+        data = result.get_json()
+        self.assertFalse(data["transcript"]["abstained"])
+        self.assertTrue(data["visual"]["evidence"])
+        self.assertNotEqual(data["transcript"]["evidence"][0]["segment_id"],
+                            data["visual"]["evidence"][0]["segment_id"])
+        self.assertNotIn("source_path", data["visual"]["evidence"][0])
+        self.assertEqual(client.post("/api/compare-search", json={"question": "x", "video_id": "missing"}).status_code, 404)
+        def fail(_):
+            raise ValueError("private local path")
+        degraded = create_app(pipeline, database_path=self.base / "compare-error.sqlite3", mode="transcript",
+                              visual_builder=fail).test_client()
+        partial = degraded.post("/api/compare-search", json={"question": "attention"}).get_json()
+        self.assertFalse(partial["transcript"]["abstained"])
+        self.assertIsNone(partial["visual"])
+        self.assertNotIn("private local path", partial["visual_error"])
+        off = create_app(pipeline, database_path=self.base / "compare-off.sqlite3", mode="transcript").test_client()
+        self.assertEqual(off.post("/api/compare-search", json={"question": "attention"}).status_code, 409)
+
     def test_course_search_filters_evidence_and_handles_empty_or_invalid_scope(self):
         other = self.base / "other.mp4"
         other.write_bytes(b"other video")
