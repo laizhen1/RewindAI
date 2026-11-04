@@ -160,6 +160,8 @@ def segments_from_subtitles(video_path: str | Path, subtitles_path: str | Path) 
     subtitles = Path(subtitles_path).expanduser().resolve()
     if not video.is_file() or video.suffix.lower() not in VIDEO_SUFFIXES:
         raise ValueError("Video must be an existing local MP4, WebM, OGV, MOV or M4V file")
+    if subtitles.suffix.lower() == ".txt":
+        raise ValueError("Plain text transcripts are not supported; use timed SRT/VTT or transcribe locally")
     if not subtitles.is_file() or subtitles.suffix.lower() not in SUBTITLE_SUFFIXES:
         raise ValueError("Subtitles must be an existing local .srt or .vtt file")
     if subtitles.stat().st_size > MAX_SUBTITLE_BYTES:

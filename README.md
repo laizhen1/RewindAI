@@ -18,7 +18,7 @@ RewindAI is a local learning workspace for finding and reviewing moments in lect
 - Try optional local English semantic search and experimental visual search. A comparison view shows their results separately.
 - Explore the full pipeline's speech, keyframe, hybrid retrieval, reranking and evaluation components; the complete model workflow still needs independent end-to-end validation.
 
-While the page remains open, an unsaved note is retained when the bookmark list refreshes. Select **Save note** to store it; unsaved drafts are lost when the page reloads or closes.
+While the page remains open, an unsaved note is retained when the bookmark list refreshes. Select **Save note** to store it. The browser may warn before a reload or close when notes are unsaved or saving; drafts are still lost if the page closes, and browsers may suppress this warning.
 
 ## Current limitations
 
@@ -70,6 +70,8 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 ```
 
 Omit all `--subtitles` arguments to look for same-name SRT or VTT files. This mode uses local keyword matching and transcript excerpts without downloading a model. It does not guarantee cross-language or semantic retrieval. For on-demand frame previews, install `python -m pip install -e ".[asr]"`; decoding stays local and is not a claim that the frame has been understood.
+
+Untimed `.txt` transcripts cannot provide reliable video timestamps and are not imported directly. Use a timed SRT/VTT file or generate one with local transcription. Generating timestamps does not establish transcript accuracy; check the result against the recording.
 
 For video without subtitles, install faster-whisper and prepare a local cached model as described in [local transcription](docs/LOCAL_TRANSCRIPTION.md). Enter the video path, choose a language, and select **Transcribe locally and load** in the workspace. One job runs at a time on CPU; the interface remains in Chinese. Transcription can be cancelled before indexing starts. A completed transcript is kept under `artifacts/transcripts/` and a copy is saved in the local library. The process does not initiate model downloads or send media to a hosted speech API. Model weights must already be cached; obtaining them initially requires an explicit download. The workflow has been checked on two short public videos, but lecture performance remains unverified.
 

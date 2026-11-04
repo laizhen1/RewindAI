@@ -68,6 +68,15 @@ class TranscriptBaselineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UTF-8"):
             segments_from_subtitles(self.video, self.srt)
 
+    def test_plain_text_transcript_explains_timed_subtitle_requirement(self):
+        plain = self.base / "lecture.txt"
+        plain.write_text("An untimed transcript", encoding="utf-8")
+        client = create_app(build_transcript_segments([]), database_path=self.base / "text.sqlite3", mode="transcript").test_client()
+        response = client.post("/api/library/local-video", json={"video_path": str(self.video), "subtitle_path": str(plain)})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["error"], "Plain text transcripts are not supported; use timed SRT/VTT or transcribe locally")
+        self.assertEqual(client.get("/api/library").get_json()["videos"], [])
+
     def test_local_api_search_and_video_response(self):
         pipeline = build_transcript_pipeline(self.video, self.srt)
         app = create_app(pipeline, database_path=self.base / "state.sqlite3", mode="transcript")
