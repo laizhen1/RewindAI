@@ -14,7 +14,15 @@ The integrated browser flow was also checked using the same public video and an 
 
 ## Reproduce
 
-Install optional packages with `python -m pip install -e ".[semantic]" "av>=11,<17"` and obtain `tokenizer.json` and `onnx/model_quantized.onnx` from the model repository into a local directory. Model download is a separate user action; the diagnostic and app do not download weights. Run:
+Install optional packages with `python -m pip install -e ".[semantic]" "av>=11,<17"` and obtain `tokenizer.json` and `onnx/model_quantized.onnx` from the model repository into a local directory. Model download is a separate user action; the diagnostic and app do not download weights. For example, from the project root, install `huggingface_hub` and explicitly download only these public model files (approximately 154 MB) into the ignored project cache:
+
+```powershell
+python -m pip install huggingface_hub
+$env:HF_HUB_DISABLE_TELEMETRY = "1"
+python -c "from huggingface_hub import snapshot_download; print(snapshot_download('Xenova/clip-vit-base-patch32', revision='d15189d7028b43f1d3e65039190477f6af591c2a', cache_dir='artifacts/hf-cache/hub', allow_patterns=['tokenizer.json','onnx/model_quantized.onnx']))"
+```
+
+This network request downloads the public model; it does not send any lecture file. Windows users can then double-click `Start-RewindAI-Visual.cmd`, which uses that pinned cache path. Set `REWINDAI_VISUAL_MODEL_DIR` if the model is stored elsewhere. Alternatively run:
 
 ```powershell
 python scripts/diagnose_clip_visual.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --model-dir PATH_TO_LOCAL_CLIP_MODEL --question "A drawing of a hospital"
