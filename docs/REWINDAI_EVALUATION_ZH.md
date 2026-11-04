@@ -67,3 +67,4 @@ python scripts/diagnose_transcript.py --video "C:\path\video.mp4" --subtitles "C
 JSON 包含 `questions` 数组；每条至少有 `question`。有答案的问题还需 `evidence_start_seconds` 和 `evidence_end_seconds`；无答案问题设置 `expected_answerable` 为 `false`。程序报告返回片段是否与参考时间有正时长交集、单个片段覆盖参考时间的比例，以及无答案问题是否拒答。时间重叠不等于回答正确，比例也不是模型准确率；只有先对问题及证据独立人工复核，诊断才有意义。输出可能包含问题文本，私人资料请留在本地。
 
 
+时间证据的 F1 按 `2TP / (2TP + FP + FN)` 计算：存在漏检但没有预测时，Precision 未定义而 F1 为 0；没有预测且没有正例时 F1 未定义。该指标只衡量时间范围覆盖，不代表回答正确。

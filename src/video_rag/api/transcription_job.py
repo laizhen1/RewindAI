@@ -1,15 +1,27 @@
 """One local, offline transcription job for the learning workspace."""
 from __future__ import annotations
 
+import atexit
 import os
 import subprocess
 import sys
 import threading
 import uuid
+import weakref
 from pathlib import Path
 from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[3]
+_ACTIVE_JOBS = weakref.WeakSet()
+
+
+def _cancel_jobs_on_exit() -> None:
+    """Best effort cleanup for normal Python exit; hard termination may bypass it."""
+    for job in list(_ACTIVE_JOBS):
+        job.cancel()
+
+
+atexit.register(_cancel_jobs_on_exit)
 
 
 class LocalTranscriptionJob:
@@ -20,6 +32,7 @@ class LocalTranscriptionJob:
         self._import_subtitles = import_subtitles
         self._process = None
         self._cancel_requested = False
+        _ACTIVE_JOBS.add(self)
 
     def status(self) -> dict:
         with self._lock:

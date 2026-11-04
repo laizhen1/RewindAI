@@ -166,3 +166,28 @@ def test_cancel_api_checks_origin_and_reports_terminal_state(tmp_path, monkeypat
     assert client.get("/api/transcription").get_json()["state"] == "cancelled"
     assert client.post("/api/transcription/cancel").status_code == 409
     assert client.get("/api/library").get_json()["videos"] == []
+
+
+def test_normal_exit_cleanup_cancels_live_transcription(tmp_path, monkeypatch):
+    video = tmp_path / "lecture.mp4"
+    video.write_bytes(b"video")
+    monkeypatch.setattr(transcription_job, "ROOT", tmp_path)
+    started, terminated = threading.Event(), threading.Event()
+    class Process:
+        def wait(self):
+            assert terminated.wait(5)
+            return 1
+        def terminate(self):
+            terminated.set()
+    def fake_popen(*args, **kwargs):
+        started.set()
+        return Process()
+    monkeypatch.setattr(transcription_job.subprocess, "Popen", fake_popen)
+    job = transcription_job.LocalTranscriptionJob(lambda *args: False)
+    assert job.start(video, None)
+    assert started.wait(5)
+    worker = next(t for t in threading.enumerate() if t.name == "RewindAI-transcription")
+    transcription_job._cancel_jobs_on_exit()
+    worker.join(5)
+    assert terminated.is_set() and job.status()["state"] == "cancelled"
+    assert video.read_bytes() == b"video"

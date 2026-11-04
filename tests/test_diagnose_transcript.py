@@ -52,3 +52,9 @@ def test_metrics_count_wrong_evidence_as_false_positive_and_false_negative():
     assert (result["tp"], result["fp"], result["fn"], result["tn"]) == (1, 2, 2, 1)
     assert result["precision"] == result["recall"] == result["f1"] == 1 / 3
 
+
+def test_f1_is_zero_for_missed_positive_and_undefined_for_no_positives():
+    missed = metrics([{"expected_answerable": True, "abstained": True}])
+    assert missed["precision"] is None and missed["recall"] == 0 and missed["f1"] == 0
+    empty = metrics([{"expected_answerable": False, "abstained": True}])
+    assert empty["precision"] is None and empty["recall"] is None and empty["f1"] is None

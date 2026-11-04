@@ -76,9 +76,8 @@ def metrics(results: list[dict], min_coverage: float = 0.5) -> dict:
             tn += int(not predicted and not answerable)
     precision = tp / (tp + fp) if tp + fp else None
     recall = tp / (tp + fn) if tp + fn else None
-    f1 = (2 * precision * recall / (precision + recall)
-          if precision is not None and recall is not None and precision + recall else
-          0.0 if precision is not None and recall is not None else None)
+    denominator = 2 * tp + fp + fn
+    f1 = 2 * tp / denominator if denominator else None
     return {"tp": tp, "fp": fp, "fn": fn, "tn": tn, "precision": precision,
             "recall": recall, "f1": f1, "reference_coverage_threshold": min_coverage,
             "question_count": len(results)}
@@ -104,4 +103,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
