@@ -57,3 +57,13 @@ On 4 November 2026, the browser workflow was exercised against the 97-second pub
 On 4 November 2026, the isolated browser workspace used the public 97-second ethics video after a real local Whisper base transcription. A search for `medical professionals` returned a 0–19 second excerpt. Browser automation created a course, assigned the video, saved the excerpt and added a note. After stopping and restarting the local server with the same isolated database, the course assignment, five indexed segments and saved note were still visible; selecting the saved clip started the public video at the beginning. No Canvas material was used.
 
 This is one functional smoke test, not a study of transcription accuracy, timestamp accuracy, performance on long lectures, or real-user task success. The public example is not a substitute for independently reviewed questions and answers. For a private test, use authorized local inputs and keep the database, subtitles, notes and results on the same computer.
+
+
+### Subtitle revision check
+
+A separate local API smoke test copied the public ethics video and its generated subtitle to a temporary directory, imported the copy, saved a note on a retrieved segment, removed the index, changed the subtitle text and re-imported it. The new segment ID differed, the previous bookmark was unavailable for playback, and its note remained. After recreating the application with the same isolated database, the updated transcript was searchable. The copied video remained present throughout. This check used one public sample and does not verify all source-replacement or filesystem failure cases.
+
+
+### Repository path check
+
+A recursive GitHub tree listing at revision `e9cd7698a16d5f16dddd199c7c2743c759bc61ce` returned no tracked files under `artifacts/`, `local_data/`, `raw/` or `processed/`, and no tracked files with common media, subtitle or database extensions. This was a path and extension check only: it did not inspect every text file or prove that all sensitive content was absent. Future commits require their own review.
