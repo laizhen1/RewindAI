@@ -233,6 +233,14 @@ def create_app(
             return jsonify({"error": "Local transcription is only available in subtitle mode"}), 409
         return jsonify(transcription_job.status())
 
+    @app.post("/api/transcription/cancel")
+    def cancel_transcription():
+        if mode != "transcript":
+            return jsonify({"error": "Local transcription is only available in subtitle mode"}), 409
+        if not transcription_job.cancel():
+            return jsonify({"error": "No transcription can be cancelled; indexing may have started"}), 409
+        return jsonify(transcription_job.status()), 202
+
     @app.post("/api/transcription")
     def start_transcription():
         if mode != "transcript":

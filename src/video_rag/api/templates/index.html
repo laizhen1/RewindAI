@@ -64,15 +64,18 @@
     try { await api("/api/transcription", jsonOptions("POST", {video_path: videoPath.value, language: asrLanguage.value || null})); await pollTranscription(); }
     catch (err) { asrStatus.className = "message"; asrStatus.textContent = `无法开始转录：${explainImportError(err.message)}`; asrButton.disabled = false; }
   });
+  const asrCancel = button("取消转录", async () => { asrCancel.disabled = true; try { await api("/api/transcription/cancel", {method: "POST"}); await pollTranscription(); } catch (err) { asrStatus.className = "message"; asrStatus.textContent = `无法取消：${err.message}`; await pollTranscription(); } });
+  asrCancel.classList.add("hidden");
   const asrStatus = element("p", "hint", "可选：无字幕时使用本地缓存的 Whisper base，在 CPU 上转录；不下载模型。长视频可能需要较长时间。"); asrStatus.setAttribute("role", "status");
-  importForm.append(asrLanguage, asrButton, asrStatus);
+  importForm.append(asrLanguage, asrButton, asrCancel, asrStatus);
   let asrTimer = null;
   async function pollTranscription() {
     clearTimeout(asrTimer);
     try {
       const data = await api("/api/transcription");
-      const busy = data.state === "transcribing" || data.state === "indexing";
+      const busy = data.state === "transcribing" || data.state === "cancelling" || data.state === "indexing";
       asrButton.disabled = busy;
+      asrCancel.classList.toggle("hidden", !busy); asrCancel.disabled = data.state !== "transcribing";
       if (data.message) { asrStatus.textContent = data.message; asrStatus.className = data.state === "failed" ? "message" : "hint"; }
       if (busy) asrTimer = setTimeout(pollTranscription, 2500);
       if (data.state === "complete") { await loadLibrary(); await loadBookmarks(); }
