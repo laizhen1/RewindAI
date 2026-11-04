@@ -50,3 +50,10 @@ The generated SRT is kept under `artifacts/transcripts/`, and a subtitle copy is
 Keep the workspace server open while transcribing. Select **取消转录** during transcription to stop the local child process; the original video and any generated subtitle file remain intact. Cancellation is unavailable once indexing has started, to avoid interrupting the library update. Task state exists only in the current server process. On normal Python exit, the server attempts to stop an active transcription child; forced termination or a crash can bypass cleanup and leave it running. There is no automatic resumption. If a task is interrupted, check local transcript files before retrying. This protection is separate from OS-level network isolation; local third-party dependencies are not sandboxed by the offline flags.
 
 On 4 November 2026, the browser workflow was exercised against the 97-second public ethics sample using the cached base model on CPU. The process created five subtitle segments and a search for `medical professionals` returned the 0–19 second segment. This is a workflow check, not a transcription accuracy benchmark, and no Canvas material was used.
+
+
+## Public-sample restart and review check
+
+On 4 November 2026, the isolated browser workspace used the public 97-second ethics video after a real local Whisper base transcription. A search for `medical professionals` returned a 0–19 second excerpt. Browser automation created a course, assigned the video, saved the excerpt and added a note. After stopping and restarting the local server with the same isolated database, the course assignment, five indexed segments and saved note were still visible; selecting the saved clip started the public video at the beginning. No Canvas material was used.
+
+This is one functional smoke test, not a study of transcription accuracy, timestamp accuracy, performance on long lectures, or real-user task success. The public example is not a substitute for independently reviewed questions and answers. For a private test, use authorized local inputs and keep the database, subtitles, notes and results on the same computer.
