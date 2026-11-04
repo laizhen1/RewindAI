@@ -44,6 +44,8 @@ python -m pytest -q
 python -m ruff check src/video_rag/api scripts/ingest_local.py tests/test_ingest_local.py tests/test_library_api.py
 ```
 
+未安装 FAISS、PyAV 等可选依赖时，相关测试会跳过。轻量测试通过并不代表完整多模态模型流程已验证。
+
 ## 真实视频流程
 
 ### 使用已有字幕（低配置）

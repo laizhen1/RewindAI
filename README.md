@@ -46,6 +46,8 @@ python -m pytest -q
 python -m ruff check src/video_rag/api scripts/ingest_local.py tests/test_ingest_local.py tests/test_library_api.py
 ```
 
+Some tests are skipped when optional dependencies such as FAISS or PyAV are not installed. Passing the lightweight test suite does not validate the full multimodal model workflow.
+
 ## Work with local video
 
 ### Subtitle search

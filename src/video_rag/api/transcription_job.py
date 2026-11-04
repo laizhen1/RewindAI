@@ -8,8 +8,8 @@ import sys
 import threading
 import uuid
 import weakref
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[3]
 _ACTIVE_JOBS = weakref.WeakSet()
