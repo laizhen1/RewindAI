@@ -7,6 +7,7 @@ from scripts.evaluate_ytcommentqa_full_transcript import (
     full_transcript,
     overlaps,
     reference_coverage,
+    union_duration,
 )
 from video_rag.transcript_baseline import build_transcript_segments
 
@@ -28,6 +29,9 @@ def test_full_transcript_overlap_uses_only_script_positive_labels():
     assert result["top3_reference_half_covered_count"] == 1
     assert result["mean_top3_reference_coverage"] == .25
     assert result["returned_segment_window_overlap_fraction"] == 1
+    assert result["reference_window_time_micro"] == {
+        "matched_seconds": 1, "returned_seconds": 1, "reference_seconds": 4,
+        "precision": 1, "recall": .25, "f1": .4}
     assert result["abstained"] == 1
     assert result["first_three_caption_overlap_count"] == 2
     segments, ref, skipped = full_transcript(data["1"])
@@ -82,6 +86,8 @@ def test_reference_coverage_merges_overlaps_and_clips_to_window():
     assert reference_coverage(segments, (10, 20)) == .7
     assert reference_coverage([], (10, 20)) == 0
     assert reference_coverage(segments[:2], (10, 20)) == .5
+    assert union_duration([(8, 12), (11, 15), (18, 25)]) == 14
+    assert union_duration([]) == 0
 
 
 def test_workspace_segmentation_matches_real_subtitle_grouping():

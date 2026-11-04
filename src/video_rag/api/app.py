@@ -329,13 +329,16 @@ def create_app(
             return jsonify({"error": "video_id and segment_id are required"}), 400
         if not isinstance(note, str) or len(note) > 4000:
             return jsonify({"error": "note must be at most 4000 characters"}), 400
-        segment = pipeline.segment(segment_id)
-        if segment is None or segment.video_id != video_id:
-            return jsonify({"error": "segment not found in the loaded video"}), 404
-        # Persist canonical evidence times from the index, not untrusted client values.
-        return jsonify(store.create_bookmark(
-            video_id, segment_id, segment.start_time, segment.end_time, note
-        )), 201
+        with import_lock:
+            segment = pipeline.segment(segment_id)
+            if segment is None or segment.video_id != video_id:
+                return jsonify({"error": "segment not found in the loaded video"}), 404
+            if mode == "transcript" and not source_available(video_id):
+                return jsonify({"error": "视频文件已改变或不可用，请恢复原文件或重新导入后再收藏。"}), 409
+            # Persist canonical evidence times from the index, not untrusted client values.
+            return jsonify(store.create_bookmark(
+                video_id, segment_id, segment.start_time, segment.end_time, note
+            )), 201
 
     @app.patch("/api/bookmarks/<int:bookmark_id>")
     def edit_bookmark(bookmark_id: int):

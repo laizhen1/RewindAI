@@ -354,3 +354,14 @@ The grouping changes the searchable text and the length of each returned interva
 ```powershell
 python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_DATASET_JSON --sample sample --compare-model PATH_TO_LOCAL_MINILM --segmentation workspace
 ```
+
+### Duration-weighted reference-window diagnostic
+
+For the same strict 151-question workspace-grouping run, we also compare the union of up to three returned intervals against the annotated reference window for each question. Intersections, returned durations and reference durations are summed **across questions**, then divided: window-time precision = intersection / returned duration, window-time recall = intersection / reference duration, and window-time F1 = twice the intersection divided by the sum of returned and reference duration. Overlapping returned segments are merged before counting; an abstention contributes zero returned time and its entire reference window to the denominator. Longer annotated windows have more weight than shorter ones.
+
+| Method | Matched / returned seconds | Matched / reference seconds | Window-time precision | Window-time recall | Window-time F1 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Keyword | 933.21 / 4337.35 | 933.21 / 4246.11 | 0.215 | 0.220 | 0.217 |
+| Experimental semantic | 1007.95 / 4007.84 | 1007.95 / 4246.11 | 0.251 | 0.237 | 0.244 |
+
+These are **reference-window time-overlap measures**, not answer accuracy or factual precision, recall and F1. The dataset's reference is a broad caption-snippet span, which may include unneeded context and omit other valid locations. Workspace grouping can bridge gaps between cues, and the reference span itself can contain gaps. The measured returned and matched time can therefore include silence or irrelevant material. Only script-answerable questions with valid full transcripts were included; there are no whole-video negatives, no video or audio was examined, and 77 records were excluded for invalid cues. The sample was already explored, the model threshold was uncalibrated, and these instructional videos are not a lecture benchmark. Do not use these numbers as a claim about actual course performance.

@@ -56,13 +56,9 @@ def overlaps(segment, reference):
     return segment.start_time < reference[1] and segment.end_time > reference[0]
 
 
-def reference_coverage(segments, reference):
-    """Fraction of the reference window covered by the union of returned segments."""
-    start, end = reference
-    if not math.isfinite(start) or not math.isfinite(end) or not start < end:
-        raise ValueError("Invalid reference window")
-    spans = sorted((max(segment.start_time, start), min(segment.end_time, end)) for segment in segments
-                   if overlaps(segment, reference))
+def union_duration(spans):
+    """Sum the union of intervals without double-counting overlapping predictions."""
+    spans = sorted(spans)
     total = 0.0
     left = right = None
     for begin, finish in spans:
@@ -75,7 +71,17 @@ def reference_coverage(segments, reference):
             left, right = begin, finish
     if left is not None:
         total += right - left
-    return total / (end - start)
+    return total
+
+
+def reference_coverage(segments, reference):
+    """Fraction of the reference window covered by the union of returned segments."""
+    start, end = reference
+    if not math.isfinite(start) or not math.isfinite(end) or not start < end:
+        raise ValueError("Invalid reference window")
+    spans = ((max(segment.start_time, start), min(segment.end_time, end)) for segment in segments
+             if overlaps(segment, reference))
+    return union_duration(spans) / (end - start)
 
 
 def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, include_rows=False, allow_incomplete=False, segmentation="sentence"):
@@ -112,6 +118,9 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
         top3 = any(overlaps(hit, ref) for hit in hits)
         first3 = any(overlaps(segment, ref) for segment in segments[:3])
         top3_coverage = reference_coverage(hits, ref)
+        counts["reference_seconds"] += ref[1] - ref[0]
+        counts["matched_seconds"] += top3_coverage * (ref[1] - ref[0])
+        counts["returned_seconds"] += union_duration((s.start_time, s.end_time) for s in hits)
         first3_coverage = reference_coverage(segments[:3], ref)
         counts["top3_cover_half"] += int(top3_coverage >= 0.5)
         counts["first3_cover_half"] += int(first3_coverage >= 0.5)
@@ -126,6 +135,7 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
         videos.add(row["videoID"])
         outcomes[row_id] = (top1, top3)
     n = len(outcomes)
+    matched, predicted, reference = counts["matched_seconds"], counts["returned_seconds"], counts["reference_seconds"]
     result = {"selected_rows": counts["selected_rows"], "evaluated_questions": n,
               "evaluated_videos": len(videos), "excluded_other_labels": counts["excluded_other_labels"],
               "invalid_rows": counts["invalid_rows"], "invalid_transcripts": counts["invalid_transcripts"],
@@ -143,7 +153,12 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
               "returned_segments": counts["returned_segments"],
               "returned_segment_window_overlap_fraction": (counts["overlapping_returned_segments"] / counts["returned_segments"]
                                                            if counts["returned_segments"] else None),
-              "abstained": counts["abstained"]}
+              "abstained": counts["abstained"],
+              "reference_window_time_micro": {
+                  "matched_seconds": matched, "returned_seconds": predicted, "reference_seconds": reference,
+                  "precision": matched / predicted if predicted else None,
+                  "recall": matched / reference if reference else None,
+                  "f1": 2 * matched / (predicted + reference) if predicted + reference else None}}
     if include_rows:
         result["_outcomes"] = outcomes
     return result
