@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,7 +13,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.diagnose_transcript import diagnose, metrics, operating_metrics
-from video_rag.evaluation.provenance import verify_sources
+from scripts.prepare_temporal_questions import write_output
+from video_rag.evaluation.provenance import fingerprint, verify_sources
 from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
 
 
@@ -52,9 +54,15 @@ def main():
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--semantic-threshold", type=float, default=0.4)
     parser.add_argument("--min-coverage", type=float, default=0.5)
+    parser.add_argument("--output", type=Path, help="Write a new report under artifacts/ or local_data/")
+    parser.add_argument("--aggregate-only", action="store_true", help="Omit individual questions and results")
+    parser.add_argument("--record-hashes", action="store_true", help="Fingerprint inputs and model before and after the run")
     args = parser.parse_args()
     try:
         from video_rag.retrieval.onnx_semantic import OnnxSentenceEncoder, build_semantic_pipeline
+        paths = {"video": args.video, "subtitles": args.subtitles, "questions": args.questions,
+                 "model": args.model_dir / "onnx" / "model_quantized.onnx", "tokenizer": args.model_dir / "tokenizer.json"}
+        input_hashes = {name: fingerprint(path) for name, path in paths.items()} if args.record_hashes else None
         data = json.loads(args.questions.read_text(encoding="utf-8-sig"))
         source_binding = verify_sources(data, args.video, args.subtitles)
         segments = segments_from_subtitles(args.video, args.subtitles)
@@ -63,12 +71,24 @@ def main():
         semantic = build_semantic_pipeline(segments, encoder, args.semantic_threshold)
         result = compare(data["questions"], keyword, semantic, args.min_coverage)
         verify_sources(data, args.video, args.subtitles)
+        if input_hashes is not None and input_hashes != {name: fingerprint(path) for name, path in paths.items()}:
+            raise ValueError("An input or model file changed during evaluation")
+        if args.aggregate_only:
+            result.pop("results")
+        report = {"warning": "Temporal coverage depends on label quality and does not establish answer correctness. "
+                             "Reports and hashes may contain sensitive course information; keep them local.",
+                  "created_at_utc": datetime.now(timezone.utc).isoformat(),
+                  "label_status": data.get("status", "not provided"), "source_binding": source_binding,
+                  "semantic_threshold": args.semantic_threshold, "min_coverage": args.min_coverage,
+                  "aggregate_only": args.aggregate_only, "input_sha256": input_hashes, "comparison": result}
+        if args.output:
+            write_output(args.output, report, (ROOT / "artifacts", ROOT / "local_data"))
     except (ImportError, OSError, KeyError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Comparison failed: {exc}\n")
-    print(json.dumps({"warning": "Temporal coverage depends on label quality and does not establish answer correctness. "
-                                  "Output includes questions; keep private material local.",
-                      "label_status": data.get("status", "not provided"), "source_binding": source_binding, "semantic_threshold": args.semantic_threshold,
-                      "comparison": result}, indent=2))
+    if args.output:
+        print("Saved a local evaluation report. Keep private data and hashes on this computer.")
+    else:
+        print(json.dumps(report, indent=2))
     return 0
 
 

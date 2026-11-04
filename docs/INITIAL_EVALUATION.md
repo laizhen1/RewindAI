@@ -239,3 +239,12 @@ python scripts/compare_time_retrieval.py --video PATH_TO_VIDEO --subtitles PATH_
 ```
 
 The script reads inputs locally. Select thresholds on a separate validation set before using an untouched test set, and record source and model versions separately.
+
+
+To save a local report rather than printing detailed questions, append:
+
+```powershell
+--output artifacts/evaluation/comparison.json --aggregate-only --record-hashes
+```
+
+The output must be a new JSON file under `artifacts/` or `local_data/`; existing files are not overwritten. `--aggregate-only` omits per-question results, while `--record-hashes` checks video, subtitles, questions, tokenizer and model file SHA-256 before and after the run and records them with the thresholds and UTC time. Hashing long videos can be slow. These hashes and aggregate results can still be sensitive; keep them local. A report does not capture every dependency, hardware setting or code revision, so record those separately before claiming reproducibility.
