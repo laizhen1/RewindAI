@@ -318,3 +318,18 @@ python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_D
 ```
 
 The local dataset and model files must already exist. The script prints aggregate counts only and does not download media. Reproduce with the data and model revisions documented above; independently annotated lecture videos and actual answer evaluation remain necessary.
+
+
+### Reference-window coverage in the strict transcript run
+
+The earlier overlap rule counts even a very short intersection. We repeated the same strict 151-question run and additionally clipped each returned segment to its annotated reference window, merged overlapping clips to avoid double-counting, and measured the fraction of that window covered by up to three returned segments. No-candidate cases contribute zero coverage.
+
+| Method | At least half of reference window covered | Mean reference coverage | Returned segments overlapping window |
+| --- | ---: | ---: | ---: |
+| Keyword | 16 / 151 (0.106) | 0.134 | 63 / 239 (0.264) |
+| Experimental semantic | 20 / 151 (0.132) | 0.183 | 95 / 314 (0.303) |
+| First three captions | 7 / 151 (0.046) | 0.044 | Not calculated |
+
+This exposes how a small overlap can coexist with low coverage of a broad annotated window. It is **not** answer correctness: the reference snippet can contain more context than needed, so a shorter clip may still support an answer, while a long overlapping clip may not. The returned-segment overlap fraction is not factual precision, because the dataset may omit other valid answer locations. A maximum of three individually indexed sentences also limits possible coverage, especially of long windows. The 77 excluded invalid transcripts, previously exposed sample, transcript-only setup, differing app segmentation, uncalibrated semantic threshold and YouTube-versus-lecture limitations described above still apply. The 50% cutoff is a diagnostic choice, not a validated success threshold.
+
+Run the same command in the preceding section; the output now contains `top3_reference_half_covered_count`, `mean_top3_reference_coverage` and `returned_segment_window_overlap_fraction`. Coverage checks use the union of the returned time intervals rather than adding overlaps twice.

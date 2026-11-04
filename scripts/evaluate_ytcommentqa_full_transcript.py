@@ -48,6 +48,28 @@ def overlaps(segment, reference):
     return segment.start_time < reference[1] and segment.end_time > reference[0]
 
 
+def reference_coverage(segments, reference):
+    """Fraction of the reference window covered by the union of returned segments."""
+    start, end = reference
+    if not math.isfinite(start) or not math.isfinite(end) or not start < end:
+        raise ValueError("Invalid reference window")
+    spans = sorted((max(segment.start_time, start), min(segment.end_time, end)) for segment in segments
+                   if overlaps(segment, reference))
+    total = 0.0
+    left = right = None
+    for begin, finish in spans:
+        if left is None:
+            left, right = begin, finish
+        elif begin <= right:
+            right = max(right, finish)
+        else:
+            total += right - left
+            left, right = begin, finish
+    if left is not None:
+        total += right - left
+    return total / (end - start)
+
+
 def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, include_rows=False, allow_incomplete=False):
     if sample not in {"sample", "other", "all"} or not isinstance(dataset, dict):
         raise ValueError("Invalid dataset or sample")
@@ -81,6 +103,13 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
         top1 = bool(hits and overlaps(hits[0], ref))
         top3 = any(overlaps(hit, ref) for hit in hits)
         first3 = any(overlaps(segment, ref) for segment in segments[:3])
+        top3_coverage = reference_coverage(hits, ref)
+        first3_coverage = reference_coverage(segments[:3], ref)
+        counts["top3_cover_half"] += int(top3_coverage >= 0.5)
+        counts["first3_cover_half"] += int(first3_coverage >= 0.5)
+        counts["sum_top3_coverage"] += top3_coverage
+        counts["sum_first3_coverage"] += first3_coverage
+        counts["overlapping_returned_segments"] += sum(overlaps(hit, ref) for hit in hits)
         counts["top1"] += int(top1)
         counts["top3"] += int(top3)
         counts["first3"] += int(first3)
@@ -97,7 +126,16 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
               "top3_overlap_count": counts["top3"], "top3_overlap_rate": counts["top3"] / n if n else None,
               "first_three_caption_overlap_count": counts["first3"],
               "first_three_caption_overlap_rate": counts["first3"] / n if n else None,
-              "abstained": counts["abstained"], "returned_segments": counts["returned_segments"]}
+              "top3_reference_half_covered_count": counts["top3_cover_half"],
+              "top3_reference_half_covered_rate": counts["top3_cover_half"] / n if n else None,
+              "mean_top3_reference_coverage": counts["sum_top3_coverage"] / n if n else None,
+              "first_three_reference_half_covered_count": counts["first3_cover_half"],
+              "mean_first_three_reference_coverage": counts["sum_first3_coverage"] / n if n else None,
+              "overlapping_returned_segments": counts["overlapping_returned_segments"],
+              "returned_segments": counts["returned_segments"],
+              "returned_segment_window_overlap_fraction": (counts["overlapping_returned_segments"] / counts["returned_segments"]
+                                                           if counts["returned_segments"] else None),
+              "abstained": counts["abstained"]}
     if include_rows:
         result["_outcomes"] = outcomes
     return result
@@ -143,7 +181,7 @@ def main():
             result = evaluate(data, sample=args.sample, allow_incomplete=args.allow_incomplete_captions)
     except (ImportError, OSError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
-    print(json.dumps({"warning": "Positive-duration overlap with a broad annotated snippet is not answer correctness. "
+    print(json.dumps({"warning": "Temporal overlap and reference coverage do not establish answer correctness. "
                                  "Full provided transcripts are searched; actual videos and audio are not used.",
                       "sample": args.sample, "allow_incomplete_captions": args.allow_incomplete_captions,
                       "semantic_threshold": args.semantic_threshold if args.compare_model else None,
