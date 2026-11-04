@@ -64,3 +64,16 @@ def test_local_aggregate_report_omits_questions_and_refuses_overwrite(tmp_path, 
     with pytest.raises(SystemExit) as error:
         module.main()
     assert error.value.code == 2
+
+    changed_output = root / "artifacts" / "changed-report.json"
+    def mutate_source(*args):
+        video.write_bytes(b"video changed during evaluation")
+        return {"results": [], "total": 1}
+    monkeypatch.setattr(module, "compare", mutate_source)
+    monkeypatch.setattr(sys, "argv", ["compare", "--video", str(video), "--subtitles", str(subtitles),
+                                    "--questions", str(questions), "--model-dir", str(model),
+                                    "--output", str(changed_output), "--record-hashes"])
+    with pytest.raises(SystemExit) as error:
+        module.main()
+    assert error.value.code == 2
+    assert not changed_output.exists()
