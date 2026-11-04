@@ -12,7 +12,7 @@ RewindAI is an AI-powered learning workspace for finding and reviewing moments i
 ## What it does · 当前功能
 
 - 查看从已加载索引中识别的视频，创建、重命名或删除课程并整理视频；删除课程会保留视频和笔记。
-- 对视频资料提问，查看答案和证据；证据包含时间戳，可跳转到可用的视频文件。字幕模式可按需展开同一视频的前后字幕，作为未验证的上下文。
+- 对视频资料提问，查看答案和证据；证据包含时间戳，可跳转到可用的视频文件。字幕模式可按需展开同一视频的前后字幕，作为未验证的上下文；安装 PyAV 后也可查看片段中点附近的一帧画面，画面仅供人工核验。
 - 保存或删除片段收藏，为收藏编辑复习笔记。
 - 分别对回答和证据提交有用或需改进的反馈，并可填写原因；反馈保存在本地数据库。
 - 区分演示模式和完整模式，避免把占位演示当作真实模型结果。
@@ -55,6 +55,8 @@ python -m ruff check src/video_rag/api scripts/ingest_local.py tests/test_ingest
 ```bash
 python scripts/run_transcript.py --video /path/to/lecture.mp4 --subtitles /path/to/lecture.srt
 ```
+
+要在字幕模式下查看命中片段的画面，可安装 `python -m pip install -e ".[asr]"`（包含 PyAV）；画面在本机按需解码，不上传，也不代表系统理解画面。
 
 此模式无需下载模型、无需联网，适合资源有限的电脑。它只进行**关键词匹配和字幕原文摘录**，不是语音识别、AI 生成或视频画面理解；不会自行生成字幕，也不能保证跨语言语义检索。只能处理外置字幕文件。如果字幕不足以回答问题，应该回看视频核对。单独运行时默认打开 `http://127.0.0.1:5000`。
 

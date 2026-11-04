@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from video_rag.api.library import LibraryStore
 from video_rag.pipeline import VideoRAGPipeline
@@ -351,5 +351,28 @@ def create_app(
                                 "video_id": item.video_id, "start_time": item.start_time,
                                 "end_time": item.end_time, "transcript": item.transcript})
         return jsonify({"context": context})
+
+    @app.get("/api/segments/<segment_id>/frame")
+    def segment_frame(segment_id: str):
+        if mode != "transcript":
+            return jsonify({"error": "Frame preview is only available in subtitle mode"}), 409
+        segment = pipeline.segment(segment_id)
+        if segment is None:
+            return jsonify({"error": "Segment not found"}), 404
+        if not Path(segment.source_path).is_file():
+            return jsonify({"error": "Video file is unavailable"}), 404
+        try:
+            import av
+
+            from video_rag.api.frames import extract_frame_png
+
+            image, actual = extract_frame_png(segment.source_path, (segment.start_time + segment.end_time) / 2)
+        except ImportError:
+            return jsonify({"error": "Frame preview requires the optional PyAV package"}), 503
+        except (av.error.FFmpegError, OSError, OverflowError, RuntimeError, ValueError):
+            # Do not expose local file paths in decoding errors.
+            return jsonify({"error": "Could not decode a frame near this segment"}), 422
+        return Response(image, mimetype="image/png", headers={"Cache-Control": "no-store",
+                                                               "X-Frame-Seconds": f"{actual:.3f}"})
 
     return app

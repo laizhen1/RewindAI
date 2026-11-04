@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from video_rag.api import create_app
 from video_rag.transcript_baseline import (
@@ -171,6 +172,24 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(client.get("/api/segments/missing/context").status_code, 404)
         demo = create_app(pipeline, database_path=self.base / "context-demo.sqlite3", mode="demo").test_client()
         self.assertEqual(demo.get(f"/api/segments/{own[0].segment_id}/context").status_code, 409)
+
+    def test_frame_preview_only_uses_indexed_video_and_hides_paths(self):
+        pipeline = build_transcript_pipeline(self.video, self.srt)
+        client = create_app(pipeline, database_path=self.base / "frame.sqlite3", mode="transcript").test_client()
+        segment = pipeline.segments()[0]
+        with patch("video_rag.api.frames.extract_frame_png", return_value=(b"png-data", 5.5)) as extract:
+            result = client.get(f"/api/segments/{segment.segment_id}/frame")
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.mimetype, "image/png")
+        self.assertEqual(result.headers["Cache-Control"], "no-store")
+        extract.assert_called_once_with(segment.source_path, 5.5)
+        with patch("video_rag.api.frames.extract_frame_png", side_effect=ValueError(str(self.video))):
+            failed = client.get(f"/api/segments/{segment.segment_id}/frame")
+        self.assertEqual(failed.status_code, 422)
+        self.assertNotIn(str(self.video), failed.get_data(as_text=True))
+        self.assertEqual(client.get("/api/segments/missing/frame").status_code, 404)
+        demo = create_app(pipeline, database_path=self.base / "frame-demo.sqlite3", mode="demo").test_client()
+        self.assertEqual(demo.get(f"/api/segments/{segment.segment_id}/frame").status_code, 409)
 
     def test_course_search_filters_evidence_and_handles_empty_or_invalid_scope(self):
         other = self.base / "other.mp4"
