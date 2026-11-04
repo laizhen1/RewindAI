@@ -285,7 +285,12 @@ def create_app(
             return jsonify({"error": "comment must be at most 4000 characters"}), 400
         if segment_id is not None and (not isinstance(segment_id, str) or pipeline.segment(segment_id) is None):
             return jsonify({"error": "segment not found"}), 404
-        feedback_id = store.add_feedback(question.strip(), segment_id, rating, comment)
+        target = payload.get("target_type", "answer" if segment_id is None else "unknown_evidence")
+        if target not in ("answer", "transcript", "visual", "unknown_evidence"):
+            return jsonify({"error": "invalid feedback target"}), 400
+        if (target == "answer") != (segment_id is None):
+            return jsonify({"error": "feedback target does not match the segment"}), 400
+        feedback_id = store.add_feedback(question.strip(), segment_id, rating, comment, target)
         return jsonify({"id": feedback_id}), 201
 
     @app.post("/api/ask")

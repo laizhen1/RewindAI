@@ -30,7 +30,8 @@ class LibraryStore:
                 CREATE TABLE IF NOT EXISTS feedback (
                     id INTEGER PRIMARY KEY, question TEXT NOT NULL,
                     segment_id TEXT, rating TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '',
-                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    target_type TEXT NOT NULL DEFAULT 'legacy'
                 );
                 CREATE TABLE IF NOT EXISTS local_transcript_videos (
                     video_id TEXT PRIMARY KEY, video_path TEXT NOT NULL,
@@ -38,6 +39,12 @@ class LibraryStore:
                     segments_json TEXT NOT NULL
                 );
             """)
+            # Older local databases predate feedback provenance. Serialize the
+            # schema check and migration so two local processes cannot race.
+            connection.execute("BEGIN IMMEDIATE")
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(feedback)")}
+            if "target_type" not in columns:
+                connection.execute("ALTER TABLE feedback ADD COLUMN target_type TEXT NOT NULL DEFAULT 'legacy'")
 
     @contextmanager
     def connect(self):
@@ -128,18 +135,19 @@ class LibraryStore:
         with self.connect() as connection:
             return connection.execute("DELETE FROM bookmarks WHERE id = ?", (bookmark_id,)).rowcount > 0
 
-    def add_feedback(self, question: str, segment_id: str | None, rating: str, comment: str) -> int:
+    def add_feedback(self, question: str, segment_id: str | None, rating: str, comment: str,
+                     target_type: str) -> int:
         with self.connect() as connection:
             result = connection.execute(
-                "INSERT INTO feedback (question, segment_id, rating, comment) VALUES (?, ?, ?, ?)",
-                (question, segment_id, rating, comment),
+                "INSERT INTO feedback (question, segment_id, rating, comment, target_type) VALUES (?, ?, ?, ?, ?)",
+                (question, segment_id, rating, comment, target_type),
             )
             return int(result.lastrowid)
 
     def recent_feedback(self, limit: int = 100) -> list[dict]:
         with self.connect() as connection:
             return [dict(row) for row in connection.execute(
-                "SELECT id, question, segment_id, rating, comment, created_at "
+                "SELECT id, question, segment_id, rating, comment, created_at, target_type "
                 "FROM feedback ORDER BY id DESC LIMIT ?", (limit,)
             )]
 

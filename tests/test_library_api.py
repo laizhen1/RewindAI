@@ -1,5 +1,7 @@
+import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from scripts.run_demo import build_demo_pipeline
@@ -93,6 +95,37 @@ class LibraryApiTests(unittest.TestCase):
         self.assertEqual(self.client.delete(f"/api/feedback/{entry}").status_code, 204)
         self.assertEqual(reopened.get("/api/feedback").get_json()["feedback"], [])
         self.assertEqual(self.client.delete(f"/api/feedback/{entry}").status_code, 404)
+
+    def test_feedback_distinguishes_sources_and_rejects_mismatches(self):
+        base = {"question": "CLIP?", "segment_id": "demo_0001", "rating": "helpful"}
+        for target in ("transcript", "visual"):
+            self.assertEqual(self.client.post("/api/feedback", json={**base, "target_type": target}).status_code, 201)
+        rows = self.client.get("/api/feedback").get_json()["feedback"]
+        self.assertEqual([row["target_type"] for row in rows], ["visual", "transcript"])
+        self.assertEqual(self.client.post("/api/feedback", json={**base, "target_type": "answer"}).status_code, 400)
+        self.assertEqual(self.client.post("/api/feedback", json={**base, "target_type": "unknown"}).status_code, 400)
+        self.assertEqual(self.client.post("/api/feedback", json={"question": "x", "rating": "helpful",
+                                                                 "target_type": "visual"}).status_code, 400)
+        self.assertEqual(self.client.post("/api/feedback", json={"question": "x", "rating": "helpful"}).status_code, 201)
+        self.assertEqual(self.client.get("/api/feedback").get_json()["feedback"][0]["target_type"], "answer")
+
+    def test_feedback_migrates_old_database_without_losing_notes(self):
+        old_db = Path(self.temp.name) / "old.sqlite3"
+        with closing(sqlite3.connect(old_db)) as conn:
+            conn.executescript("""
+                CREATE TABLE feedback (id INTEGER PRIMARY KEY, question TEXT NOT NULL, segment_id TEXT,
+                    rating TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+                INSERT INTO feedback (question, segment_id, rating, comment)
+                    VALUES ('old question', 'demo_0001', 'not_helpful', 'keep me');
+            """)
+        old = create_app(build_demo_pipeline(), database_path=old_db).test_client()
+        rows = old.get("/api/feedback").get_json()["feedback"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["comment"], "keep me")
+        self.assertEqual(rows[0]["target_type"], "legacy")
+        reopened = create_app(build_demo_pipeline(), database_path=old_db).test_client()
+        self.assertEqual(reopened.get("/api/feedback").get_json()["feedback"], rows)
 
     def test_ask_does_not_expose_local_media_paths(self):
         response = self.client.post("/api/ask", json={"question": "CLIP有什么作用"})
