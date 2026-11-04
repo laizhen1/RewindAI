@@ -12,6 +12,7 @@ import re
 import sys
 import tempfile
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from urllib.parse import urlsplit
@@ -194,8 +195,9 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         if not isinstance(payload, dict):
             return jsonify({"error": "A current annotation revision is required"}), 400
         include_cases = payload.get("include_cases", False)
-        if type(include_cases) is not bool:
-            return jsonify({"error": "include_cases must be true or false"}), 400
+        save_report = payload.get("save_report", False)
+        if type(include_cases) is not bool or type(save_report) is not bool:
+            return jsonify({"error": "Report and case options must be true or false"}), 400
         try:
             rows, revision = read_rows()
             if payload.get("revision") != revision:
@@ -250,6 +252,27 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                       "semantic_threshold": 0.4 if semantic_result is not None else None,
                       "subtitle_last_end_seconds": max(segment.end_time for segment in segments),
                       "video_duration_seconds": duration}
+            if save_report:
+                with lock:
+                    if (read_rows()[1] != revision or fingerprint(video) != binding["video_sha256"]
+                            or fingerprint(subtitles) != subtitle_hash
+                            or tuple(fingerprint(path) for path in model_files) != model_hashes):
+                        return jsonify({"error": "An input changed before the report was saved"}), 409
+                    name = f"draft-diagnostic-{uuid.uuid4().hex}.json"
+                    target = private_output(output.parent / "reports" / name, roots=allowed_roots)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    saved = {"created_at_utc": datetime.now(UTC).isoformat(), "status": "unverified_draft",
+                             "warning": "Private local data. Timestamp overlap is not answer accuracy.",
+                             "source_sha256": {"video": binding["video_sha256"], "subtitles": subtitle_hash,
+                                               "annotation_csv": revision, "semantic_files": list(model_hashes)},
+                             "retrieval": {"keyword": "local_keyword", "semantic_threshold": report["semantic_threshold"],
+                                           "semantic_device": "cpu" if semantic_result is not None else None,
+                                           "reference_coverage_threshold": 0.5},
+                             "summary": report}
+                    with target.open("x", encoding="utf-8", newline="\n") as handle:
+                        json.dump(saved, handle, ensure_ascii=False, indent=2, allow_nan=False)
+                        handle.write("\n")
+                    report["saved_report_filename"] = name
             if include_cases:
                 report["cases"] = [{"question_id": question["question_id"],
                                     "reference_range": [question["evidence_start_seconds"], question["evidence_end_seconds"]]

@@ -1,4 +1,5 @@
 import csv
+import json
 
 import pytest
 
@@ -124,6 +125,7 @@ def test_local_diagnostic_uses_drafts_without_exposing_question_text(tmp_path):
     assert data["metrics"]["tp"] == 1 and data["metrics"]["f1"] == 1
     assert data["metrics"]["question_count"] == 1 and data["subtitle_last_end_seconds"] == 8
     assert "cases" not in data
+    assert not (tmp_path / "private" / "reports").exists()
     assert "private answer" not in response.get_data(as_text=True)
     assert "attention" not in response.get_data(as_text=True)
     negative = client.post("/api/entries", json={"revision": result["revision"], "question": "quantum entanglement",
@@ -136,6 +138,15 @@ def test_local_diagnostic_uses_drafts_without_exposing_question_text(tmp_path):
     assert cases[0]["keyword"]["returned_ranges"] == [[3, 8]] and cases[0]["semantic"] is None
     assert cases[1]["keyword"]["status"] == "abstained" and cases[1]["reference_range"] is None
     assert client.post("/api/evaluate", json={"revision": negative["revision"], "include_cases": 1}).status_code == 400
+    assert client.post("/api/evaluate", json={"revision": negative["revision"], "save_report": 1}).status_code == 400
+    saved_report = client.post("/api/evaluate", json={"revision": negative["revision"], "include_cases": True,
+                                                     "save_report": True}).get_json()
+    report_path = tmp_path / "private" / "reports" / saved_report["saved_report_filename"]
+    report_text = report_path.read_text(encoding="utf-8")
+    report = json.loads(report_text)
+    assert report["status"] == "unverified_draft" and report["summary"]["metrics"]["question_count"] == 2
+    assert report["source_sha256"]["annotation_csv"] == negative["revision"]
+    assert "cases" not in report["summary"] and "attention" not in report_text and "private answer" not in report_text
     reserved = create_label_app(video, tmp_path / "private" / "test.csv", "reserved", "test", 100,
                                 allowed_roots=(tmp_path / "private",), subtitles=subs).test_client()
     assert not reserved.get("/api/entries").get_json()["evaluation_available"]
@@ -161,7 +172,8 @@ def test_local_diagnostic_rejects_subtitle_mutation(tmp_path, monkeypatch):
         subs.write_text("changed", encoding="utf-8")
         return pipeline
     monkeypatch.setattr(module, "build_transcript_segments", mutate)
-    assert client.post("/api/evaluate", json={"revision": result["revision"]}).status_code == 409
+    assert client.post("/api/evaluate", json={"revision": result["revision"], "save_report": True}).status_code == 409
+    assert not (tmp_path / "private" / "reports").exists()
 
 
 def test_local_paired_comparison_keeps_queries_private_and_checks_model_revision(tmp_path, monkeypatch):
