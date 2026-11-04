@@ -216,3 +216,26 @@ The tool processes inputs locally and prints aggregate counts and paired differe
 The local diagnostic now also separates temporal evidence coverage on answerable questions from abstention on unanswerable questions, with explicit counts and denominators. On the same nine **unreviewed, caption-derived draft questions** for the public ethics video and the locally generated subtitles, three of three answerable drafts had a top-one segment covering at least half of the draft reference interval; all three also had such a segment among the returned results. There were zero answerable abstentions. Of the six intended unanswerable drafts, three were rejected and three returned candidates. This is the same provisional sample previously reported above, not an independent new test or answer-accuracy measurement.
 
 Optional `question_type` labels allow per-type reporting; missing labels appear as `unlabeled`. The returned-set hit rate is based on the results the pipeline actually returned, not a standard Recall@K over all relevant intervals. A zero denominator yields `null`. Question text and results remain local for private media.
+
+
+### Paired question-level comparison on both provisional videos
+
+The new local `scripts/compare_time_retrieval.py` runs the actual keyword and experimental semantic pipelines on the same transcript segments and questions, and reports per-question temporal results alongside paired counts. A top-one hit requires at least 50% coverage of the single draft reference interval; it does not establish that the returned text answers the question. The semantic threshold is the earlier uncalibrated 0.4, and the quantized MiniLM model revision is `08a308f628bc9d6774b7922f319eb1b65afa1a82`. Both inputs use locally generated Whisper base captions.
+
+| Public video | Answerable drafts | Both hit | Keyword only | Semantic only | Neither |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| AI medical ethics | 3 | 2 | 1 | 0 | 0 |
+| AI explained | 5 | 2 | 0 | 1 | 2 |
+
+| Public video | Intended unanswerable drafts | Both abstain | Keyword only abstains | Semantic only abstains | Neither abstains |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| AI medical ethics | 6 | 3 | 0 | 1 | 2 |
+| AI explained | 5 | 2 | 1 | 0 | 2 |
+
+These are the same previously examined caption-derived drafts and the same two videos, not new or independent tests. They were not independently reviewed against video and all questions come from one publisher. Some returned evidence may cover the draft interval yet fail to support an answer. The counts are exploratory and cannot establish superiority or general lecture performance. The detailed JSON contains questions and candidate timestamps; keep any private-course results local.
+
+```powershell
+python scripts/compare_time_retrieval.py --video PATH_TO_VIDEO --subtitles PATH_TO_LOCAL_SRT --questions PATH_TO_QUESTIONS_JSON --model-dir PATH_TO_LOCAL_MINILM --semantic-threshold 0.4 --min-coverage 0.5
+```
+
+The script reads inputs locally. Select thresholds on a separate validation set before using an untouched test set, and record source and model versions separately.
