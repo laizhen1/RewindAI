@@ -39,3 +39,14 @@ On Windows with Python 3.12, faster-whisper 1.2.1 and PyAV 16.1.0, the multiling
 ## Local workflow smoke test
 
 On 4 November 2026, the public AI-medical-ethics sample was transcribed again with the locally cached base model on CPU. A temporary local server started with the resulting SRT returned the 0–19 second segment for the exact phrase `medical professionals`. An initial query, `ethical decisions`, abstained because those words did not occur together under the current keyword rule. This checks the transcription-to-HTTP-retrieval path on one sample, not the launcher file picker, full multimodal pipeline, or search accuracy. No Canvas material was used.
+
+
+## Transcribe from the local workspace
+
+In subtitle mode, enter an authorized local video path, choose automatic language detection, English or Chinese, and select **本机转录并加载**. The workspace runs the cached `base` model on CPU, then imports the resulting subtitles and refreshes the video list. The task state displays transcription, indexing, completion or failure; it is not a percentage. Only one transcription may run per workspace process. It does not initiate model downloads or use a hosted speech API. Follow the dependency and model-cache setup above; a missing cache or audio/decoder failure is reported as a general failure.
+
+The generated SRT is kept under `artifacts/transcripts/`, and a subtitle copy is saved in the local library. Both can contain private course content. Original files and existing notes are not overwritten. A video already in the library must have its index removed before retranscribing; if its source changes during processing, the new index is not imported. Review transcript accuracy against the recording.
+
+Keep the workspace server open while transcribing. Task state exists only in the current server process, and closing it may leave the transcription child process running; there is currently no cancel button or automatic resumption. If a task is interrupted, check local transcript files before retrying. This protection is separate from OS-level network isolation; local third-party dependencies are not sandboxed by the offline flags.
+
+On 4 November 2026, the browser workflow was exercised against the 97-second public ethics sample using the cached base model on CPU. The process created five subtitle segments and a search for `medical professionals` returned the 0–19 second segment. This is a workflow check, not a transcription accuracy benchmark, and no Canvas material was used.

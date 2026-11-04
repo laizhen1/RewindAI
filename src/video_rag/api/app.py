@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Callable
@@ -216,6 +217,48 @@ def create_app(
             return jsonify({"error": str(exc)}), 400
         except (sqlite3.Error, RuntimeError):
             return jsonify({"error": "Could not rebuild or save the local index; existing videos remain available"}), 500
+
+    def import_generated_subtitles(video: Path, subtitle: Path) -> bool:
+        # Reuse the same validation, locking and atomic index replacement as manual import.
+        with app.test_client() as client:
+            response = client.post("/api/library/local-video", json={"video_path": str(video), "subtitle_path": str(subtitle)})
+            return response.status_code == 201
+
+    from video_rag.api.transcription_job import LocalTranscriptionJob
+    transcription_job = LocalTranscriptionJob(import_generated_subtitles)
+
+    @app.get("/api/transcription")
+    def transcription_status():
+        if mode != "transcript":
+            return jsonify({"error": "Local transcription is only available in subtitle mode"}), 409
+        return jsonify(transcription_job.status())
+
+    @app.post("/api/transcription")
+    def start_transcription():
+        if mode != "transcript":
+            return jsonify({"error": "Local transcription is only available in subtitle mode"}), 409
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "JSON object required"}), 400
+        video, language = payload.get("video_path"), payload.get("language")
+        if not isinstance(video, str) or not video.strip() or len(video) > 4096 or language not in (None, "en", "zh"):
+            return jsonify({"error": "A local video path and a supported language are required"}), 400
+        from video_rag.transcript_baseline import VIDEO_SUFFIXES
+        try:
+            path = Path(video.strip()).expanduser().resolve()
+            if not path.is_file() or path.suffix.lower() not in VIDEO_SUFFIXES:
+                return jsonify({"error": "Video must be an existing local MP4, WebM, OGV, MOV or M4V file"}), 400
+            video_id = "video_" + hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
+            with import_lock:
+                if pipeline.video_path(video_id) is not None or video_id in unavailable_videos:
+                    return jsonify({"error": "Video is already saved; remove its index before retranscribing"}), 409
+                if not transcription_job.start(path, language):
+                    return jsonify({"error": "A local transcription is already running"}), 409
+        except (OSError, ValueError):
+            return jsonify({"error": "Cannot read the local video"}), 400
+        except RuntimeError:
+            return jsonify({"error": "Could not start the local transcription task"}), 503
+        return jsonify(transcription_job.status()), 202
 
     @app.post("/api/courses")
     def create_course():

@@ -55,6 +55,29 @@
   const importHint = element("p", "hint", "仅在本机读取；视频路径和字幕副本保存在本机。视频被移动或更改后可恢复原文件，或移除失效索引并重新加载。");
   const importStatus = element("p", "hint", "尚未开始加载。"); importStatus.setAttribute("role", "status"); importStatus.setAttribute("aria-live", "polite");
   importForm.append(importTitle, videoLabel, subtitleLabel, importButton, importStatus, importHint);
+  const asrLanguage = document.createElement("select"); asrLanguage.className = "field";
+  asrLanguage.setAttribute("aria-label", "转录语言");
+  [["", "自动检测语言"], ["en", "英语"], ["zh", "中文"]].forEach(([value, label]) => { const option = element("option", "", label); option.value = value; asrLanguage.append(option); });
+  const asrButton = button("本机转录并加载", async () => {
+    if (!videoPath.value.trim()) { asrStatus.textContent = "请先输入本地视频路径。"; return; }
+    asrButton.disabled = true;
+    try { await api("/api/transcription", jsonOptions("POST", {video_path: videoPath.value, language: asrLanguage.value || null})); await pollTranscription(); }
+    catch (err) { asrStatus.className = "message"; asrStatus.textContent = `无法开始转录：${explainImportError(err.message)}`; asrButton.disabled = false; }
+  });
+  const asrStatus = element("p", "hint", "可选：无字幕时使用本地缓存的 Whisper base，在 CPU 上转录；不下载模型。长视频可能需要较长时间。"); asrStatus.setAttribute("role", "status");
+  importForm.append(asrLanguage, asrButton, asrStatus);
+  let asrTimer = null;
+  async function pollTranscription() {
+    clearTimeout(asrTimer);
+    try {
+      const data = await api("/api/transcription");
+      const busy = data.state === "transcribing" || data.state === "indexing";
+      asrButton.disabled = busy;
+      if (data.message) { asrStatus.textContent = data.message; asrStatus.className = data.state === "failed" ? "message" : "hint"; }
+      if (busy) asrTimer = setTimeout(pollTranscription, 2500);
+      if (data.state === "complete") { await loadLibrary(); await loadBookmarks(); }
+    } catch (err) { asrButton.disabled = false; asrStatus.className = "message"; asrStatus.textContent = `无法获取转录状态：${err.message}。刷新页面可重试。`; }
+  }
   $("courseForm").after(importForm);
   const removeVideo = button("移除当前视频索引", async () => {
     const selected = state.selectedVideo;
@@ -188,7 +211,7 @@
   $("courseSelect").addEventListener("change", async event => { if (!state.selectedVideo) return; const id = state.selectedVideo.id; const courseId = event.target.value ? Number(event.target.value) : null; try { await api(`/api/videos/${encodeURIComponent(id)}/course`, jsonOptions("PUT", { course_id: courseId })); await loadLibrary(); notice("课程归属已更新"); } catch (err) { notice(err.message); renderCourseSelect(); } });
   $("questionForm").addEventListener("submit", async event => { event.preventDefault(); const question = $("question").value.trim(); if (!question) return; if (searchScope.value !== "all" && !state.selectedVideo) { notice("请先选择一个视频"); return; } const payload = { question }; if (searchScope.value === "video") payload.video_id = state.selectedVideo.id; if (searchScope.value === "course") { if (state.selectedVideo.course_id == null) { notice("请先将当前视频归入课程"); return; } payload.course_id = state.selectedVideo.course_id; } state.lastQuestion = question; $("answerHeading").textContent = state.mode === "transcript" ? "字幕检索摘录" : state.mode === "full" ? "AI 回答" : "检索结果"; setSearchBusy(true); $("answer").textContent = "正在查找相关证据……"; $("evidenceList").replaceChildren(); $("feedbackButtons").classList.add("hidden"); $("feedbackComment").value = ""; try { const data = await api("/api/ask", jsonOptions("POST", payload)); $("answer").textContent = data.answer || "没有返回回答。"; if (data.abstained) $("answer").textContent += "\n\n目前没有足够证据，请核对原视频。"; renderEvidence(Array.isArray(data.evidence) ? data.evidence : []); $("feedbackButtons").classList.remove("hidden"); } catch (err) { $("answer").textContent = `无法完成检索：${err.message}`; } finally { setSearchBusy(false); } });
   $("feedbackButtons").addEventListener("click", async event => { const rating = event.target.dataset.rating; if (!rating || !state.lastQuestion) return; try { await api("/api/feedback", jsonOptions("POST", { question: state.lastQuestion, rating, comment: $("feedbackComment").value })); $("feedbackComment").value = ""; if ($("feedbackHistory").open) await loadFeedbackHistory(); notice("感谢反馈，已保存在本机"); } catch (err) { notice(err.message); } });
-  async function init() { try { const health = await api("/api/health"); $("serverStatus").textContent = "服务在线"; const mode = health.mode; state.mode = mode; if (health.visual_enabled && mode === "transcript") { visualButton.classList.remove("hidden"); compareButton.classList.remove("hidden"); } if (mode === "transcript") { importForm.classList.remove("hidden"); removeVideo.classList.remove("hidden"); $("modeNotice").textContent = health.visual_enabled ? "字幕搜索与实验性画面搜索分别运行。画面搜索可能返回不相关结果，请逐一核对。" : health.retrieval_type === "semantic_experimental" ? "实验性英语语义检索：可能返回不相关证据，请回看核对；只展示字幕原文，不理解画面。" : "字幕检索模式：使用关键词匹配和字幕原文摘录，不生成 AI 回答，也不理解视频画面。"; $("answerHeading").textContent = "字幕检索摘录"; $("askHeading").textContent = "搜索视频字幕"; $("question").placeholder = health.visual_enabled ? "输入字幕关键词或英文画面描述" : "输入课程中出现的关键词"; $("submit").textContent = "搜索字幕 ↗"; $("questionHint").textContent = "可选择搜索全部视频、当前视频或当前视频所属课程。请回看原视频核对。"; $("answer").textContent = "输入关键词后，匹配的字幕原文和相关视频片段会显示在这里。"; $("feedbackPrompt").textContent = "这条检索结果有帮助吗？"; } else { $("modeNotice").textContent = mode === "demo" || health.demo === true ? "CPU 演示模式：使用预设片段和简化组件，不能代表真实多模态模型效果。" : mode === "full" ? "完整模式：回答可能有误，请查看视频证据。" : "运行模式未确认：请根据启动方式核实当前服务能力。"; if (mode === "full") $("answerHeading").textContent = "AI 回答"; } } catch (_) { $("serverStatus").textContent = "服务未连接"; $("modeNotice").textContent = "无法连接服务，请检查后端运行状态。"; } try { await loadLibrary(); } catch (err) { $("libraryList").replaceChildren(element("p", "message", `课程加载失败：${err.message}`)); } try { await loadBookmarks(); } catch (err) { $("bookmarks").replaceChildren(element("p", "message", `收藏加载失败：${err.message}`)); } }
+  async function init() { try { const health = await api("/api/health"); $("serverStatus").textContent = "服务在线"; const mode = health.mode; state.mode = mode; if (health.visual_enabled && mode === "transcript") { visualButton.classList.remove("hidden"); compareButton.classList.remove("hidden"); } if (mode === "transcript") { importForm.classList.remove("hidden"); removeVideo.classList.remove("hidden"); pollTranscription(); $("modeNotice").textContent = health.visual_enabled ? "字幕搜索与实验性画面搜索分别运行。画面搜索可能返回不相关结果，请逐一核对。" : health.retrieval_type === "semantic_experimental" ? "实验性英语语义检索：可能返回不相关证据，请回看核对；只展示字幕原文，不理解画面。" : "字幕检索模式：使用关键词匹配和字幕原文摘录，不生成 AI 回答，也不理解视频画面。"; $("answerHeading").textContent = "字幕检索摘录"; $("askHeading").textContent = "搜索视频字幕"; $("question").placeholder = health.visual_enabled ? "输入字幕关键词或英文画面描述" : "输入课程中出现的关键词"; $("submit").textContent = "搜索字幕 ↗"; $("questionHint").textContent = "可选择搜索全部视频、当前视频或当前视频所属课程。请回看原视频核对。"; $("answer").textContent = "输入关键词后，匹配的字幕原文和相关视频片段会显示在这里。"; $("feedbackPrompt").textContent = "这条检索结果有帮助吗？"; } else { $("modeNotice").textContent = mode === "demo" || health.demo === true ? "CPU 演示模式：使用预设片段和简化组件，不能代表真实多模态模型效果。" : mode === "full" ? "完整模式：回答可能有误，请查看视频证据。" : "运行模式未确认：请根据启动方式核实当前服务能力。"; if (mode === "full") $("answerHeading").textContent = "AI 回答"; } } catch (_) { $("serverStatus").textContent = "服务未连接"; $("modeNotice").textContent = "无法连接服务，请检查后端运行状态。"; } try { await loadLibrary(); } catch (err) { $("libraryList").replaceChildren(element("p", "message", `课程加载失败：${err.message}`)); } try { await loadBookmarks(); } catch (err) { $("bookmarks").replaceChildren(element("p", "message", `收藏加载失败：${err.message}`)); } }
   init();
 </script>
 </body>
