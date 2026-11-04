@@ -197,3 +197,48 @@ def test_local_paired_comparison_keeps_queries_private_and_checks_model_revision
         return build_transcript_segments(segments)
     monkeypatch.setattr(onnx_semantic, "build_semantic_pipeline", mutate)
     assert client.post("/api/evaluate", json={"revision": saved["revision"]}).status_code == 409
+
+
+def test_development_excerpts_are_bounded_and_do_not_create_labels(tmp_path):
+    video = tmp_path / "sample.mp4"
+    video.write_bytes(b"video")
+    subs = tmp_path / "sample.srt"
+    subs.write_text("\n".join(f"{i + 1}\n00:{i // 60:02}:{i % 60:02},000 --> 00:{(i + 1) // 60:02}:{(i + 1) % 60:02},000\nExample topic {i}.\n"
+                              for i in range(0, 99, 7)), encoding="utf-8")
+    app = create_label_app(video, tmp_path / "private" / "dev.csv", "sample", "development", 100,
+                           allowed_roots=(tmp_path / "private",), subtitles=subs)
+    client = app.test_client()
+    assert client.get("/api/entries").get_json()["suggestions_available"]
+    result = client.get("/api/development-excerpts")
+    assert result.status_code == 200
+    excerpts = result.get_json()["excerpts"]
+    assert len(excerpts) == 12
+    assert len({item["start"] for item in excerpts}) == len(excerpts)
+    assert client.get("/api/entries").get_json()["count"] == 0
+    assert client.get("/api/development-excerpts", headers={"Origin": "https://outside.example"}).status_code == 403
+    reserved = create_label_app(video, tmp_path / "private" / "test.csv", "reserved", "test", 100,
+                                allowed_roots=(tmp_path / "private",), subtitles=subs).test_client()
+    assert not reserved.get("/api/entries").get_json()["suggestions_available"]
+    assert reserved.get("/api/development-excerpts").status_code == 409
+    validation = create_label_app(video, tmp_path / "private" / "validation.csv", "validation", "validation", 100,
+                                  allowed_roots=(tmp_path / "private",), subtitles=subs).test_client()
+    assert not validation.get("/api/entries").get_json()["suggestions_available"]
+    assert validation.get("/api/development-excerpts").status_code == 409
+
+
+def test_development_excerpts_reject_source_mutation(tmp_path, monkeypatch):
+    from scripts import temporal_label_server as module
+
+    video = tmp_path / "sample.mp4"
+    video.write_bytes(b"video")
+    subs = tmp_path / "sample.srt"
+    subs.write_text("1\n00:00:03,000 --> 00:00:08,000\nAttention mechanism.\n", encoding="utf-8")
+    app = create_label_app(video, tmp_path / "private" / "dev.csv", "sample", "development", 100,
+                           allowed_roots=(tmp_path / "private",), subtitles=subs)
+    original = module.segments_from_subtitles
+    def mutate(*args):
+        segments = original(*args)
+        subs.write_text("changed", encoding="utf-8")
+        return segments
+    monkeypatch.setattr(module, "segments_from_subtitles", mutate)
+    assert app.test_client().get("/api/development-excerpts").status_code == 409

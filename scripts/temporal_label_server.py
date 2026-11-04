@@ -160,7 +160,31 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         except (OSError, UnicodeError, ValueError):
             return jsonify({"error": "Unable to read the annotation file"}), 500
         return jsonify({"count": len(rows), "revision": revision, "split": split, "duration": duration,
-                        "evaluation_available": subtitles is not None and split != "test", "entries": rows})
+                        "evaluation_available": subtitles is not None and split != "test",
+                        "suggestions_available": subtitles is not None and split == "development", "entries": rows})
+
+    @app.get("/api/development-excerpts")
+    def development_excerpts():
+        """Offer evenly sampled transcript segments, never suggested answers or labels."""
+        if subtitles is None or split != "development":
+            return jsonify({"error": "Excerpts are available only for development with subtitles"}), 409
+        try:
+            if fingerprint(video) != binding["video_sha256"]:
+                return jsonify({"error": "Video changed; check the source"}), 409
+            subtitle_hash = fingerprint(subtitles)
+            segments = segments_from_subtitles(video, subtitles)
+            if max(segment.end_time for segment in segments) > duration + 1:
+                return jsonify({"error": "Subtitle timestamps exceed the video duration"}), 400
+            count = min(12, len(segments))
+            positions = [0] if count == 1 else [round(i * (len(segments) - 1) / (count - 1)) for i in range(count)]
+            excerpts = [{"start": segments[i].start_time, "end": segments[i].end_time,
+                         "text": segments[i].transcript[:500]} for i in positions]
+            if fingerprint(video) != binding["video_sha256"] or fingerprint(subtitles) != subtitle_hash:
+                return jsonify({"error": "An input changed while preparing excerpts"}), 409
+            return jsonify({"excerpts": excerpts,
+                            "warning": "Transcript text may be wrong. Excerpts are not questions or verified evidence."})
+        except (OSError, UnicodeError, ValueError, RuntimeError):
+            return jsonify({"error": "Could not prepare local transcript excerpts"}), 400
 
     @app.post("/api/evaluate")
     def evaluate_drafts():
