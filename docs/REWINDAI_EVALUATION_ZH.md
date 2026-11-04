@@ -58,6 +58,16 @@
 实验记录模板：`data/evaluation/rewindai_experiment_template.md`。分别记录每组配置、分母、结果、错误例子与限制，禁止将候选题、模拟演示或未运行实验标为正式结果。必要时先在私有目录整理题目，再使用 `scripts/validate_questions.py --help` 和 `scripts/evaluate_retrieval.py --help` 检查工具要求；检索工具需要真实索引和模型，不能只靠模板运行。
 # 本地时间范围诊断
 
+## 使用本地页面收集题目草稿
+
+安装 PyAV 后，可为单个视频启动标注页面（先选定开发、验证或测试划分，每个视频使用独立的新输出文件）：
+
+```powershell
+python scripts/temporal_label_server.py --video PATH_TO_LOCAL_VIDEO --video-id lecture_dev --split development --output artifacts/evaluation/lecture-dev-drafts.csv
+```
+
+在同一台电脑打开 `http://127.0.0.1:5095/`。播放视频并检查上下文，填写问题和参考答案，用按钮记录当前播放时间作为证据起止；无答案题要写明完整检查过的范围。每个 CSV 同时只运行一个标注服务。页面只添加草稿，不能修改或删除已有记录；若需在外部编辑 CSV，先停止服务。输出 CSV 及旁边的 `.source.json` 含私人数据，应留在本机。启动时用视频 SHA-256 绑定输出；运行期间通过文件大小和修改时间检测变化，不能证明内容始终未变。页面无法验证用户是否观看或独立复核；这些题仍须人工核验，不能因为保存而称为正式标签。
+
 对已经准备好的本地视频、字幕与问题 JSON，可运行：
 
 ```powershell

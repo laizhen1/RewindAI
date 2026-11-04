@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RewindAI · Local evidence labels</title>
+<style>
+  body{font:16px system-ui,sans-serif;background:#f5f6f1;color:#26332f;margin:0;padding:24px}
+  main{max-width:1100px;margin:auto}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  section{background:white;border:1px solid #dce5db;border-radius:12px;padding:20px}
+  video{width:100%;background:#14231b}label{display:block;margin:12px 0 4px;font-weight:600}
+  input,textarea,select{font:inherit;width:100%;box-sizing:border-box;padding:8px}textarea{min-height:72px}
+  button{font:inherit;padding:8px 12px;margin:8px 8px 0 0;cursor:pointer}button:disabled{opacity:.5}
+  .hint{color:#53685b;font-size:.9rem;line-height:1.5}.status{white-space:pre-wrap}
+  @media(max-width:750px){.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<h1>Local evidence labels / 本地证据标注</h1>
+<p class="hint">Watch the original video and check the surrounding context. Draft labels do not prove accuracy or independent review. This page stores questions on this computer only.</p>
+<div class="grid"><section><h2>Video / 视频</h2><video id="video" controls preload="metadata"></video>
+<p class="hint">Seek to the start and end of the evidence, then use the buttons below. Times are seconds.</p>
+<button id="markStart" type="button">Use current time as start</button><button id="markEnd" type="button">Use current time as end</button>
+<p id="progress" class="hint" aria-live="polite"></p></section>
+<section><h2>New draft / 新草稿</h2><form id="form">
+<label for="question">Question / 问题</label><textarea id="question" maxlength="4000" required></textarea>
+<label for="kind">Evidence type / 证据类型</label><select id="kind"><option value="audio">Audio / 语音</option><option value="visual">Visual / 画面</option><option value="ocr">Text on screen / 画面文字</option><option value="multimodal">Audio and visual / 综合</option><option value="unknown_route">Uncertain / 未确定</option></select>
+<label for="answerable">Answerable in checked scope? / 检查范围内能否回答？</label><select id="answerable"><option value="true">Yes / 可以</option><option value="false">No / 不能</option></select>
+<div id="positive"><label for="answer">Reference answer / 参考答案</label><textarea id="answer" maxlength="4000"></textarea>
+<label for="start">Evidence start (seconds) / 开始时间（秒）</label><input id="start" type="number" min="0" step="0.001">
+<label for="end">Evidence end (seconds) / 结束时间（秒）</label><input id="end" type="number" min="0" step="0.001"></div>
+<div id="negative" hidden><label for="scope">What complete scope did you check? / 完整检查过的范围</label><textarea id="scope" maxlength="4000"></textarea><p class="hint">Do not call a whole video unanswerable after checking only a few clips.</p></div>
+<button id="save" type="submit">Save local draft / 保存本地草稿</button><p id="status" class="status" role="status"></p>
+</form></section></div></main><script>
+const $=id=>document.getElementById(id); let revision=null;
+async function refresh(){const r=await fetch('/api/entries');const data=await r.json();if(!r.ok)throw Error(data.error||'Could not load labels');revision=data.revision;$('progress').textContent=`${data.count} local drafts · ${data.split} · ${Math.round(data.duration)} seconds`;}
+function toggle(){const yes=$('answerable').value==='true';$('positive').hidden=!yes;$('negative').hidden=yes;}
+$('answerable').addEventListener('change',toggle);
+function mark(id){const t=$('video').currentTime;if(Number.isFinite(t))$(id).value=String(Math.floor(t*1000)/1000);}
+$('markStart').addEventListener('click',()=>mark('start'));$('markEnd').addEventListener('click',()=>mark('end'));
+$('form').addEventListener('submit',async e=>{e.preventDefault();if(!revision){$('status').textContent='Annotations not loaded.';return;}
+ const yes=$('answerable').value==='true';const data={revision,question:$('question').value,question_type:$('kind').value,answerable:yes,answer:yes?$('answer').value:'',checked_scope:yes?'':$('scope').value};
+ if(yes){data.start=$('start').value===''?null:Number($('start').value);data.end=$('end').value===''?null:Number($('end').value);}
+ const controls=[...$('form').querySelectorAll('input,textarea,select,button'),$('markStart'),$('markEnd')];controls.forEach(node=>node.disabled=true);
+ try{const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw Error(result.error||'Save failed');revision=result.revision;$('form').reset();toggle();$('progress').textContent=`${result.count} local drafts`;$('status').textContent='Saved locally as a draft. Please review it against the original video.';}catch(err){$('status').textContent=err.message;}finally{controls.forEach(node=>node.disabled=false);}
+});
+$('video').src='/video';refresh().catch(err=>{$('status').textContent=err.message});
+</script></body></html>

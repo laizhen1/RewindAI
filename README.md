@@ -128,6 +128,14 @@ The workspace displays the latest 100 local feedback records and aggregates all 
 
 Candidate questions are diagnostic material, not a fully reviewed gold standard. Review answers and evidence against video, split by video, and separately assess audio, visual, combined and unanswerable questions. Do not present provisional results as verified accuracy.
 
+To collect time-labeled drafts locally without editing a CSV by hand, install PyAV (`pip install -e ".[asr]"`) and run:
+
+```powershell
+python scripts/temporal_label_server.py --video PATH_TO_LOCAL_VIDEO --video-id lecture_dev --split development --output artifacts/evaluation/lecture-dev-drafts.csv
+```
+
+Open `http://127.0.0.1:5095/` on the same computer. Play the video, enter a question and reference answer, and mark the evidence start and end. For an unanswerable question, describe the complete scope actually checked. Entries are **drafts**, not proof of independent review; the page does not verify that you watched the material. The CSV and its source-binding sidecar contain private data and must remain local. The sidecar binds the file to the video's SHA-256 at startup; during the session, changes are detected using size and modification time, which is not a full integrity guarantee. Use a separate output for each video and split, and run only one labeling server per CSV. Stop the server before editing its CSV externally; the page can add entries but cannot edit or delete existing ones. The data can be converted with the documented local evaluation tools, subject to independent review and split checks.
+
 In an exploratory TutorialVQA subset of 18 instructional videos and 294 questions, reference-sentence overlap gave keyword Precision / Recall / F1 of **0.394 / 0.095 / 0.153**, and experimental English semantic retrieval **0.388 / 0.129 / 0.194**. These numbers measure transcript sentence overlap, not video timestamps or answer correctness. The dataset has no unanswerable questions, and the subset was included in earlier exploratory analysis; it is not a pristine final test set.
 
 On a separate YTCommentQA sample of 284 annotated instructional-video snippets, treating any keyword retrieval candidate as a positive answerability prediction produced precision / recall / F1 of **0.939 / 0.413 / 0.573**, with candidates returned for **6 of 61** snippets labeled unanswerable. On the same questions, experimental semantic retrieval produced **0.945 / 0.614 / 0.745**, with candidates on **8 of 61** unanswerable snippets. This is a snippet-level heuristic comparison, not answer accuracy or whole-video performance; see the [method and exclusions](docs/INITIAL_EVALUATION.md#ytcommentqa-independent-snippet-level-retrieval-proxy).
