@@ -248,3 +248,29 @@ To save a local report rather than printing detailed questions, append:
 ```
 
 The output must be a new JSON file under `artifacts/` or `local_data/`; existing files are not overwritten. `--aggregate-only` omits per-question results, while `--record-hashes` checks video, subtitles, questions, tokenizer and model file SHA-256 before and after the run and records them with the thresholds and UTC time. Hashing long videos can be slow. These hashes and aggregate results can still be sensitive; keep them local. A report does not capture every dependency, hardware setting or code revision, so record those separately before claiming reproducibility.
+
+
+## YTCommentQA: independent snippet-level retrieval proxy
+
+We evaluated the keyword transcript pipeline against independently collected [YTCommentQA](https://github.com/lgresearch/YTCommentQA) labels from Yang et al., [AAAI 2024](https://ojs.aaai.org/index.php/AAAI/article/view/29906). The repository describes naturally occurring instructional-video questions, caption evidence IDs, and labels for answerability from visual, script, combined, or neither; it lists the dataset repository under the MIT license. Video and transcript rights may differ. We obtained the public `dataset.json` locally; no videos, audio or Canvas data were downloaded or uploaded. The source file had Git blob SHA-1 `5298bd108374c10bde5357048bcccccc8ffbc596` and SHA-256 `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc368`.
+
+This is an **exploratory proxy**, not a question-answering or video-wide answerability benchmark. Each question is given only the dataset's annotated caption snippet, with each caption sentence indexed as a separate segment. We predict positive whenever keyword retrieval returns any segment, and negative when it returns none. We compare this heuristic against questions labeled script-answerable (including those also answerable visually) versus questions labeled unanswerable in the annotation context. We exclude visual-only and combined-required questions because they cannot be treated as negative for the same task. The authors annotated snippets around reply timestamps; a snippet-level unanswerable label does not establish that an entire video has no answer. A returned keyword match does not establish that the snippet supports an answer. The app normally groups subtitle cues differently, and the original videos and source audio were not inspected.
+
+For a deterministic sample, compute SHA-256 of each video ID and include it when the first eight bytes as a big-endian integer are divisible by five. This keeps questions from the same video together; it is our sampling rule, not an official test split. Of 446 selected records, 145 visual-only/combined-only records were excluded, 17 had invalid evidence-caption time/text values, and **284 questions from 239 videos** remained. No setting was tuned on this sample during this run.
+
+| Snippet-level proxy count | Value |
+| --- | ---: |
+| True positives / false positives | 92 / 6 |
+| False negatives / true negatives | 131 / 55 |
+| Precision / recall / F1 | **0.939 / 0.413 / 0.573** |
+| Unanswerable snippets returning a candidate | 6 / 61 |
+
+The positive prevalence is high and this deliberately simplified proxy has low recall. The values are not answer accuracy, full-video retrieval accuracy, model-calibrated confidence, or comparable to the paper's answerability classifiers. These are public YouTube how-to material rather than university lectures, and model pretraining overlap is unknown. The exclusion of invalid cues may introduce bias. Even when the heuristic agrees with an answerability label, no answer is generated or checked. Use independent, reviewed course-specific and visual tests before making portfolio performance claims.
+
+To reproduce, obtain the repository's public `dataset.json` separately and keep it outside version control, then run:
+
+```powershell
+python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_LOCAL_DATASET_JSON --sample sample
+```
+
+`other` and `all` are available for exploration. The script reads the dataset locally and outputs aggregate counts only; model/video downloads and private material are not involved. Attribution: Saelyne Yang, Sunghyun Park, Yunseok Jang and Moontae Lee, *YTCommentQA: Video Question Answerability in Instructional Videos*, AAAI 2024, DOI 10.1609/aaai.v38i17.29906.

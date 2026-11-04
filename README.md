@@ -123,6 +123,8 @@ Candidate questions are diagnostic material, not a fully reviewed gold standard.
 
 In an exploratory TutorialVQA subset of 18 instructional videos and 294 questions, reference-sentence overlap gave keyword Precision / Recall / F1 of **0.394 / 0.095 / 0.153**, and experimental English semantic retrieval **0.388 / 0.129 / 0.194**. These numbers measure transcript sentence overlap, not video timestamps or answer correctness. The dataset has no unanswerable questions, and the subset was included in earlier exploratory analysis; it is not a pristine final test set.
 
+On a separate YTCommentQA sample of 284 annotated instructional-video snippets, treating any keyword retrieval candidate as a positive answerability prediction produced precision / recall / F1 of **0.939 / 0.413 / 0.573**, with candidates returned for **6 of 61** snippets labeled unanswerable. This is a snippet-level heuristic comparison, not answer accuracy or whole-video performance; see the [method and exclusions](docs/INITIAL_EVALUATION.md#ytcommentqa-independent-snippet-level-retrieval-proxy).
+
 Visual retrieval has only a small public-video frame diagnostic with assistant-drafted, independently unreviewed labels. It does not establish reliable visual F1. Private lecture recordings, labels and detailed results must stay local. See:
 
 - [Evaluation plan (Chinese)](docs/REWINDAI_EVALUATION_ZH.md)
