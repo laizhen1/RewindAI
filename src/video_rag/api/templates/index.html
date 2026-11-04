@@ -83,7 +83,7 @@
     if (searchScope.value === "course") { if (state.selectedVideo.course_id == null) { notice("请先将当前视频归入课程"); return; } payload.course_id = state.selectedVideo.course_id; }
     state.lastQuestion = question; $("answerHeading").textContent = "画面检索候选"; visualButton.disabled = true; $("submit").disabled = true;
     $("answer").textContent = "正在本机分析视频帧，首次运行可能较慢……"; $("evidenceList").replaceChildren(); $("feedbackButtons").classList.add("hidden");
-    try { const data = await api("/api/visual-search", jsonOptions("POST", payload)); $("answer").textContent = "以下是相似画面候选，并非确认的答案。即使视频没有相关内容，也可能返回结果；请逐一回看核对。"; renderEvidence(data.evidence || [], "相似画面候选（未验证）"); }
+    try { const data = await api("/api/visual-search", jsonOptions("POST", payload)); $("answer").textContent = "以下是相似画面候选，并非确认的答案。即使视频没有相关内容，也可能返回结果；请逐一回看核对。" + (data.sampled ? `\n\n仅抽取 ${data.indexed_segments} / ${data.source_segments} 个片段的画面搜索，未抽取的内容可能被遗漏。` : `\n\n已搜索 ${data.indexed_segments} 个片段的中点画面，其他时刻可能被遗漏。`); renderEvidence(data.evidence || [], "相似画面候选（未验证）"); }
     catch (err) { $("answer").textContent = `画面搜索失败：${err.message}`; }
     finally { visualButton.disabled = false; $("submit").disabled = false; }
   });

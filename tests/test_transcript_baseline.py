@@ -260,7 +260,7 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(client.post("/api/visual-search", json={"question": "x", "course_id": course,
                                                                   "video_id": videos["other.mp4"]}).status_code, 400)
 
-    def test_visual_limit_applies_to_selected_scope(self):
+    def test_visual_sampling_is_reported_and_selected_scope_remains_precise(self):
         segments = [VideoSegment(f"a{i}", "large", str(self.video), float(i), float(i + 1), transcript="a")
                     for i in range(101)]
         segments.append(VideoSegment("small-0", "small", str(self.video), 0.0, 1.0, transcript="b"))
@@ -269,10 +269,13 @@ class TranscriptBaselineTests(unittest.TestCase):
                 return [SearchHit("small-0", 0.2, "visual", 1)]
         client = create_app(build_transcript_segments(segments), database_path=self.base / "limit.sqlite3",
                             mode="transcript", visual_builder=lambda values: FakeVisual()).test_client()
-        self.assertEqual(client.post("/api/visual-search", json={"question": "image"}).status_code, 400)
+        large_scope = client.post("/api/visual-search", json={"question": "image"}).get_json()
+        self.assertTrue(large_scope["sampled"])
+        self.assertEqual((large_scope["source_segments"], large_scope["indexed_segments"]), (102, 100))
         response = client.post("/api/visual-search", json={"question": "image", "video_id": "small"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["evidence"][0]["video_id"], "small")
+        self.assertFalse(response.get_json()["sampled"])
 
     def test_course_search_filters_evidence_and_handles_empty_or_invalid_scope(self):
         other = self.base / "other.mp4"

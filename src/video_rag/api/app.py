@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from video_rag.api.library import LibraryStore
+from video_rag.api.visual_sampling import sample_visual_segments
 from video_rag.pipeline import VideoRAGPipeline
 from video_rag.schemas import VideoSegment
 
@@ -360,23 +361,28 @@ def create_app(
                     segments = tuple(segment for segment in segments if assignments.get(segment.video_id) == course_id)
                 if not segments:
                     return jsonify({"error": "No loaded videos in the selected scope"}), 400
-                if len(segments) > 100:
-                    return jsonify({"error": "Visual prototype supports at most 100 segments in the selected scope"}), 400
-                scope_key = tuple(sorted(segment.segment_id for segment in segments))
+                total = len(segments)
+                try:
+                    selected = sample_visual_segments(segments, limit=100)
+                except ValueError as exc:
+                    return jsonify({"error": str(exc)}), 400
+                scope_key = tuple(sorted(segment.segment_id for segment in selected))
                 if visual_index is None or visual_key != scope_key:
-                    candidate = visual_builder(list(segments))
+                    candidate = visual_builder(selected)
                     visual_index = candidate
                     visual_key = scope_key
                 hits = visual_index.search(question.strip(), 3)
-                lookup = {segment.segment_id: segment for segment in segments}
+                lookup = {segment.segment_id: segment for segment in selected}
                 evidence = [{"segment_id": hit.segment_id, "video_id": lookup[hit.segment_id].video_id,
                              "start_time": lookup[hit.segment_id].start_time,
                              "end_time": lookup[hit.segment_id].end_time, "score": hit.score}
                             for hit in hits if hit.segment_id in lookup]
         except (OSError, RuntimeError, ValueError, ImportError):
             return jsonify({"error": "Visual indexing or search failed; check local model and videos"}), 503
-        return jsonify({"evidence": evidence, "warning": "Visual similarity is not proof of relevance; "
-                                                       "results can be wrong even when nothing matches."})
+        return jsonify({"evidence": evidence, "source_segments": total, "indexed_segments": len(selected),
+                        "sampled": len(selected) < total,
+                        "warning": "Visual similarity is not proof of relevance; results can be wrong "
+                                   "even when nothing matches. Unindexed segments are not searched."})
 
     @app.get("/api/videos/<video_id>")
     def video(video_id: str):
