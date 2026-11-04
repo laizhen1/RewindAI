@@ -150,7 +150,17 @@
     $("nowPlaying").textContent = video.available ? `从 ${fmt(startTime)} 开始 · 点击播放或继续提问` : "视频源文件不可用，无法播放。";
     $("assignWrap").classList.remove("hidden"); renderCourseSelect(); renderLibrary();
     if (!video.available) { player.removeAttribute("src"); player.load(); return; }
-    const seek = () => { player.currentTime = Math.max(0, Number(startTime) || 0); if (autoplay) player.play().catch(() => {}); };
+    const seek = () => {
+      const target = Math.max(0, Number(startTime) || 0);
+      if (Number.isFinite(player.duration) && target >= player.duration && target > 0) {
+        player.pause();
+        $("nowPlaying").textContent = `无法跳转：证据开始时间 ${fmt(target)} 超出视频时长 ${fmt(player.duration)}。请检查字幕与视频是否匹配。`;
+        notice("字幕时间超出视频时长，请检查字幕和视频是否匹配。");
+        return;
+      }
+      player.currentTime = target;
+      if (autoplay) player.play().catch(() => {});
+    };
     const url = safeVideoUrl(video.id);
     const waitForMetadata = () => { pendingSeek = () => { pendingSeek = null; seek(); }; player.addEventListener("loadedmetadata", pendingSeek, { once: true }); };
     if (player.getAttribute("src") !== url) { player.src = url; waitForMetadata(); player.load(); } else if (player.readyState >= 1) seek(); else waitForMetadata();
