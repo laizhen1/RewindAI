@@ -29,7 +29,7 @@ def test_literal_refusal_proxy_is_not_retrieval_abstention(monkeypatch):
             return SimpleNamespace(evidence=[object()], answer='Insufficient evidence in the provided excerpts.' if question == 'no' else 'red')
 
     monkeypatch.setattr('scripts.evaluate_ytcommentqa_local_answers.evidence_segments', lambda row: row)
-    monkeypatch.setattr('scripts.evaluate_ytcommentqa_local_answers.build_transcript_segments', lambda segments, generator: Pipeline(segments))
-    result = score([('a', True, {'question': 'yes'}), ('b', False, {'question': 'no'})], object())
+    builder = lambda segments, generator: Pipeline(segments)
+    result = score([('a', True, {'question': 'yes'}), ('b', False, {'question': 'no'})], object(), builder)
     assert result['retrieval']['fp'] == 1 and result['retrieval']['tp'] == 1
     assert result['exact_refusal_proxy']['tn'] == 1 and result['exact_refusal_proxy']['tp'] == 1

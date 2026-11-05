@@ -35,6 +35,7 @@ def prepare_review(pipeline, data: dict) -> list[dict]:
         rows.append({
             'question_id': item.get('question_id'), 'question': item['question'],
             'expected_answerable': answerable, 'expected_answer': item.get('expected_answer'),
+            'annotation_source': item.get('annotation_source', 'not_recorded'),
             'reference_interval': [item.get('evidence_start_seconds'), item.get('evidence_end_seconds')],
             'answer': answer.answer, 'retrieval_abstained': answer.abstained,
             'evidence': [{'start': hit.segment.start_time, 'end': hit.segment.end_time,

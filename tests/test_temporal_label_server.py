@@ -254,3 +254,22 @@ def test_development_excerpts_reject_source_mutation(tmp_path, monkeypatch):
         return segments
     monkeypatch.setattr(module, "segments_from_subtitles", mutate)
     assert app.test_client().get("/api/development-excerpts").status_code == 409
+
+
+def test_model_suggestion_origin_is_preserved_in_development_only(labeler):
+    client, video, output, tmp = labeler
+    initial = client.get('/api/entries').get_json()
+    payload = {'revision': initial['revision'], 'question': 'What is the topic?', 'question_type': 'audio',
+               'answerable': True, 'answer': 'A topic', 'start': 3.0, 'end': 8.0,
+               'model_generated_candidate': True}
+    assert client.post('/api/entries', json=payload).status_code == 201
+    with output.open(encoding='utf-8', newline='') as f:
+        rows = list(csv.DictReader(f))
+    prepared = prepare(rows, 'sample', 'development')
+    assert prepared['questions'][0]['annotation_source'] == 'model_generated_candidate_unverified'
+    entry = client.get('/api/entries').get_json()['entries'][0]
+    assert entry['notes'] == 'model_generated_candidate'
+    validation = create_label_app(video, tmp / 'private' / 'validation.csv', 'sample', 'validation', 100,
+                                  allowed_roots=(tmp / 'private',)).test_client()
+    payload['revision'] = validation.get('/api/entries').get_json()['revision']
+    assert validation.post('/api/entries', json=payload).status_code == 400

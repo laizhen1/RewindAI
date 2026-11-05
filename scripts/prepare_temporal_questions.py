@@ -56,6 +56,10 @@ def prepare(rows: list[dict], video_id: str, split: str | None = None) -> dict:
         answerable = answerable_raw == "true"
         item = {"question_id": qid, "question": question, "question_type": kind,
                 "expected_answerable": answerable}
+        if field(row, "notes") == "model_generated_candidate":
+            if effective_split != "development" or not answerable:
+                raise ValueError("Model-generated candidates are restricted to answerable development questions")
+            item["annotation_source"] = "model_generated_candidate_unverified"
         if answerable:
             try:
                 start = float(field(row, "evidence_start_seconds"))

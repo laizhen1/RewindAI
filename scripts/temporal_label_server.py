@@ -293,6 +293,9 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             return jsonify({"error": "A question is required"}), 400
         question, answer, scope = (payload.get(key, "") for key in ("question", "answer", "checked_scope"))
         kind, answerable = payload.get("question_type"), payload.get("answerable")
+        candidate = payload.get("model_generated_candidate", False)
+        if type(candidate) is not bool or (candidate and (split != "development" or answerable is not True)):
+            return jsonify({"error": "Model suggestions are allowed only for answerable development drafts"}), 400
         if (not all(isinstance(value, str) and len(value) <= 4000 for value in (question, answer, scope))
                 or not question.strip() or not isinstance(kind, str) or kind not in TYPES or type(answerable) is not bool):
             return jsonify({"error": "Provide a question and valid question type"}), 400
@@ -306,6 +309,8 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                     or not math.isfinite(start) or not math.isfinite(end) or not 0 <= start < end <= duration):
                 return jsonify({"error": "Provide an answer and an evidence range within the video"}), 400
             row.update(evidence_start_seconds=str(start), evidence_end_seconds=str(end))
+            if candidate:
+                row["notes"] = "model_generated_candidate"
         elif not scope.strip() or answer.strip() or payload.get("checked_entire_video") is not True:
             return jsonify({"error": "Check the entire video, describe the scope, and leave the answer empty"}), 400
         else:
@@ -326,7 +331,7 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                         return jsonify({"error": "Draft not found"}), 404
                     old = rows[positions[0]]
                     if (old["annotation_status"] != "draft_unverified" or old["evidence_frame_seconds"]
-                            or old["notes"] not in {"", "scope_declared_entire_video"}):
+                            or old["notes"] not in {"", "scope_declared_entire_video", "model_generated_candidate"}):
                         return jsonify({"error": "This record has additional review data; edit it externally with the server stopped"}), 409
                     rows[positions[0]] = row
                 temp_name = None

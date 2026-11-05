@@ -15,6 +15,14 @@ python scripts/evaluate_local_answers.py --video PATH_TO_VIDEO --subtitles PATH_
 ```
 
 The question JSON uses the same `questions` structure as the prepared temporal question files. The script rejects test-split files, fingerprints inputs before and after execution, and writes only to a new JSON file under `artifacts/` or `local_data/`. A source-bound question file is checked against the supplied video and subtitles; unbound files are marked as such. Results include question text, draft answers, retrieved excerpts, timings, input fingerprints and the recorded generation configuration. Keep private course outputs local. Human answer and evidence verdicts start empty; retrieval abstention is not a judgment that a generated answer is correct. Review the source recording, references and each claim before calculating or presenting metrics.
+## Optional local development suggestions
+
+`generate_development_questions.py` can draft questions from sampled subtitles with an existing local model, writing a new JSON and readable Markdown file only under ignored local directories. It never changes question labels or runs on a test split. These are model-generated, can hallucinate, inherit transcript errors and sampling bias, and are not independently authored questions. Watch the video, verify every question, answer and time, and select **Model suggestion** as the question origin when entering it in the development labeler. The source marker is carried into answer-review drafts. Do not treat these suggestions as an independent evaluation set or upload private course content.
+
+```bash
+python scripts/generate_development_questions.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --model PATH_TO_GGUF --output artifacts/private_lecture_review/suggestions.json --count 8
+```
+
 ## Start from local question labels
 
 For labels created in the local temporal-label page, the helper below verifies that the CSV is bound to the same video and that its split is development or validation. It creates answer drafts using CPU inference, then starts the review page. The final test split is reserved. All inputs and outputs stay local.
@@ -86,3 +94,16 @@ With both prompt texts fixed after the development investigation, we selected 25
 | Balanced prompt, exact-refusal proxy | 4 | 1 | 21 | 24 | 0.800 | 0.160 | 0.267 |
 
 This repeats the direction of the development-sample trade-off, but positive counts are only two and four, respectively, and the exact-string heuristic can misclassify refusals phrased differently. These are class-balanced answerability proxies, not generated-answer correctness. Both prompts used the same dataset/model fingerprints and CPU settings described above; no course material was involved. The balanced prompt remains experimental, and the workspace default is unchanged. Repeat with `--partition other` and separate output paths for `--prompt strict` and `--prompt balanced`. Avoid further tuning on this partition; evaluate answer quality and evidence on independently reviewed recordings.
+## Semantic retrieval on the existing development sample
+
+We repeated the same 50 balanced development snippets with the local quantized MiniLM encoder revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`, English-only, CPU, and the previously used uncalibrated 0.4 threshold. The Qwen model and prompt configurations were unchanged. The same question and caption snippet were used as in the keyword runs.
+
+| Development-sample rule | TP | FP | FN | TN | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Semantic retrieval: any candidate | 15 | 4 | 10 | 21 | 0.789 | 0.600 | 0.682 |
+| Semantic + strict prompt: exact-refusal proxy | 2 | 0 | 23 | 25 | 1.000 | 0.080 | 0.148 |
+| Semantic + balanced prompt: exact-refusal proxy | 5 | 1 | 20 | 24 | 0.833 | 0.200 | 0.323 |
+
+The keyword counterparts on this same development set were 9/4/16/21 for retrieval, 1/0/24/25 for strict and 3/1/22/24 for balanced. An exact-refusal match is a narrow heuristic and other refusal wording counts as a positive; the evaluation does not check generated-answer correctness. The selected evidence window is supplied in advance and all earlier caveats about dataset labels, prompt tuning, balanced sampling, pretraining and lack of source-video review apply. These figures are not course performance and do not establish a general improvement. The workspace defaults remain keyword retrieval and the strict prompt.
+
+To reproduce this exploratory run, add `--semantic-model PATH_TO_LOCAL_MINILM` and use a new local output path. No threshold was selected using the video-disjoint partition; further tuning requires new independent data.

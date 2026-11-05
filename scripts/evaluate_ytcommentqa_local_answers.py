@@ -77,10 +77,10 @@ def select_cases(dataset: dict, per_class: int, sample: str = "sample") -> list[
     return [(key, positive, row) for _, key, positive, row in selected]
 
 
-def score(cases: list[tuple[str, bool, dict]], generator) -> dict:
+def score(cases: list[tuple[str, bool, dict]], generator, builder=build_transcript_segments) -> dict:
     counts = {'retrieval': Counter(), 'exact_refusal_proxy': Counter()}
     for _, positive, row in cases:
-        pipeline = build_transcript_segments(evidence_segments(row), generator=generator)
+        pipeline = builder(evidence_segments(row), generator=generator)
         result = pipeline.ask(row['question'])
         retrieved = bool(result.evidence)
         answer = ' '.join(result.answer.lower().split()).rstrip('.! ')
@@ -105,6 +105,7 @@ def main() -> int:
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--per-class', type=int, default=25)
     parser.add_argument('--partition', choices=['sample', 'other'], default='sample')
+    parser.add_argument('--semantic-model', type=Path, help='Optional local MiniLM directory for experimental semantic retrieval')
     parser.add_argument('--prompt', choices=['strict', 'balanced'], default='strict',
                         help='Balanced is an experimental alternate prompt, not the workspace default')
     args = parser.parse_args()
@@ -112,17 +113,31 @@ def main() -> int:
         target = private_output(args.output)
         if target.suffix.lower() != '.json' or target.exists():
             raise ValueError('Choose a new local JSON output')
-        before = {'dataset': fingerprint(args.dataset), 'model': fingerprint(args.model)}
+        sources = {'dataset': args.dataset, 'model': args.model}
+        if args.semantic_model:
+            sources.update({'semantic_tokenizer': args.semantic_model / 'tokenizer.json',
+                            'semantic_model': args.semantic_model / 'onnx' / 'model_quantized.onnx'})
+        before = {key: fingerprint(path) for key, path in sources.items()}
         dataset = json.loads(args.dataset.read_text(encoding='utf-8-sig'))
         cases = select_cases(dataset, args.per_class, args.partition)
         generator = (BalancedExperimentGenerator(args.model) if args.prompt == 'balanced'
                      else LocalAnswerGenerator(args.model))
-        metrics = score(cases, generator)
-        if fingerprint(args.dataset) != before['dataset'] or fingerprint(args.model) != before['model']:
+        builder = build_transcript_segments
+        if args.semantic_model:
+            from video_rag.retrieval.onnx_semantic import (
+                OnnxSentenceEncoder,
+                build_semantic_pipeline,
+            )
+
+            encoder = OnnxSentenceEncoder(args.semantic_model)
+            builder = lambda segments, generator: build_semantic_pipeline(segments, encoder, 0.4, generator=generator)
+        metrics = score(cases, generator, builder)
+        if any(fingerprint(path) != before[key] for key, path in sources.items()):
             raise ValueError('Input changed; discard run')
         result = {'status': 'exploratory_snippet_proxy', 'input_sha256': before,
                   'sample': args.partition, 'per_class': args.per_class,
                   'videos': len({row['videoID'] for _, _, row in cases}),
+                  'retrieval_type': 'semantic_0.4_uncalibrated' if args.semantic_model else 'keyword',
                   'generation_config': generator.metadata(), 'metrics': metrics,
                   'warning': 'Balanced snippet-level labels; exact refusal string heuristic. '
                              'Not answer correctness, full-video answerability, or independent final test.'}
