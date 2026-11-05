@@ -26,6 +26,18 @@
 
 字幕检索、实验性画面检索和画面预览在处理结束后会再次检查视频源；发现变化时不返回该结果。此检查无法发现文件大小与修改时间都保持不变的替换，也无法防止最终检查之后发生的变化。
 
+## 实验性本地 AI 回答
+
+可选模式使用本机 `llama-cpp-python` 和已有 GGUF 模型，在 CPU 上根据检索到的字幕生成回答；推理不会联网。回答可能编造、误解字幕或受到字幕中指令的影响。检索片段和时间戳只是候选证据，请回看原视频核对；没有检索到内容不代表整部视频没有答案。该模式只处理文本，不理解画面，尚未用人工核验的课程题目评估。
+
+按照 [llama-cpp-python 安装说明](https://github.com/abetlen/llama-cpp-python#installation)安装 CPU 版本并准备本地 GGUF 文件，然后运行：
+
+```bash
+python scripts/run_transcript.py --answer-model /path/to/model.gguf
+```
+
+Windows 用户可运行 `Start-RewindAI-Local-Answers.cmd`；它使用本地缓存的 Qwen2.5 3B Q4_K_M 指定版本，也可设置 `REWINDAI_ANSWER_MODEL` 指向其他本地模型。启动脚本不下载模型，请单独查看[模型许可证](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)。在 12 个自编的简单合成题中，3B 模型回答了 6 个有答案问题，并对 6 个无答案问题表示无法回答；0.5B 模型对其中 5 个无答案问题编造了答案。这只是初步检查，不能作为课程准确率或 F1。在随后的公开视频草稿问题中，模型对糖尿病治疗产生了无证据支持的陈述，即使它同时承认没有具体信息。详见[本地回答评估和人工复核工具](docs/LOCAL_ANSWER_EXPERIMENT.md)。
+
 ## 本地核对字幕
 
 自动字幕可能有错误。可以在本机播放每条字幕对应的视频，手动修正文本并另存 SRT：

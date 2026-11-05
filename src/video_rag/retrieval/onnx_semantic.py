@@ -79,7 +79,7 @@ class SemanticReranker:
         return [float(value) for value in vectors[1:] @ vectors[0]]
 
 
-def build_semantic_pipeline(segments: list[VideoSegment], encoder: OnnxSentenceEncoder, threshold: float):
+def build_semantic_pipeline(segments: list[VideoSegment], encoder: OnnxSentenceEncoder, threshold: float, *, generator=None):
     """Create an experimental local transcript index with a shared encoder."""
     from video_rag.adapters import EvidenceGenerator
     from video_rag.pipeline import VideoRAGPipeline
@@ -87,6 +87,6 @@ def build_semantic_pipeline(segments: list[VideoSegment], encoder: OnnxSentenceE
     if not np.isfinite(threshold) or not -1 <= threshold <= 1:
         raise ValueError("Semantic threshold must be finite and between -1 and 1")
     pipeline = VideoRAGPipeline(retrievers=[SemanticRetriever(encoder)], reranker=SemanticReranker(encoder),
-                                generator=EvidenceGenerator(), minimum_rerank_score=threshold)
+                                generator=generator if generator is not None else EvidenceGenerator(), minimum_rerank_score=threshold)
     pipeline.build(segments)
     return pipeline

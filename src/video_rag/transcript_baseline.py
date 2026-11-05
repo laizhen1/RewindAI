@@ -207,12 +207,12 @@ def build_transcript_library(sources: list[tuple[str | Path, str | Path]]) -> Vi
     return build_transcript_segments(segments)
 
 
-def build_transcript_segments(segments: list[VideoSegment]) -> VideoRAGPipeline:
+def build_transcript_segments(segments: list[VideoSegment], *, generator=None) -> VideoRAGPipeline:
     """Build a new index before replacing the currently serving index."""
     pipeline = VideoRAGPipeline(
         retrievers=[TranscriptLexicalRetriever()],
         reranker=TranscriptReranker(),
-        generator=EvidenceGenerator(),
+        generator=generator if generator is not None else EvidenceGenerator(),
         minimum_rerank_score=0.01,
     )
     pipeline.build(segments)

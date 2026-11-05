@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=5000)
     parser.add_argument("--save-startup-video", action="store_true",
                         help="Save the single startup video to the local library")
+    parser.add_argument("--answer-model", type=Path, help="Optional experimental local GGUF answer model (CPU only)")
     parser.add_argument("--semantic-model", type=Path, help="Optional local English ONNX model directory")
     parser.add_argument("--visual-model", type=Path, help="Optional experimental local CLIP ONNX model directory")
     parser.add_argument("--semantic-threshold", type=float, default=0.4,
@@ -46,7 +47,14 @@ def main() -> None:
         subtitles = args.subtitles or [find_subtitles(video) for video in args.video]
         sources = list(zip(args.video, subtitles, strict=True))
         pipeline = build_transcript_library(sources) if sources else build_transcript_segments([])
+        generator = None
         builder = None
+        if args.answer_model:
+            from video_rag.adapters.local_answer import LocalAnswerGenerator
+
+            generator = LocalAnswerGenerator(args.answer_model)
+            builder = lambda segments: build_transcript_segments(segments, generator=generator)
+            pipeline = builder(list(pipeline.segments()))
         retrieval_type = "keyword"
         if args.semantic_model:
             from video_rag.retrieval.onnx_semantic import (
@@ -55,7 +63,7 @@ def main() -> None:
             )
 
             encoder = OnnxSentenceEncoder(args.semantic_model)
-            builder = lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold)
+            builder = lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold, generator=generator)
             pipeline = builder(list(pipeline.segments()))
             retrieval_type = "semantic_experimental"
         visual_builder = None
@@ -71,7 +79,8 @@ def main() -> None:
         if args.save_startup_video:
             pipeline = builder([]) if builder else build_transcript_segments([])
         app = create_app(pipeline, mode="transcript", transcript_builder=builder,
-                         retrieval_type=retrieval_type, visual_builder=visual_builder)
+                         retrieval_type=retrieval_type, visual_builder=visual_builder,
+                         answer_mode="local_experimental" if generator else "extractive")
         if args.save_startup_video:
             video, subtitle = sources[0]
             response = app.test_client().post("/api/library/local-video", json={
@@ -81,9 +90,10 @@ def main() -> None:
                 message = (response.get_json(silent=True) or {}).get("error", "import failed")
                 parser.error(f"Could not save video: {message}. If already saved, open the workspace "
                              "and remove the old index before importing new subtitles.")
-    except (OSError, ValueError, ImportError) as exc:
+    except (OSError, ValueError, ImportError, RuntimeError) as exc:
         parser.error(str(exc))
-    print("Transcript search mode:", retrieval_type, "— direct subtitle excerpts; no generated answer.")
+    print("Transcript search mode:", retrieval_type, "—",
+          "experimental local answers; verify against evidence" if generator else "direct subtitle excerpts; no generated answer")
     print(f"Open http://127.0.0.1:{args.port}/ (local access only)")
     app.run(host="127.0.0.1", port=args.port, debug=False)
 

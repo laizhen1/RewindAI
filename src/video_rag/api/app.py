@@ -24,7 +24,10 @@ def create_app(
     transcript_builder: Callable[[list[VideoSegment]], VideoRAGPipeline] | None = None,
     retrieval_type: str = "keyword",
     visual_builder: Callable[[list[VideoSegment]], object] | None = None,
+    answer_mode: str = "extractive",
 ) -> Flask:
+    if answer_mode not in {"extractive", "local_experimental"}:
+        raise ValueError("Unknown answer mode")
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     store = LibraryStore(database_path)
@@ -127,7 +130,7 @@ def create_app(
     @app.get("/api/health")
     def health():
         return jsonify({"status": "ok", "mode": mode, "retrieval_type": retrieval_type,
-                        "visual_enabled": visual_builder is not None})
+                        "visual_enabled": visual_builder is not None, "answer_mode": answer_mode})
 
     @app.get("/api/library")
     def library():

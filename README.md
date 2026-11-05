@@ -22,7 +22,7 @@ While the page remains open, an unsaved note is retained when the bookmark list 
 
 ## Current limitations
 
-The app does not automatically download Canvas recordings. Subtitle search returns source excerpts using keyword matching; it does not generate answers or understand video frames. Semantic and visual search are experimental. In particular, visual search can return candidates even when nothing is relevant.
+The app does not automatically download Canvas recordings. By default, subtitle search returns source excerpts using keyword matching and does not generate answers or understand video frames. An opt-in local answer generator is experimental. Semantic and visual search are experimental. In particular, visual search can return candidates even when nothing is relevant.
 
 The local library stores video paths, subtitle copies, course assignments, bookmarks and feedback. Unchanged videos are restored on restart. If a source moves or changes, affected searches and playback are blocked; restore the file or remove and rebuild its index. Original media and notes are preserved, although bookmarks for an old subtitle revision may no longer be playable. Updating an external subtitle file does not update the saved copy automatically; use the workspace subtitle update action to rebuild the index. Video changes are detected using size and modification time, not a content hash, and already buffered media may continue playing. If an evidence start time exceeds video duration, the player warns about a possible mismatch; this check cannot validate other timestamps.
 
@@ -87,6 +87,18 @@ For video without subtitles, install faster-whisper and prepare a local cached m
 
 Windows users can also run `Start-RewindAI-Transcribe.cmd`. An unchanged saved video opens the workspace without retranscription; remove its index first to replace subtitles. A forced service shutdown can bypass best-effort child-process cleanup; see the transcription guide for details.
 
+### Experimental local AI answers
+
+The optional answer mode uses a locally installed `llama-cpp-python` and an existing GGUF model to answer from retrieved transcript excerpts on CPU. It makes no network request for inference or model download. Answers can be wrong, fabricated, or affected by instructions in the subtitles; the retrieved excerpts and timestamps are candidates, not proof. A search miss does not show that the whole video lacks an answer. Check the source video. This is text-only, not visual understanding, and it has not been evaluated on human-reviewed lectures.
+
+Install a CPU wheel using the [llama-cpp-python instructions](https://github.com/abetlen/llama-cpp-python#installation), prepare a GGUF model locally, and start:
+
+```bash
+python scripts/run_transcript.py --answer-model /path/to/model.gguf
+```
+
+On Windows, `Start-RewindAI-Local-Answers.cmd` looks for the locally cached Qwen2.5 3B Q4_K_M revision `7dabda4d13d513e3e842b20f0d435c732f172cbe`; `REWINDAI_ANSWER_MODEL` overrides the path. It does not download a model. Check the [model license](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) separately. This model and the smaller 0.5B were compared on 12 hand-written synthetic cases: the 3B answered six simple supported questions and declined six unsupported questions, while the 0.5B answered the supported questions and fabricated answers on five unsupported questions. These exploratory results are not a benchmark or a course F1 score, and performance can vary. A subsequent public-video draft test exposed an unsupported diabetes-treatment claim despite a caveat; see the [local answer evaluation](docs/LOCAL_ANSWER_EXPERIMENT.md) and review tool.
+
 ### Experimental English semantic search
 
 Install `python -m pip install -e ".[semantic]"` and place the `tokenizer.json` and `onnx/model_quantized.onnx` files for [Xenova/all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2) in a local model directory:
@@ -95,7 +107,7 @@ Install `python -m pip install -e ".[semantic]"` and place the `tokenizer.json` 
 python scripts/run_transcript.py --semantic-model PATH_TO_LOCAL_MODEL_DIRECTORY
 ```
 
-On Windows, `Start-RewindAI-Semantic.cmd` looks for revision `08a308f628bc9d6774b7922f319eb1b65afa1a82` in the project cache; set `REWINDAI_SEMANTIC_MODEL_DIR` for another location. The launcher does not download weights. Inference runs locally on CPU. The English-only mode uses an uncalibrated cosine threshold of 0.4 and may return unrelated segments. It does not generate answers or understand frames. See the [evaluation report](docs/INITIAL_EVALUATION.md); the default mode remains keyword search.
+On Windows, `Start-RewindAI-Semantic.cmd` looks for revision `08a308f628bc9d6774b7922f319eb1b65afa1a82` in the project cache; set `REWINDAI_SEMANTIC_MODEL_DIR` for another location. The launcher does not download weights. Inference runs locally on CPU. The English-only mode uses an uncalibrated cosine threshold of 0.4 and may return unrelated segments. Without the separately enabled local answer mode, it does not generate answers; it does not understand frames. See the [evaluation report](docs/INITIAL_EVALUATION.md); the default mode remains keyword search.
 
 ### Experimental local visual search
 
