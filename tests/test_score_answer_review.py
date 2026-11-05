@@ -17,6 +17,8 @@ def test_answer_metrics_count_wrong_answer_as_fp_and_fn():
     assert (result['tp'], result['fp'], result['fn'], result['tn']) == (1, 2, 2, 1)
     assert result['precision'] == result['recall'] == result['f1'] == pytest.approx(1/3)
     assert result['question_origin_not_recorded'] == 5 and result['model_generated_questions'] == 0
+    assert result['answerable_questions'] == 3 and result['unanswerable_questions'] == 2
+    assert result['answerable_abstentions'] == 1 and result['unanswerable_abstention_rate'] == .5
 
 
 def test_requires_complete_consistent_reviews_and_reserves_test():
@@ -30,6 +32,7 @@ def test_requires_complete_consistent_reviews_and_reserves_test():
         summarize({**base, 'split': 'test'})
     scores = summarize({**base, 'rows': [row(False, 'abstain')]})
     assert scores['precision'] is None and scores['recall'] is None and scores['f1'] is None
+    assert scores['answerable_questions'] == 0 and scores['unanswerable_abstention_rate'] == 1
 
 
 def test_question_origin_is_counted_without_claiming_independence():
