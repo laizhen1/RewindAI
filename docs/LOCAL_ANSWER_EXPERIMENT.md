@@ -50,3 +50,23 @@ The flag is a declaration by the reviewer, not proof of independent review. Each
 ## Lexical answer overlap is a separate diagnostic
 
 The legacy `scripts/evaluate_answers.py` compares generated answer strings against nonempty reference strings. English-like words are treated as word tokens, while CJK ideographs are treated individually; it reports normalized exact match and mean lexical token F1. It cannot assess whether a paraphrase is correct, whether evidence supports the answer, or whether an answer should have been refused. Empty references are rejected; evaluate unanswerable questions separately. It also rejects duplicate question IDs. Its tokenization changed from the earlier character-level implementation, so scores from the two versions must not be compared directly. Private inputs and resulting metrics must stay local.
+## Public annotated snippet experiment (development only)
+
+We selected 25 script-answerable and 25 unanswerable examples from the previously examined YTCommentQA video-hash partition, ranking row IDs by SHA-256 within each class. The 50 examples represent 48 videos; visual-only and combined-required labels were excluded. The dataset's human labels concern annotated snippets, not whole-video answerability. The input to the workspace retrieval was the caption text within each question's annotated evidence range, which supplies the relevant region in advance and makes the task easier than whole-video retrieval. No actual source videos or audio were reviewed. This class-balanced subset and previously explored partition are not an independent final test.
+
+Using keyword retrieval and local Qwen2.5 3B Q4_K_M revision `7dabda4d13d513e3e842b20f0d435c732f172cbe` on CPU, prompt `explicit-evidence-v2`, temperature 0 and 160 output tokens, we compared two **answerability proxies**:
+
+| Positive prediction rule | TP | FP | FN | TN | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| At least one retrieved excerpt | 9 | 4 | 16 | 21 | 0.692 | 0.360 | 0.474 |
+| Retrieved excerpt and answer differs from exact refusal string | 1 | 0 | 24 | 25 | 1.000 | 0.040 | 0.077 |
+
+The second rule treats retrieval abstention or the exact normalized phrase `Insufficient evidence in the provided excerpts` as negative; every other generated string counts as positive. It does not recognize other refusals and does not judge the answer. Eight positive examples retrieved evidence but produced that exact refusal. Thus, in this small set the stricter behavior reduced positive predictions substantially; the high precision with only one positive prediction must not be presented alone or generalized to lectures. An attempted answer can still be wrong. Labels, snippet selection, English captions, uncalibrated keyword retrieval, truncated excerpts, model pretraining overlap and prior sample exploration limit the comparison. The numbers are not answer correctness, evidence precision, or course F1.
+
+The public dataset is [YTCommentQA](https://github.com/lgresearch/YTCommentQA); the local dataset SHA-256 was `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc368`. Reproduce with the locally downloaded dataset and model:
+
+```bash
+python scripts/evaluate_ytcommentqa_local_answers.py --dataset PATH_TO_DATASET_JSON --model PATH_TO_GGUF --per-class 25 --output artifacts/local_answer_review/ytcommentqa.json
+```
+
+The script performs no download and saves a local aggregate. For private data, fingerprints and metrics are private too. Additional independent, human-reviewed full-video tests are required.

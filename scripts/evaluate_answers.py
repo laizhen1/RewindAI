@@ -35,7 +35,7 @@ def main() -> None:
     references = index_answers(questions)
     predicted_answers = index_answers(predictions)
     result = evaluate_answers(predicted_answers, references)
-    print(json.dumps({"metrics": result, "method": "lexical token overlap: CJK characters and other word sequences",
+    print(json.dumps({**result, "method": "lexical token overlap: CJK characters and other word sequences",
                       "warning": "Not semantic correctness, groundedness, or question-level answerability F1. "
                                  "Reference answers must be nonempty; evaluate unanswerable cases separately."}, indent=2))
 
