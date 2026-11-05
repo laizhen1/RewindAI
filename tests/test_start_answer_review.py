@@ -45,9 +45,44 @@ def test_create_draft_from_bound_local_labels(sources, monkeypatch):
     report = json.loads(target.read_text(encoding='utf-8'))
     assert report['status'] == 'unreviewed_answer_drafts' and report['binding'] == 'video_matched'
     assert report['generation_config']['prompt_version'] == 'test'
+    assert report['retrieval_config'] == {'type': 'keyword', 'threshold': None}
     assert report['rows'][0]['human_answer_verdict'] is None
     assert report['rows'][0]['answer'] == 'It halves the range.'
     assert report['input_sha256']['video'] == hashlib.sha256(video.read_bytes()).hexdigest()
+
+
+def test_create_semantic_draft_records_models_and_configuration(sources, monkeypatch):
+    import numpy as np
+
+    from video_rag.retrieval import onnx_semantic
+
+    video, subs, labels, model, root = sources
+    semantic = root / 'encoder'; (semantic / 'onnx').mkdir(parents=True)
+    (semantic / 'tokenizer.json').write_text('{}')
+    (semantic / 'onnx' / 'model_quantized.onnx').write_bytes(b'encoder')
+
+    class Generator:
+        def __init__(self, path):
+            pass
+        def metadata(self):
+            return {'prompt_version': 'test'}
+        def generate(self, query, segments):
+            return 'It halves the range.'
+
+    class Encoder:
+        def __init__(self, path):
+            assert path == semantic
+        def encode(self, texts):
+            return np.ones((len(texts), 1), dtype=np.float32)
+
+    monkeypatch.setattr('scripts.start_answer_review.LocalAnswerGenerator', Generator)
+    monkeypatch.setattr(onnx_semantic, 'OnnxSentenceEncoder', Encoder)
+    target = create_draft(video, subs, labels, 'sample', 'development', model, root / 'semantic-runs',
+                          allowed_roots=(root,), semantic_model=semantic, semantic_threshold=0.4)
+    report = json.loads(target.read_text(encoding='utf-8'))
+    assert report['retrieval_config'] == {'type': 'semantic_experimental', 'threshold': 0.4}
+    assert report['input_sha256']['semantic_model'] == hashlib.sha256(b'encoder').hexdigest()
+    assert report['rows'][0]['answer'] == 'It halves the range.'
 
 
 def test_rejects_wrong_binding_and_test_split_without_outputs(sources):
