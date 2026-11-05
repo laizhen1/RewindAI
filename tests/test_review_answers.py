@@ -58,3 +58,30 @@ def test_rejects_changed_sources_and_wrong_video(review_app, tmp_path):
     video.write_bytes(b'changed video')
     assert client.get('/api/review').status_code == 409
     assert client.post('/api/save', json={'confirm_human_review': True, 'judgments': []}).status_code == 409
+
+
+def test_partial_progress_can_be_reopened_without_scoring(review_app):
+    client, video, review = review_app
+    original = review.read_bytes()
+    judgments = [{'answer': 'correct', 'evidence': 'supported'}, {'answer': '', 'evidence': ''}]
+    result = client.post('/api/progress', json={'judgments': judgments})
+    assert result.status_code == 201 and 'metrics' not in result.json
+    progress = review.parent / result.json['filename']
+    saved = json.loads(progress.read_text(encoding='utf-8'))
+    assert saved['human_review_state'] == 'in_progress_not_verified'
+    assert saved['rows'][0]['human_answer_verdict'] == 'correct'
+    assert saved['rows'][1]['human_answer_verdict'] is None
+    assert 'human_review_declaration' not in saved and review.read_bytes() == original
+    reopened = create_review_app(video, progress, allowed_roots=(review.parent,)).test_client()
+    assert reopened.get('/api/review').json['rows'][0]['human_answer_verdict'] == 'correct'
+    with pytest.raises(ValueError, match='verdicts'):
+        summarize(saved)
+
+
+def test_progress_rejects_invalid_verdict_and_changed_input(review_app):
+    client, video, review = review_app
+    invalid = [{'answer': [], 'evidence': ''}, {'answer': '', 'evidence': ''}]
+    assert client.post('/api/progress', json={'judgments': invalid}).status_code == 400
+    assert not list(review.parent.glob('progress-*.json'))
+    video.write_bytes(b'changed')
+    assert client.post('/api/progress', json={'judgments': []}).status_code == 409

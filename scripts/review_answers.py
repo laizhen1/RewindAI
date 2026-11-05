@@ -85,6 +85,34 @@ def create_review_app(video: Path, review: Path, *, allowed_roots=PRIVATE_ROOTS)
             return jsonify(error='Video or review changed; restart'), 409
         return jsonify(rows=rows, split=report.get('split'), binding=report.get('binding'))
 
+    @app.post('/api/progress')
+    def save_progress():
+        if not unchanged():
+            return jsonify(error='Video or review changed; restart'), 409
+        data = request.get_json(silent=True)
+        judgments = data.get('judgments') if isinstance(data, dict) else None
+        if not isinstance(judgments, list) or len(judgments) != len(rows):
+            return jsonify(error='Invalid review progress'), 400
+        reviewed = json.loads(raw.decode('utf-8-sig'))
+        for row, decision in zip(reviewed['rows'], judgments, strict=True):
+            if not isinstance(decision, dict) or set(decision) != {'answer', 'evidence'}:
+                return jsonify(error='Invalid verdict'), 400
+            answer, evidence = decision['answer'], decision['evidence']
+            if (not isinstance(answer, str) or answer not in {'', 'correct', 'incorrect', 'abstain'} or
+                    not isinstance(evidence, str) or evidence not in {'', 'supported', 'unsupported', 'not_applicable'}):
+                return jsonify(error='Invalid verdict'), 400
+            row['human_answer_verdict'] = answer or None
+            row['human_evidence_verdict'] = evidence or None
+        if not unchanged():
+            return jsonify(error='Video or review changed; restart'), 409
+        reviewed.pop('human_review_declaration', None)
+        reviewed['human_review_state'] = 'in_progress_not_verified'
+        target = review.parent / f'progress-{uuid.uuid4().hex}.json'
+        with target.open('x', encoding='utf-8', newline='\n') as out:
+            json.dump(reviewed, out, ensure_ascii=False, indent=2)
+            out.write('\n')
+        return jsonify(filename=target.name), 201
+
     @app.post('/api/save')
     def save():
         if not unchanged():
@@ -107,6 +135,7 @@ def create_review_app(video: Path, review: Path, *, allowed_roots=PRIVATE_ROOTS)
             return jsonify(error=str(exc)), 400
         if not unchanged():
             return jsonify(error='Video or review changed; restart'), 409
+        reviewed['human_review_state'] = 'complete_not_independently_verified'
         reviewed['human_review_declaration'] = 'declared_by_local_user_not_independently_verified'
         target = review.parent / f'reviewed-{uuid.uuid4().hex}.json'
         with target.open('x', encoding='utf-8', newline='\n') as out:
