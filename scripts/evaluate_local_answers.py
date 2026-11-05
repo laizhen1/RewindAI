@@ -68,7 +68,8 @@ def main() -> int:
         if any(fingerprint(path) != before[key] for key, path in sources.items()):
             raise ValueError('An input changed during evaluation; discard this run')
         report = {'status': 'unreviewed_answer_drafts', 'binding': binding,
-                  'input_sha256': before, 'split': data.get('split'), 'rows': rows,
+                  'input_sha256': before, 'generation_config': generator.metadata(),
+                  'split': data.get('split'), 'rows': rows,
                   'warning': 'Private draft output; judge answers and evidence against the video. No scores are assigned.'}
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('x', encoding='utf-8', newline='\n') as out:

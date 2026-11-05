@@ -34,6 +34,9 @@ def test_create_draft_from_bound_local_labels(sources, monkeypatch):
         def __init__(self, path):
             assert path == model
 
+        def metadata(self):
+            return {'prompt_version': 'test'}
+
         def generate(self, query, segments):
             return 'It halves the range.'
 
@@ -41,6 +44,7 @@ def test_create_draft_from_bound_local_labels(sources, monkeypatch):
     target = create_draft(video, subs, labels, 'sample', 'development', model, root / 'runs', allowed_roots=(root,))
     report = json.loads(target.read_text(encoding='utf-8'))
     assert report['status'] == 'unreviewed_answer_drafts' and report['binding'] == 'video_matched'
+    assert report['generation_config']['prompt_version'] == 'test'
     assert report['rows'][0]['human_answer_verdict'] is None
     assert report['rows'][0]['answer'] == 'It halves the range.'
     assert report['input_sha256']['video'] == hashlib.sha256(video.read_bytes()).hexdigest()

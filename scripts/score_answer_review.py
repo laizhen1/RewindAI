@@ -69,6 +69,7 @@ def main() -> int:
             raise ValueError('Review changed during scoring; try again')
         result = {'status': 'human_review_declared_not_independently_verified',
                   'split': report.get('split'), 'binding': report.get('binding'),
+                  'generation_config': report.get('generation_config'),
                   'review_sha256': hashlib.sha256(raw).hexdigest(), 'metrics': scores,
                   'method': 'Correct supported answer=TP; wrong answer=FP and, if answerable, FN; '
                             'abstention on answerable=FN; abstention on unanswerable=TN.',

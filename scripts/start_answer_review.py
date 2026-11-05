@@ -45,7 +45,8 @@ def create_draft(video: Path, subtitles: Path, labels: Path, video_id: str, spli
     if any(fingerprint(path) != before[key] for key, path in sources.items()):
         raise ValueError('An input changed during the run; no review was saved')
     report = {'status': 'unreviewed_answer_drafts', 'binding': 'video_matched',
-              'input_sha256': before, 'split': split, 'rows': review_rows,
+              'input_sha256': before, 'generation_config': generator.metadata(),
+              'split': split, 'rows': review_rows,
               'warning': 'Labels and answers are unverified drafts. Review against the original video.'}
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / f'answer-draft-{uuid.uuid4().hex}.json'
