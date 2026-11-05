@@ -16,6 +16,8 @@ def test_balanced_selection_is_stable_and_filters_invalid():
     assert select_cases(dict(reversed(list(data.items()))), 1) == selected
     with pytest.raises(ValueError, match='Not enough'):
         select_cases(data, 2)
+    with pytest.raises(ValueError, match='Not enough'):
+        select_cases(data, 1, 'other')
 
 
 def test_literal_refusal_proxy_is_not_retrieval_abstention(monkeypatch):

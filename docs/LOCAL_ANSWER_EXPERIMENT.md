@@ -70,3 +70,19 @@ python scripts/evaluate_ytcommentqa_local_answers.py --dataset PATH_TO_DATASET_J
 ```
 
 The script performs no download and saves a local aggregate. For private data, fingerprints and metrics are private too. Additional independent, human-reviewed full-video tests are required.
+## Same-sample prompt investigation
+
+After inspecting failures on the 50-example subset, we tried a development-only alternative instruction that permits a simple inference grounded in the excerpts while requesting the same exact refusal phrase when the answer is unsupported. Under the same automatic exact-string proxy, the strict default gave TP/FP/FN/TN **1/0/24/25** (precision 1.000, recall 0.040, F1 0.077); the alternative gave **3/1/22/24** (precision 0.750, recall 0.120, F1 0.207). The retrieval stage was identical: 9/4/16/21. Both prompts requested the same refusal string, but a different refusal wording is still treated as a positive, and no generated answers were graded for correctness.
+
+The alternative was designed after looking at this development sample. Its apparent change is not an independent improvement estimate, and neither sample is appropriate for choosing a portfolio claim. We have not changed the workspace default. Reproduce the alternative with the command above plus `--prompt balanced` and a new output path. Use held-out, independently reviewed questions and assess unsupported claims before deciding whether to adopt it.
+## Video-disjoint public snippet check
+
+With both prompt texts fixed after the development investigation, we selected 25 script-answerable and 25 unanswerable rows using the same row-ID hash rule from the `other` video-hash partition. These 50 rows came from 50 videos and are video-disjoint from the 20% development partition; available records did not identify a previous run of this prompt experiment on this partition. Dataset examples may still overlap model pretraining, and this is not an independently reviewed full-video or course test. Labels are for annotated snippets, and the supplied evidence range makes retrieval easier than real whole-video search.
+
+| Rule on the video-disjoint sample | TP | FP | FN | TN | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| At least one retrieved excerpt | 8 | 3 | 17 | 22 | 0.727 | 0.320 | 0.444 |
+| Strict prompt, exact-refusal proxy | 2 | 0 | 23 | 25 | 1.000 | 0.080 | 0.148 |
+| Balanced prompt, exact-refusal proxy | 4 | 1 | 21 | 24 | 0.800 | 0.160 | 0.267 |
+
+This repeats the direction of the development-sample trade-off, but positive counts are only two and four, respectively, and the exact-string heuristic can misclassify refusals phrased differently. These are class-balanced answerability proxies, not generated-answer correctness. Both prompts used the same dataset/model fingerprints and CPU settings described above; no course material was involved. The balanced prompt remains experimental, and the workspace default is unchanged. Repeat with `--partition other` and separate output paths for `--prompt strict` and `--prompt balanced`. Avoid further tuning on this partition; evaluate answer quality and evidence on independently reviewed recordings.
