@@ -22,9 +22,15 @@ def summarize(report: dict) -> dict:
     if not isinstance(rows, list) or not rows:
         raise ValueError('No review rows')
     tp = fp = fn = tn = 0
+    generated = unrecorded = 0
     for row in rows:
         if not isinstance(row, dict) or type(row.get('expected_answerable')) is not bool:
             raise ValueError('Every row must have a boolean reference label')
+        origin = row.get('annotation_source', 'not_recorded')
+        if not isinstance(origin, str) or not origin:
+            raise ValueError('Invalid question origin')
+        generated += int(origin == 'model_generated_candidate_unverified')
+        unrecorded += int(origin == 'not_recorded')
         verdict = row.get('human_answer_verdict')
         evidence = row.get('human_evidence_verdict')
         if verdict not in {'correct', 'incorrect', 'abstain'} or evidence not in {'supported', 'unsupported', 'not_applicable'}:
@@ -42,7 +48,8 @@ def summarize(report: dict) -> dict:
             fn += 1
         else:
             tn += 1
-    return {'question_count': len(rows), 'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn,
+    return {'question_count': len(rows), 'model_generated_questions': generated,
+            'question_origin_not_recorded': unrecorded, 'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn,
             'precision': tp / (tp + fp) if tp + fp else None,
             'recall': tp / (tp + fn) if tp + fn else None,
             'f1': 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None}
