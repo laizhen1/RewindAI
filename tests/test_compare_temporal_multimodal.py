@@ -37,7 +37,12 @@ def test_fused_comparison_uses_same_questions_and_reports_negative_candidates():
     assert result['fused_experimental']['temporal_recall_at_3'] == {
         'hits': 2, 'answerable_questions': 2, 'rate': 1.0, 'min_reference_coverage': 0.5}
     assert result['paired_answerable_top1']['fused_only_hit'] == 1
+    assert result['paired_unanswerable']['transcript_only_abstains'] == 1
+    assert result['results'][1]['fused']['returned_sources'] == [['visual']]
+    assert result['results'][0]['fused']['returned_sources'][0] == ['transcript', 'visual']
     assert result['fused_experimental']['by_question_type']['visual']['metrics']['tp'] == 1
+    assert result['results'][1]['reference_range'] == [22.0, 28.0]
+    assert result['results'][2]['reference_range'] is None
 
 
 def test_comparison_rejects_invalid_threshold_and_empty_questions():

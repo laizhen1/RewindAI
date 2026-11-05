@@ -79,9 +79,12 @@ class FusedCandidates:
         visual = self.visual.search(query, 3)
         if self.min_visual_score is not None:
             visual = [hit for hit in visual if hit.score >= self.min_visual_score]
+        visual = [SearchHit(hit.segment_id, hit.score, 'visual', rank)
+                  for rank, hit in enumerate(visual, 1)]
         fused = reciprocal_rank_fusion([text_hits, visual], k=60, top_k=3)
         evidence = [{'start_time': self.lookup[hit.segment_id].start_time,
-                     'end_time': self.lookup[hit.segment_id].end_time} for hit in fused]
+                     'end_time': self.lookup[hit.segment_id].end_time,
+                     'sources': hit.source.split('+')} for hit in fused]
 
         class Result:
             def to_dict(self):
@@ -97,14 +100,23 @@ def compare(questions, transcript, fused, min_coverage=0.5):
         raise ValueError('Coverage threshold must be in (0, 1]')
     left, right = diagnose(transcript, questions), diagnose(fused, questions)
     pairs = {'both_hit': 0, 'transcript_only_hit': 0, 'fused_only_hit': 0, 'neither_hit': 0}
+    negatives = {'both_abstain': 0, 'transcript_only_abstains': 0,
+                 'fused_only_abstains': 0, 'neither_abstains': 0}
     rows = []
-    for a, b in zip(left, right, strict=True):
+    for question, a, b in zip(questions, left, right, strict=True):
         if a['expected_answerable']:
             ah = not a['abstained'] and a['first_hit_reference_coverage'] >= min_coverage
             bh = not b['abstained'] and b['first_hit_reference_coverage'] >= min_coverage
             key = 'both_hit' if ah and bh else 'transcript_only_hit' if ah else 'fused_only_hit' if bh else 'neither_hit'
             pairs[key] += 1
-        rows.append({'question': a['question'], 'transcript': a, 'fused': b})
+        else:
+            aa, ba = a['abstained'], b['abstained']
+            key = 'both_abstain' if aa and ba else 'transcript_only_abstains' if aa else 'fused_only_abstains' if ba else 'neither_abstains'
+            negatives[key] += 1
+        reference = ([float(question['evidence_start_seconds']), float(question['evidence_end_seconds'])]
+                     if a['expected_answerable'] else None)
+        rows.append({'question_id': question.get('question_id'), 'question': a['question'],
+                     'reference_range': reference, 'transcript': a, 'fused': b})
 
     def summarize(items):
         operating = operating_metrics(items, min_coverage)
@@ -116,7 +128,7 @@ def compare(questions, transcript, fused, min_coverage=0.5):
                 'query_latency': latency_summary(items), 'by_question_type': comparison_by_question_type(items, min_coverage)}
 
     return {'transcript': summarize(left), 'fused_experimental': summarize(right),
-            'paired_answerable_top1': pairs, 'results': rows}
+            'paired_answerable_top1': pairs, 'paired_unanswerable': negatives, 'results': rows}
 
 
 def main():

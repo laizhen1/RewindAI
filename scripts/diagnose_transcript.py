@@ -50,6 +50,8 @@ def diagnose(pipeline, questions: list[dict]) -> list[dict]:
             "query_latency_ms": latency_ms,
             "returned_ranges": [[hit["start_time"], hit["end_time"]] for hit in hits],
         }
+        if hits and all(isinstance(hit.get("sources"), list) for hit in hits):
+            row["returned_sources"] = [hit["sources"] for hit in hits]
         if question_type is not None:
             row["question_type"] = question_type.strip()
         if answerable:

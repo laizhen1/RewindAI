@@ -19,6 +19,7 @@ RewindAI is a local learning workspace for finding and reviewing moments in lect
 - Explore the full pipeline's speech, keyframe, hybrid retrieval, reranking and evaluation components; the complete model workflow still needs independent end-to-end validation.
 
 A five-task [usability study plan](docs/USER_STUDY.md) can be run with shareable media; it is not a report of completed research.
+The [product case and demo storyboard](docs/PORTFOLIO_CASE.md) explain the user workflow, measured evidence and remaining validation.
 
 While the page remains open, an unsaved note is retained when the bookmark list refreshes. Select **Save note** to store it. The browser may warn before a reload or close when notes are unsaved or saving; drafts are still lost if the page closes, and browsers may suppress this warning. The export button saves all bookmarks, regardless of the current filter, and requires pending notes to be saved first. The browser writes a text file containing video titles and notes. Save course-derived exports in a local folder that is not synchronized to cloud storage.
 
