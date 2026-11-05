@@ -49,6 +49,20 @@ class LibraryApiTests(unittest.TestCase):
         self.assertEqual(reopened.get("/api/bookmarks").get_json()["bookmarks"], [])
         self.assertEqual(self.client.delete(f"/api/bookmarks/{item['id']}").status_code, 404)
 
+    def test_review_status_is_persisted_independently_of_notes(self):
+        item = self.client.post('/api/bookmarks', json={'video_id': 'demo', 'segment_id': 'demo_0001', 'note': 'keep'}).json
+        path = f"/api/bookmarks/{item['id']}/reviewed"
+        self.assertEqual(item['reviewed'], 0)
+        self.assertEqual(self.client.put(path, json={'reviewed': 'true'}).status_code, 400)
+        self.assertEqual(self.client.put(path, json={'reviewed': 1}).status_code, 400)
+        self.assertEqual(self.client.put(path, json={'reviewed': True}).json['reviewed'], 1)
+        self.client.patch(f"/api/bookmarks/{item['id']}", json={'note': 'updated'})
+        reopened = create_app(build_demo_pipeline(), database_path=self.db).test_client()
+        saved = reopened.get('/api/bookmarks').json['bookmarks'][0]
+        self.assertEqual((saved['reviewed'], saved['note']), (1, 'updated'))
+        self.assertEqual(reopened.put(path, json={'reviewed': False}).json['reviewed'], 0)
+        self.assertEqual(self.client.put('/api/bookmarks/999/reviewed', json={'reviewed': True}).status_code, 404)
+
     def test_rename_and_delete_course_keep_video_and_bookmark(self):
         course = self.client.post("/api/courses", json={"name": "Old"}).get_json()["id"]
         self.client.put("/api/videos/demo/course", json={"course_id": course})

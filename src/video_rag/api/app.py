@@ -411,6 +411,17 @@ def create_app(
             return jsonify({"error": "bookmark not found"}), 404
         return "", 204
 
+    @app.put("/api/bookmarks/<int:bookmark_id>/reviewed")
+    def set_bookmark_reviewed(bookmark_id: int):
+        payload = request.get_json(silent=True)
+        reviewed = payload.get("reviewed") if isinstance(payload, dict) else None
+        if type(reviewed) is not bool:
+            return jsonify({"error": "reviewed must be a boolean"}), 400
+        item = store.set_bookmark_reviewed(bookmark_id, reviewed)
+        if item is None:
+            return jsonify({"error": "bookmark not found"}), 404
+        return jsonify(item)
+
     @app.get("/api/feedback")
     def list_feedback():
         return jsonify({"feedback": store.recent_feedback()})

@@ -45,6 +45,9 @@ class LibraryStore:
             columns = {row["name"] for row in connection.execute("PRAGMA table_info(feedback)")}
             if "target_type" not in columns:
                 connection.execute("ALTER TABLE feedback ADD COLUMN target_type TEXT NOT NULL DEFAULT 'legacy'")
+            bookmark_columns = {row["name"] for row in connection.execute("PRAGMA table_info(bookmarks)")}
+            if "reviewed" not in bookmark_columns:
+                connection.execute("ALTER TABLE bookmarks ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0 CHECK (reviewed IN (0, 1))")
 
     @contextmanager
     def connect(self):
@@ -131,7 +134,7 @@ class LibraryStore:
     def bookmarks(self) -> list[dict]:
         with self.connect() as connection:
             return [dict(row) for row in connection.execute(
-                "SELECT id, video_id, segment_id, start_time, end_time, note, created_at "
+                "SELECT id, video_id, segment_id, start_time, end_time, note, created_at, reviewed "
                 "FROM bookmarks ORDER BY id DESC"
             )]
 
@@ -146,6 +149,12 @@ class LibraryStore:
     def update_note(self, bookmark_id: int, note: str) -> dict | None:
         with self.connect() as connection:
             connection.execute("UPDATE bookmarks SET note = ? WHERE id = ?", (note, bookmark_id))
+            row = connection.execute("SELECT * FROM bookmarks WHERE id = ?", (bookmark_id,)).fetchone()
+            return dict(row) if row else None
+
+    def set_bookmark_reviewed(self, bookmark_id: int, reviewed: bool) -> dict | None:
+        with self.connect() as connection:
+            connection.execute("UPDATE bookmarks SET reviewed = ? WHERE id = ?", (int(reviewed), bookmark_id))
             row = connection.execute("SELECT * FROM bookmarks WHERE id = ?", (bookmark_id,)).fetchone()
             return dict(row) if row else None
 

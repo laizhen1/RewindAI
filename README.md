@@ -12,7 +12,7 @@ RewindAI is a local learning workspace for finding and reviewing moments in lect
 
 - Organize indexed videos into courses; rename or delete courses without deleting videos or notes.
 - Search videos or a course and inspect timestamped evidence. Subtitle mode can display neighboring transcript segments and, with PyAV installed, a midpoint frame for manual review.
-- Save clips, edit review notes, filter saved clips by video name or note, and provide separate feedback on answers and evidence. Notes and feedback stay in the local database; filtering happens in the browser. Export all saved notes and timestamps to a local text file for review.
+- Save clips, edit review notes, mark moments reviewed or pending, and filter saved clips by status, video name or note. Provide separate feedback on answers and evidence. Notes, review status and feedback stay in the local database; filtering happens in the browser. Export all saved notes, timestamps and review states to a local text file.
 
 - Add local videos with SRT/VTT subtitles, or transcribe an authorized video locally with a cached Whisper model. The interface displays processing and failure states.
 - Try optional local English semantic search and experimental visual search. A comparison view shows their results separately.
@@ -27,6 +27,8 @@ While the page remains open, an unsaved note is retained when the bookmark list 
 The app does not automatically download Canvas recordings. By default, subtitle search returns source excerpts using keyword matching and does not generate answers or understand video frames. An opt-in local answer generator is experimental. Semantic and visual search are experimental. In particular, visual search can return candidates even when nothing is relevant.
 
 The local library stores video paths, subtitle copies, course assignments, bookmarks and feedback. Unchanged videos are restored on restart. If a source moves or changes, affected searches and playback are blocked; restore the file or remove and rebuild its index. Original media and notes are preserved, although bookmarks for an old subtitle revision may no longer be playable. Updating an external subtitle file does not update the saved copy automatically; use the workspace subtitle update action to rebuild the index. Video changes are detected using size and modification time, not a content hash, and already buffered media may continue playing. If an evidence start time exceeds video duration, the player warns about a possible mismatch; this check cannot validate other timestamps.
+
+On first launch after upgrading, existing bookmarks gain a local review-state field and default to pending; existing notes remain in place. Review state is a personal checklist, not evidence that a clip or answer is correct.
 
 Subtitle and experimental visual searches recheck the source after processing; a detected change discards the results. Frame previews are similarly rechecked. These lightweight checks cannot detect changes that preserve both file size and modification time, or changes after the final check.
 
