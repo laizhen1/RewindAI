@@ -40,8 +40,11 @@ def test_rejects_aggregate_reports_wrong_video_and_test_split(sources):
     with pytest.raises(ValueError, match='detailed'):
         create_app(video, path, allowed_roots=(root,))
     path.write_text(json.dumps({**report, 'split': 'test'}), encoding='utf-8')
-    with pytest.raises(ValueError, match='development or validation'):
+    with pytest.raises(ValueError, match='frozen-test'):
         create_app(video, path, allowed_roots=(root,))
+    frozen = {**report, 'split': 'test', 'test_declaration': 'frozen_test_declared_not_independently_verified'}
+    path.write_text(json.dumps(frozen), encoding='utf-8')
+    assert create_app(video, path, allowed_roots=(root,)).test_client().get('/api/comparison').json['split'] == 'test'
     path.write_text(json.dumps(report), encoding='utf-8')
     video.write_bytes(b'changed')
     with pytest.raises(ValueError, match='does not match'):

@@ -16,8 +16,8 @@ def summarize(report: dict) -> dict:
     """Apply question-level micro metrics to declared human answer judgments."""
     if not isinstance(report, dict) or report.get('status') != 'unreviewed_answer_drafts':
         raise ValueError('Expected an answer review draft')
-    if report.get('split') == 'test':
-        raise ValueError('Final test split is reserved')
+    if report.get('split') == 'test' and report.get('test_declaration') != 'frozen_answer_test_declared_not_independently_verified':
+        raise ValueError('Final test is reserved unless a frozen-answer-test declaration exists')
     rows = report.get('rows')
     if not isinstance(rows, list) or not rows:
         raise ValueError('No review rows')
@@ -59,6 +59,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--review', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--frozen-test-manifest', type=Path, help='Required for a frozen answer-test report')
     parser.add_argument('--confirm-human-review', action='store_true',
                         help='Declare that a human reviewed each answer, evidence and reference against the video')
     args = parser.parse_args()
@@ -71,11 +72,27 @@ def main() -> int:
             raise ValueError('Choose a new local JSON output')
         raw = source.read_bytes()
         report = json.loads(raw.decode('utf-8-sig'))
+        if not isinstance(report, dict):
+            raise TypeError('Expected an answer review draft')
+        manifest = None
+        if report.get('split') == 'test':
+            from video_rag.evaluation.frozen_answers import verify_review_manifest
+
+            if args.frozen_test_manifest is None:
+                raise ValueError('A frozen-answer-test manifest is required for test scoring')
+            manifest = private_output(args.frozen_test_manifest)
+            verify_review_manifest(report, manifest)
+        elif args.frozen_test_manifest is not None:
+            raise ValueError('A frozen-answer-test manifest is only used for test scoring')
         scores = summarize(report)
+        if manifest is not None:
+            verify_review_manifest(report, manifest)
         if source.read_bytes() != raw:
             raise ValueError('Review changed during scoring; try again')
         result = {'status': 'human_review_declared_not_independently_verified',
                   'split': report.get('split'), 'binding': report.get('binding'),
+                  'test_declaration': report.get('test_declaration'),
+                  'frozen_manifest_sha256': report['input_sha256']['frozen_manifest'] if manifest is not None else None,
                   'generation_config': report.get('generation_config'),
                   'retrieval_config': report.get('retrieval_config'),
                   'review_sha256': hashlib.sha256(raw).hexdigest(), 'metrics': scores,

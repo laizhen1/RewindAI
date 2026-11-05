@@ -26,8 +26,10 @@ def create_app(video: Path, report_path: Path, *, allowed_roots=PRIVATE_ROOTS) -
         raise ValueError('Provide a local detailed comparison JSON under an ignored directory')
     raw = report_path.read_bytes()
     report = json.loads(raw.decode('utf-8-sig'))
-    if not isinstance(report, dict) or report.get('split') not in (None, 'development', 'validation'):
-        raise ValueError('Only development or validation reports can be reviewed')
+    if not isinstance(report, dict) or report.get('split') not in (None, 'development', 'validation', 'test'):
+        raise ValueError('Invalid report split')
+    if report.get('split') == 'test' and report.get('test_declaration') != 'frozen_test_declared_not_independently_verified':
+        raise ValueError('Test reports require a frozen-test declaration')
     comparison = report.get('comparison')
     rows = comparison.get('results') if isinstance(comparison, dict) else None
     if not isinstance(rows, list) or not rows or len(rows) > 1000 or any(not isinstance(row, dict) for row in rows):

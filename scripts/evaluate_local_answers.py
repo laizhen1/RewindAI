@@ -16,9 +16,9 @@ from video_rag.evaluation.provenance import fingerprint, verify_sources
 from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
 
 
-def prepare_review(pipeline, data: dict) -> list[dict]:
+def prepare_review(pipeline, data: dict, *, allow_frozen_test: bool = False) -> list[dict]:
     """Preserve model output for a human reviewer without assigning scores."""
-    if not isinstance(data, dict) or data.get('split') == 'test':
+    if not isinstance(data, dict) or (data.get('split') == 'test' and not allow_frozen_test):
         raise ValueError('Final test questions are reserved; use development or validation')
     questions = data.get('questions')
     if not isinstance(questions, list) or not questions or len(questions) > 1000:

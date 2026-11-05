@@ -41,11 +41,12 @@ class EvidenceOnly:
         return self.pipeline.ask(query, generate_answer=False)
 
 
-def load_questions(path, video_id, split, video_hash):
+def load_questions(path, video_id, split, video_hash, *, allow_test=False):
     """Load JSON drafts or video-bound local labeler CSVs without changing them."""
     if path.suffix.lower() == '.csv':
-        if not video_id or split not in {'development', 'validation'}:
-            raise ValueError('CSV requires --video-id and a development or validation --split')
+        allowed = {'development', 'validation', 'test'} if allow_test else {'development', 'validation'}
+        if not video_id or split not in allowed:
+            raise ValueError('CSV requires --video-id and a development or validation split, or an explicitly frozen test')
         sidecar = path.with_suffix(path.suffix + '.source.json')
         binding = json.loads(sidecar.read_text(encoding='utf-8-sig'))
         if binding != {'video_sha256': video_hash, 'video_id': video_id, 'split': split}:
@@ -137,7 +138,8 @@ def main():
         parser.add_argument('--' + name, type=Path, required=True)
     parser.add_argument('--semantic-model', type=Path, help='Use local MiniLM; default is keyword retrieval')
     parser.add_argument('--video-id', help='Required for a local labeler CSV')
-    parser.add_argument('--split', choices=('development', 'validation'), help='Required for a local labeler CSV')
+    parser.add_argument('--split', choices=('development', 'validation', 'test'), help='Required for a local labeler CSV')
+    parser.add_argument('--frozen-test-manifest', type=Path, help='Required only for a declared frozen test CSV')
     parser.add_argument('--semantic-threshold', type=float, default=0.4)
     parser.add_argument('--visual-min-score', type=float,
                         help='Optional uncalibrated visual cutoff for evaluation only; workspace applies none')
@@ -153,6 +155,9 @@ def main():
         if args.visual_min_score is not None and (not math.isfinite(args.visual_min_score) or
                                                    not -1 <= args.visual_min_score <= 1):
             raise ValueError('Visual similarity threshold must be finite and in [-1, 1]')
+        is_test = args.split == 'test'
+        if is_test != (args.frozen_test_manifest is not None):
+            raise ValueError('A frozen-test manifest is required only when --split test is selected')
         paths = {'video': args.video, 'subtitles': args.subtitles, 'questions': args.questions,
                  'visual_tokenizer': args.visual_model / 'tokenizer.json',
                  'visual_model': args.visual_model / 'onnx' / 'model_quantized.onnx'}
@@ -162,7 +167,17 @@ def main():
         if args.questions.suffix.lower() == '.csv':
             paths['annotation_binding'] = args.questions.with_suffix(args.questions.suffix + '.source.json')
         before = {name: fingerprint(path) for name, path in paths.items()}
-        data, csv_binding, _ = load_questions(args.questions, args.video_id, args.split, before['video'])
+        if is_test:
+            from video_rag.evaluation.frozen_temporal import config, input_paths, read_and_verify
+
+            manifest_path = private_output(args.frozen_test_manifest)
+            settings = config(args.video_id, args.semantic_model, args.semantic_threshold,
+                              args.visual_min_score, args.min_coverage)
+            expected_paths = input_paths(args.video, args.subtitles, args.questions, args.visual_model, args.semantic_model)
+            read_and_verify(manifest_path, expected_paths, settings)
+            before['frozen_manifest'] = fingerprint(manifest_path)
+            paths['frozen_manifest'] = manifest_path
+        data, csv_binding, _ = load_questions(args.questions, args.video_id, args.split, before['video'], allow_test=is_test)
         binding = csv_binding or verify_sources(data, args.video, args.subtitles)
         segments = segments_from_subtitles(args.video, args.subtitles)
         if args.semantic_model:
@@ -184,11 +199,14 @@ def main():
                          args.min_coverage)
         if csv_binding is None:
             verify_sources(data, args.video, args.subtitles)
+        if is_test:
+            read_and_verify(manifest_path, expected_paths, settings)
         if any(fingerprint(path) != before[name] for name, path in paths.items()):
             raise ValueError('An input or model file changed during evaluation')
         if args.aggregate_only:
             result.pop('results')
         report = {'status': data.get('status', 'not recorded'), 'split': data.get('split'), 'binding': binding,
+                  'test_declaration': 'frozen_test_declared_not_independently_verified' if is_test else None,
                   'input_sha256': before, 'transcript_retrieval': 'semantic_experimental' if args.semantic_model else 'keyword',
                   'semantic_threshold': args.semantic_threshold if args.semantic_model else None,
                   'visual_min_score_experimental': args.visual_min_score,
