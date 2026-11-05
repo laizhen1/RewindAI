@@ -123,6 +123,8 @@ Windows 用户也可以在准备好该模型后双击 `Start-RewindAI-Semantic.c
 
 “实验性融合检索”使用 RRF（k=60）合并字幕和采样画面的候选排名，并标注来源；它不生成回答，也不能证明画面与问题相关。画面检索失败时会提示并保留字幕候选。Windows 用户可运行 `Start-RewindAI-Visual-Answers.cmd` 加载三个本地 CPU 模型；普通 AI 回答仍只基于字幕，融合检索只展示待核对片段。
 
+[画面搜索实验指南](docs/LOCAL_VISUAL_EXPERIMENT.md)还介绍如何在同一批开发或验证题上，本机对比纯字幕与融合候选的时间定位。该对照不评估画面是否相关或答案是否正确；课程题目和评测结果必须留在本机。
+
 安装 `python -m pip install -e ".[semantic]" "av>=11,<17"`，并将 [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32) 的 `tokenizer.json` 与 `onnx/model_quantized.onnx` 下载到本机模型目录（模型文件约 154 MB，遵循模型自身许可）。然后运行：
 
 ```powershell
