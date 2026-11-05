@@ -19,7 +19,7 @@ def sha256(path: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Isolated end-to-end annotation smoke test; never writes formal reviews.")
-    parser.add_argument("--candidates", type=Path, default=Path("data/evaluation/questions.zh.review_queue.v1.jsonl"))
+    parser.add_argument("--candidates", type=Path, default=Path("artifacts/evaluation/questions.zh.review_queue.v1.jsonl"))
     parser.add_argument("--segments", type=Path, default=Path("artifacts/segments.supplement_a.jsonl"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation/annotation_smoke_latest.json"))
     args = parser.parse_args()

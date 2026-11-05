@@ -16,7 +16,7 @@ def sha256(path: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Initialize one immutable formal human-review session.")
-    parser.add_argument("--candidates", type=Path, default=Path("data/evaluation/questions.zh.review_queue.v1.jsonl"))
+    parser.add_argument("--candidates", type=Path, default=Path("artifacts/evaluation/questions.zh.review_queue.v1.jsonl"))
     parser.add_argument("--guide", type=Path, default=Path("docs/ANNOTATION_GUIDE_ZH.md"))
     parser.add_argument("--events", type=Path, default=Path("artifacts/annotations/review_events.jsonl"))
     parser.add_argument("--manifest", type=Path, default=Path("artifacts/annotations/review_session_manifest.json"))

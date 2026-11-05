@@ -1,27 +1,27 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
 import hashlib
 import json
-from pathlib import Path
 import re
+from collections import Counter, defaultdict
+from pathlib import Path
 
 from video_rag.adapters import QwenVLService
 from video_rag.evaluation.dataset_validation import read_jsonl, validate_questions
-
+from video_rag.evaluation.private_output import private_output
 
 TARGETS = {"audio": 50, "visual": 45, "multimodal": 40, "unknown_route": 40}
 
 
 def parse_json_array(text: str) -> list[dict]:
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.I | re.S)
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.IGNORECASE | re.DOTALL)
     start, end = cleaned.find("["), cleaned.rfind("]")
     if start < 0 or end <= start:
         raise ValueError("model output contains no JSON array")
     value = json.loads(cleaned[start : end + 1])
     if not isinstance(value, list):
-        raise ValueError("model output is not a JSON array")
+        raise TypeError("model output is not a JSON array")
     return value
 
 
@@ -70,12 +70,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a balanced candidate pool; never marks items verified.")
     parser.add_argument("--segments", type=Path, default=Path("artifacts/segments.supplement_a.jsonl"))
     parser.add_argument("--seed", type=Path, default=Path("data/evaluation/questions.zh.seed.jsonl"))
-    parser.add_argument("--output", type=Path, default=Path("data/evaluation/questions.zh.candidates.v1.jsonl"))
+    parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation/questions.zh.candidates.v1.jsonl"))
     parser.add_argument("--raw-log", type=Path, default=Path("artifacts/evaluation/question_candidate_generation_raw.jsonl"))
     parser.add_argument("--report", type=Path, default=Path("artifacts/evaluation/question_candidates_v1_report.json"))
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--model", default="Qwen/Qwen2.5-VL-7B-Instruct")
     args = parser.parse_args()
+    args.output, args.raw_log, args.report = map(private_output, (args.output, args.raw_log, args.report))
     segments = read_jsonl(args.segments)
     for item in segments:
         item.pop("_line_number", None)

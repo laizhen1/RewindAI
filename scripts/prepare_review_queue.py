@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 import hashlib
 import json
-from pathlib import Path
 import re
+from collections import Counter
 from difflib import SequenceMatcher
+from pathlib import Path
 
 from video_rag.evaluation.dataset_validation import read_jsonl, validate_questions
-
+from video_rag.evaluation.private_output import private_output
 
 OCR_CUES = ("文字", "字样", "字幕", "标题", "标志", "数字", "写着", "显示的名称", "屏幕上")
 GENERIC = ("视频中", "这段视频", "画面中", "是否", "什么", "的是", "提到", "显示", "内容")
@@ -28,11 +28,12 @@ def meaningful_chunks(question: str) -> set[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create a risk-flagged human-review queue without verifying anything.")
-    parser.add_argument("--candidates", type=Path, default=Path("data/evaluation/questions.zh.candidates.v1.jsonl"))
+    parser.add_argument("--candidates", type=Path, default=Path("artifacts/evaluation/questions.zh.candidates.v1.jsonl"))
     parser.add_argument("--segments", type=Path, default=Path("artifacts/segments.supplement_a.jsonl"))
-    parser.add_argument("--output", type=Path, default=Path("data/evaluation/questions.zh.review_queue.v1.jsonl"))
+    parser.add_argument("--output", type=Path, default=Path("artifacts/evaluation/questions.zh.review_queue.v1.jsonl"))
     parser.add_argument("--report", type=Path, default=Path("artifacts/evaluation/review_queue_v1_report.json"))
     args = parser.parse_args()
+    args.output, args.report = map(private_output, (args.output, args.report))
     questions = read_jsonl(args.candidates)
     segments = read_jsonl(args.segments)
     segment_by_id = {item["segment_id"]: item for item in segments}
