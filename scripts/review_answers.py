@@ -83,7 +83,8 @@ def create_review_app(video: Path, review: Path, *, allowed_roots=PRIVATE_ROOTS)
     def get_review():
         if not unchanged():
             return jsonify(error='Video or review changed; restart'), 409
-        return jsonify(rows=rows, split=report.get('split'), binding=report.get('binding'))
+        return jsonify(rows=rows, split=report.get('split'), binding=report.get('binding'),
+                       retrieval_config=report.get('retrieval_config'))
 
     @app.post('/api/progress')
     def save_progress():

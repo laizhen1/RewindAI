@@ -36,3 +36,19 @@ def test_question_origin_is_counted_without_claiming_independence():
     generated = {**row(True, 'correct', 'supported'), 'annotation_source': 'model_generated_candidate_unverified'}
     result = summarize({'status': 'unreviewed_answer_drafts', 'rows': [generated]})
     assert result['model_generated_questions'] == 1 and result['question_origin_not_recorded'] == 0
+
+
+def test_summary_preserves_retrieval_configuration(tmp_path, monkeypatch):
+    import json
+    import sys
+
+    from scripts import score_answer_review as module
+
+    source, target = tmp_path / 'review.json', tmp_path / 'summary.json'
+    source.write_text(json.dumps({'status': 'unreviewed_answer_drafts',
+                                  'retrieval_config': {'type': 'semantic_experimental', 'threshold': 0.4},
+                                  'rows': [row(True, 'correct', 'supported')]}), encoding='utf-8')
+    monkeypatch.setattr(module, 'private_output', lambda path: path)
+    monkeypatch.setattr(sys, 'argv', ['score', '--review', str(source), '--output', str(target), '--confirm-human-review'])
+    assert module.main() == 0
+    assert json.loads(target.read_text(encoding='utf-8'))['retrieval_config']['type'] == 'semantic_experimental'

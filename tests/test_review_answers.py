@@ -14,6 +14,7 @@ def review_app(tmp_path):
     review = tmp_path / 'private' / 'draft.json'
     review.parent.mkdir()
     report = {'status': 'unreviewed_answer_drafts', 'split': 'development', 'binding': 'matched',
+              'retrieval_config': {'type': 'semantic_experimental', 'threshold': 0.4},
               'input_sha256': {'video': hashlib.sha256(video.read_bytes()).hexdigest()}, 'rows': [
                   {'question': 'Color?', 'expected_answerable': True, 'expected_answer': 'red',
                    'answer': 'red', 'evidence': [], 'human_answer_verdict': None, 'human_evidence_verdict': None},
@@ -27,14 +28,16 @@ def review_app(tmp_path):
 def test_review_saves_new_copy_and_local_metrics(review_app):
     client, _video, review = review_app
     original = review.read_bytes()
-    assert len(client.get('/api/review').json['rows']) == 2
+    data = client.get('/api/review').json
+    assert len(data['rows']) == 2 and data['retrieval_config']['type'] == 'semantic_experimental'
     assert client.get('/video', headers={'Range': 'bytes=0-3'}).status_code == 206
     decisions = [{'answer': 'correct', 'evidence': 'supported'},
                  {'answer': 'abstain', 'evidence': 'not_applicable'}]
     result = client.post('/api/save', json={'confirm_human_review': True, 'judgments': decisions})
     assert result.status_code == 201 and result.json['metrics']['f1'] == 1.0
     saved = review.parent / result.json['filename']
-    assert summarize(json.loads(saved.read_text(encoding='utf-8')))['tn'] == 1
+    reviewed = json.loads(saved.read_text(encoding='utf-8'))
+    assert summarize(reviewed)['tn'] == 1 and reviewed['retrieval_config']['threshold'] == 0.4
     assert review.read_bytes() == original
     assert client.get('/').headers['Cache-Control'] == 'no-store'
 
