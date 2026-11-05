@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Mapping
-import re
 
-TOKEN_PATTERN = re.compile(r"[\w\u4e00-\u9fff]", re.UNICODE)
+# Match CJK ideographs individually and other alphabetic/numeric sequences as words.
+# This is lexical overlap, not semantic equivalence or grounded correctness.
+TOKEN_PATTERN = re.compile(r"[\u3400-\u9fff]|[^\W_\u3400-\u9fff]+", re.UNICODE)
 
 
 def answer_tokens(text: str) -> list[str]:
@@ -12,8 +14,7 @@ def answer_tokens(text: str) -> list[str]:
 
 
 def exact_match(prediction: str, reference: str) -> float:
-    normalize = lambda value: "".join(answer_tokens(value))
-    return float(normalize(prediction) == normalize(reference))
+    return float(answer_tokens(prediction) == answer_tokens(reference))
 
 
 def token_f1(prediction: str, reference: str) -> float:
@@ -33,6 +34,10 @@ def evaluate_answers(
 ) -> dict[str, float]:
     if not references:
         raise ValueError("references must not be empty")
+    if any(not isinstance(reference, str) or not answer_tokens(reference) for reference in references.values()):
+        raise ValueError("Each reference must contain answer tokens; evaluate unanswerable questions separately")
+    if any(not isinstance(value, str) for value in predictions.values()):
+        raise ValueError("Predictions must be strings")
     identifiers = sorted(references)
     return {
         "exact_match": sum(

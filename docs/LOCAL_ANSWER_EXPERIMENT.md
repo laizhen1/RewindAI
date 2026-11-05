@@ -46,3 +46,7 @@ python scripts/score_answer_review.py --review artifacts/local_answer_review/run
 ```
 
 The flag is a declaration by the reviewer, not proof of independent review. Each correct supported answer is a true positive; an incorrect answer is a false positive and, for an answerable question, also a false negative. An abstention on an answerable question is a false negative; one on an unanswerable question is a true negative. Precision, recall and F1 are micro-averaged across questions; undefined denominators produce `null`. The new summary is saved locally without questions or answers, but its hash and metrics can still be private. The script rejects incomplete or inconsistent judgments and reserved test splits. It does not verify the human judgments or turn draft references into a gold standard.
+
+## Lexical answer overlap is a separate diagnostic
+
+The legacy `scripts/evaluate_answers.py` compares generated answer strings against nonempty reference strings. English-like words are treated as word tokens, while CJK ideographs are treated individually; it reports normalized exact match and mean lexical token F1. It cannot assess whether a paraphrase is correct, whether evidence supports the answer, or whether an answer should have been refused. Empty references are rejected; evaluate unanswerable questions separately. It also rejects duplicate question IDs. Its tokenization changed from the earlier character-level implementation, so scores from the two versions must not be compared directly. Private inputs and resulting metrics must stay local.

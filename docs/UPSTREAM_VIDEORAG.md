@@ -38,7 +38,7 @@
 - 所有向量转为 L2 归一化 `float32`，使用 FAISS `IndexFlatIP` 实现余弦相似度精确检索。
 - 索引 manifest 记录模型、维度、条目数、相似度定义和文件 SHA-256，启动时拒绝不一致索引。
 - Flask API 返回结构化证据，网页播放器支持跳转到证据 `start_time`。
-- Recall@K、MRR、nDCG@K、Exact Match、字符级 Token F1 和分阶段延迟评测。
+- Recall@K、MRR、nDCG@K、Exact Match、英文按词、中文按字的词面 Token F1 和分阶段延迟评测。
 - append-only 人工复核事件、revision 冲突检测、事件备份和 video-disjoint split 校验。
 
 ## 默认模型
