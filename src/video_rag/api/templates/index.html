@@ -105,7 +105,7 @@
       "Plain text transcripts are not supported; use timed SRT/VTT or transcribe locally": "TXT 文稿不能直接用于时间跳转。请使用带时间戳的 SRT/VTT 字幕，或选择本机转录并加载；原 TXT 文稿会保留。",
       "Subtitles must be encoded as UTF-8": "字幕不是 UTF-8 编码，请转换后重试。",
       "Subtitle file exceeds the 10 MiB limit": "字幕文件超过 10 MiB 上限。",
-      "Video is already loaded": "该视频已加载。如需更新字幕，请先移除当前索引。",
+      "Video is already loaded": "该视频已加载。可选择视频并使用更新字幕按钮。",
       "Video changed while importing; try again": "加载时视频文件发生变化，请重新尝试。",
       "Could not rebuild or save the local index; existing videos remain available": "无法建立或保存索引，已有视频仍可使用。请检查本机依赖与存储空间。"
     };
@@ -123,6 +123,20 @@
     } catch (err) { importStatus.className = "message"; importStatus.textContent = `加载失败：${explainImportError(err.message)}`; }
     finally { importButton.disabled = false; }
   });
+  const replaceSubtitles = button("更新当前视频的字幕", async () => {
+    const selected = state.selectedVideo;
+    if (!selected || !subtitlePath.value.trim()) { importStatus.textContent = "请选择视频并填写新的 SRT/VTT 字幕路径。"; return; }
+    if (!window.confirm("用所填字幕重新建立当前视频的本地索引？时间范围完全相同的收藏会保留，其余收藏的备注仍会保留但可能无法回看。")) return;
+    replaceSubtitles.disabled = true; importStatus.textContent = "正在更新字幕索引……";
+    try {
+      const result = await api(`/api/library/videos/${encodeURIComponent(selected.id)}/subtitles`, jsonOptions("PUT", {subtitle_path: subtitlePath.value}));
+      $("answer").textContent = "字幕索引已更新，请重新搜索。"; $("evidenceList").replaceChildren(); $("feedbackButtons").classList.add("hidden");
+      importStatus.textContent = `已更新 ${result.segment_count} 个片段。请重新搜索并核对字幕。`;
+      try { await loadLibrary(); await loadBookmarks(); } catch (_) { importStatus.textContent += " 列表刷新失败，请刷新页面。"; }
+    } catch (err) { importStatus.className = "message"; importStatus.textContent = `更新失败：${explainImportError(err.message)}`; }
+    finally { replaceSubtitles.disabled = false; }
+  });
+  importForm.append(replaceSubtitles);
   const scopeLabel = element("label", "hint", "搜索范围 ");
   const searchScope = document.createElement("select");
   searchScope.className = "field";

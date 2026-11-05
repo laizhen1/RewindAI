@@ -114,6 +114,12 @@ def create_app(
             except ValueError:
                 return jsonify({"error": "invalid request origin"}), 403
 
+    @app.after_request
+    def prevent_private_caching(response):
+        # Paths, notes, captions, answers, frames and media are local private data.
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.get("/")
     def index():
         return render_template("index.html")
@@ -217,6 +223,51 @@ def create_app(
             return jsonify({"error": str(exc)}), 400
         except (sqlite3.Error, RuntimeError):
             return jsonify({"error": "Could not rebuild or save the local index; existing videos remain available"}), 500
+
+    @app.put("/api/library/videos/<video_id>/subtitles")
+    def replace_subtitles(video_id: str):
+        nonlocal pipeline, visual_index, visual_key
+        if mode != "transcript":
+            return jsonify({"error": "Only available in subtitle mode"}), 409
+        payload = request.get_json(silent=True)
+        subtitle = payload.get("subtitle_path") if isinstance(payload, dict) else None
+        if not isinstance(subtitle, str) or not subtitle.strip() or len(subtitle) > 4096:
+            return jsonify({"error": "A local subtitle path is required"}), 400
+        from video_rag.transcript_baseline import segments_from_subtitles
+        with import_lock:
+            current = pipeline.segments()
+            old = [segment for segment in current if segment.video_id == video_id]
+            records = [record for record in store.local_videos() if record["video_id"] == video_id]
+            if not old or not records:
+                return jsonify({"error": "Saved video not found; add it to the local library first"}), 404
+            if not source_available(video_id):
+                return jsonify({"error": "Video has changed or is unavailable"}), 409
+            record = records[0]
+            try:
+                if json.loads(record["segments_json"]) != json.loads(json.dumps([segment.to_dict() for segment in old])):
+                    return jsonify({"error": "Saved video changed; restart before updating"}), 409
+                added = segments_from_subtitles(Path(old[0].source_path), Path(subtitle.strip()))
+                replacement = transcript_builder([segment for segment in current if segment.video_id != video_id] + added)
+                if not source_available(video_id):
+                    return jsonify({"error": "Video changed while updating subtitles"}), 409
+                # Preserve only unambiguous exact ranges: a shifted timestamp must be rechecked.
+                by_range = {}
+                for segment in added:
+                    by_range.setdefault((segment.start_time, segment.end_time), []).append(segment)
+                mapping = [(segment.segment_id, by_range[(segment.start_time, segment.end_time)][0].segment_id,
+                            segment.start_time, segment.end_time) for segment in old
+                           if len(by_range.get((segment.start_time, segment.end_time), [])) == 1]
+                if not store.replace_transcript(video_id, record["segments_json"],
+                                                json.dumps([segment.to_dict() for segment in added]), mapping):
+                    return jsonify({"error": "Saved video changed; restart before updating"}), 409
+                pipeline = replacement
+                visual_index = None
+                visual_key = None
+                return jsonify({"segment_count": len(added)})
+            except (OSError, ValueError) as exc:
+                return jsonify({"error": str(exc)}), 400
+            except (sqlite3.Error, RuntimeError):
+                return jsonify({"error": "Could not update subtitles; existing index remains available"}), 500
 
     def import_generated_subtitles(video: Path, subtitle: Path) -> bool:
         # Reuse the same validation, locking and atomic index replacement as manual import.

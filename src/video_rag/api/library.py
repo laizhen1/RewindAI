@@ -70,6 +70,24 @@ class LibraryStore:
             connection.execute("INSERT INTO local_transcript_videos VALUES (?, ?, ?, ?, ?)",
                                (video_id, path, size, mtime_ns, segments_json))
 
+    def replace_transcript(self, video_id: str, expected_segments: str, new_segments: str,
+                           mapping: list[tuple[str, str, float, float]]) -> bool:
+        """Replace the cached index and remap exact-time bookmarks in one transaction."""
+        with self.connect() as connection:
+            changed = connection.execute(
+                "UPDATE local_transcript_videos SET segments_json = ? WHERE video_id = ? AND segments_json = ?",
+                (new_segments, video_id, expected_segments),
+            ).rowcount
+            if not changed:
+                return False
+            for old_id, new_id, start, end in mapping:
+                connection.execute(
+                    "UPDATE bookmarks SET segment_id = ? WHERE video_id = ? AND segment_id = ? "
+                    "AND start_time = ? AND end_time = ?",
+                    (new_id, video_id, old_id, start, end),
+                )
+            return True
+
     def forget_video(self, video_id: str) -> bool:
         """Remove only the cached source and transcript, retaining personal notes."""
         with self.connect() as connection:
