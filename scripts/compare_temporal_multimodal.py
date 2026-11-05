@@ -58,15 +58,18 @@ def load_questions(path, video_id, split, video_hash):
     data = json.loads(path.read_text(encoding='utf-8-sig'))
     if not isinstance(data, dict):
         raise TypeError('Question file must contain a JSON object')
-    if data.get('split') == 'test':
-        raise ValueError('Final test split is reserved; use development or validation')
+    if data.get('split') not in (None, 'development', 'validation'):
+        raise ValueError('Use development or validation; final test and unknown splits are reserved')
     return data, None, None
 
 
 class FusedCandidates:
     """Mirror the workspace's equal-weight RRF of the two top-three rankings."""
-    def __init__(self, transcript, visual, segments):
+    def __init__(self, transcript, visual, segments, *, min_visual_score=None):
+        if min_visual_score is not None and (not math.isfinite(min_visual_score) or not -1 <= min_visual_score <= 1):
+            raise ValueError('Visual similarity threshold must be finite and in [-1, 1]')
         self.transcript, self.visual = transcript, visual
+        self.min_visual_score = min_visual_score
         self.lookup = {item.segment_id: item for item in segments}
 
     def ask(self, query):
@@ -74,6 +77,8 @@ class FusedCandidates:
         text_hits = [SearchHit(item.segment.segment_id, 0.0, 'transcript', rank)
                      for rank, item in enumerate(text.evidence, 1)]
         visual = self.visual.search(query, 3)
+        if self.min_visual_score is not None:
+            visual = [hit for hit in visual if hit.score >= self.min_visual_score]
         fused = reciprocal_rank_fusion([text_hits, visual], k=60, top_k=3)
         evidence = [{'start_time': self.lookup[hit.segment_id].start_time,
                      'end_time': self.lookup[hit.segment_id].end_time} for hit in fused]
@@ -102,7 +107,12 @@ def compare(questions, transcript, fused, min_coverage=0.5):
         rows.append({'question': a['question'], 'transcript': a, 'fused': b})
 
     def summarize(items):
-        return {'metrics': metrics(items, min_coverage), 'operating': operating_metrics(items, min_coverage),
+        operating = operating_metrics(items, min_coverage)
+        return {'metrics': metrics(items, min_coverage), 'operating': operating,
+                'temporal_recall_at_3': {'hits': operating['any_returned_temporal_hits'],
+                                         'answerable_questions': operating['answerable_questions'],
+                                         'rate': operating['any_returned_temporal_hit_rate'],
+                                         'min_reference_coverage': min_coverage},
                 'query_latency': latency_summary(items), 'by_question_type': comparison_by_question_type(items, min_coverage)}
 
     return {'transcript': summarize(left), 'fused_experimental': summarize(right),
@@ -117,6 +127,8 @@ def main():
     parser.add_argument('--video-id', help='Required for a local labeler CSV')
     parser.add_argument('--split', choices=('development', 'validation'), help='Required for a local labeler CSV')
     parser.add_argument('--semantic-threshold', type=float, default=0.4)
+    parser.add_argument('--visual-min-score', type=float,
+                        help='Optional uncalibrated visual cutoff for evaluation only; workspace applies none')
     parser.add_argument('--min-coverage', type=float, default=0.5)
     parser.add_argument('--aggregate-only', action='store_true')
     args = parser.parse_args()
@@ -126,6 +138,9 @@ def main():
         target = private_output(args.output)
         if target.suffix.lower() != '.json' or target.exists():
             raise ValueError('Choose a new local JSON output')
+        if args.visual_min_score is not None and (not math.isfinite(args.visual_min_score) or
+                                                   not -1 <= args.visual_min_score <= 1):
+            raise ValueError('Visual similarity threshold must be finite and in [-1, 1]')
         paths = {'video': args.video, 'subtitles': args.subtitles, 'questions': args.questions,
                  'visual_tokenizer': args.visual_model / 'tokenizer.json',
                  'visual_model': args.visual_model / 'onnx' / 'model_quantized.onnx'}
@@ -152,7 +167,9 @@ def main():
         started = perf_counter()
         visual.build(selected)
         build_seconds = perf_counter() - started
-        result = compare(data['questions'], EvidenceOnly(transcript), FusedCandidates(transcript, visual, segments), args.min_coverage)
+        result = compare(data['questions'], EvidenceOnly(transcript),
+                         FusedCandidates(transcript, visual, segments, min_visual_score=args.visual_min_score),
+                         args.min_coverage)
         if csv_binding is None:
             verify_sources(data, args.video, args.subtitles)
         if any(fingerprint(path) != before[name] for name, path in paths.items()):
@@ -162,11 +179,13 @@ def main():
         report = {'status': data.get('status', 'not recorded'), 'split': data.get('split'), 'binding': binding,
                   'input_sha256': before, 'transcript_retrieval': 'semantic_experimental' if args.semantic_model else 'keyword',
                   'semantic_threshold': args.semantic_threshold if args.semantic_model else None,
+                  'visual_min_score_experimental': args.visual_min_score,
                   'min_coverage': args.min_coverage, 'rrf_k': 60, 'top_k': 3,
                   'source_segments': len(segments), 'sampled_visual_segments': len(selected),
                   'visual_index_build_seconds': build_seconds, 'aggregate_only': args.aggregate_only,
                   'warning': 'Candidate timestamp coverage only; no visual relevance or answer correctness is assessed. '
-                             'Frame search has no rejection threshold. Keep all course-derived reports and hashes local.',
+                             'The workspace has no visual rejection threshold. Any experimental cutoff is uncalibrated. '
+                             'Keep all course-derived reports and hashes local.',
                   'comparison': result}
         write_output(target, report, (ROOT / 'artifacts', ROOT / 'local_data'))
     except (ImportError, OSError, KeyError, TypeError, ValueError, RuntimeError, csv.Error) as exc:

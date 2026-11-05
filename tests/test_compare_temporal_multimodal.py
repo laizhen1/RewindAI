@@ -34,6 +34,8 @@ def test_fused_comparison_uses_same_questions_and_reports_negative_candidates():
     assert result['transcript']['metrics']['tp'] == 1
     assert result['fused_experimental']['metrics']['tp'] == 2
     assert result['fused_experimental']['operating']['unanswerable_returned_candidates'] == 1
+    assert result['fused_experimental']['temporal_recall_at_3'] == {
+        'hits': 2, 'answerable_questions': 2, 'rate': 1.0, 'min_reference_coverage': 0.5}
     assert result['paired_answerable_top1']['fused_only_hit'] == 1
     assert result['fused_experimental']['by_question_type']['visual']['metrics']['tp'] == 1
 
@@ -43,6 +45,23 @@ def test_comparison_rejects_invalid_threshold_and_empty_questions():
         compare([], None, None)
     with pytest.raises(ValueError):
         compare([{'question': 'x'}], None, None, min_coverage=float('nan'))
+
+
+def test_experimental_visual_threshold_can_remove_candidates():
+    segments = [VideoSegment('a', 'v', 'local', 0, 5, transcript='attention')]
+
+    class Visual:
+        def search(self, query, top_k):
+            return [SearchHit('a', 0.2, 'visual', 1)]
+
+    pipeline = build_transcript_segments(segments)
+    unfiltered = FusedCandidates(pipeline, Visual(), segments).ask('elephants').to_dict()
+    filtered = FusedCandidates(pipeline, Visual(), segments, min_visual_score=0.3).ask('elephants').to_dict()
+    assert unfiltered['evidence'] and not unfiltered['abstained']
+    assert filtered['evidence'] == [] and filtered['abstained']
+    assert FusedCandidates(pipeline, Visual(), segments, min_visual_score=0.3).ask('attention').to_dict()['evidence']
+    with pytest.raises(ValueError, match='threshold'):
+        FusedCandidates(pipeline, Visual(), segments, min_visual_score=float('nan'))
 
 
 def test_fused_evaluation_matches_workspace_candidate_ranking(tmp_path):
@@ -90,3 +109,16 @@ def test_csv_labels_require_matching_video_and_non_test_split(tmp_path):
         load_questions(path, 'v', 'development', 'different-hash')
     with pytest.raises(ValueError, match='development or validation'):
         load_questions(path, 'v', 'test', 'video-hash')
+
+
+def test_json_questions_reject_test_and_unknown_splits(tmp_path):
+    import json
+
+    path = tmp_path / 'questions.json'
+    for split in ('test', 'Test', 'unknown'):
+        path.write_text(json.dumps({'split': split, 'questions': []}), encoding='utf-8')
+        with pytest.raises(ValueError, match='reserved'):
+            load_questions(path, None, None, 'hash')
+    path.write_text(json.dumps({'split': 'validation', 'questions': []}), encoding='utf-8')
+    data, binding, _ = load_questions(path, None, None, 'hash')
+    assert data['split'] == 'validation' and binding is None
