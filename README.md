@@ -89,7 +89,7 @@ Windows users can also run `Start-RewindAI-Transcribe.cmd`. An unchanged saved v
 
 ### Experimental local AI answers
 
-The optional answer mode uses a locally installed `llama-cpp-python` and an existing GGUF model to answer from retrieved transcript excerpts on CPU. It makes no network request for inference or model download. Answers can be wrong, fabricated, or affected by instructions in the subtitles; the retrieved excerpts and timestamps are candidates, not proof. A search miss does not show that the whole video lacks an answer. Check the source video. This is text-only, not visual understanding, and it has not been evaluated on human-reviewed lectures.
+The optional answer mode uses a locally installed `llama-cpp-python` and an existing GGUF model to answer from retrieved transcript excerpts on CPU. It makes no network request for inference or model download. Answers can be wrong, fabricated, or affected by instructions in the subtitles; numbered excerpts match the order supplied to the model, but a model citation may still be wrong. The excerpts and timestamps are candidates, not proof. A search miss does not show that the whole video lacks an answer. Check the source video. This is text-only, not visual understanding, and it has not been evaluated on human-reviewed lectures.
 
 Install a CPU wheel using the [llama-cpp-python instructions](https://github.com/abetlen/llama-cpp-python#installation), prepare a GGUF model locally, and start:
 
