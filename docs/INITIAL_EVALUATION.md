@@ -365,3 +365,18 @@ For the same strict 151-question workspace-grouping run, we also compare the uni
 | Experimental semantic | 1007.95 / 4007.84 | 1007.95 / 4246.11 | 0.251 | 0.237 | 0.244 |
 
 These are **reference-window time-overlap measures**, not answer accuracy or factual precision, recall and F1. The dataset's reference is a broad caption-snippet span, which may include unneeded context and omit other valid locations. Workspace grouping can bridge gaps between cues, and the reference span itself can contain gaps. The measured returned and matched time can therefore include silence or irrelevant material. Only script-answerable questions with valid full transcripts were included; there are no whole-video negatives, no video or audio was examined, and 77 records were excluded for invalid cues. The sample was already explored, the model threshold was uncalibrated, and these instructional videos are not a lecture benchmark. Do not use these numbers as a claim about actual course performance.
+
+### Fixed-setting comparison on the other video partition
+
+On 5 November 2026 we applied the same workspace grouping, strict caption validation and fixed 0.4 semantic threshold to the separate `other` video-hash partition. It contains videos distinct from the earlier `sample` partition, but some questions in it were previously used in the answerability proxy experiment; this is not a pristine final test. Of 1,886 selected records, 959 had other answerability labels and 329 had invalid transcripts; the remaining **598 script-answerable questions from 537 videos** were evaluated using their supplied full transcripts. The public dataset fingerprint and MiniLM revision are those documented above.
+
+| Method | Top-three overlap | At least half of reference window | Window-time precision | Window-time recall | Window-time F1 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Keyword | 259 / 598 (0.433) | 150 / 598 (0.251) | 0.213 | 0.234 | 0.223 |
+| Experimental semantic | 282 / 598 (0.472) | 179 / 598 (0.299) | 0.262 | 0.266 | 0.264 |
+
+For top-three overlap, both routes overlapped on 182 questions, only keyword on 77, only semantic on 100 and neither on 239. These are paired descriptive results, not a significance test. The invalid-transcript exclusions may bias the sample, and all preceding limitations concerning broad reference windows, missing negatives, pretraining overlap, segmentation, uncalibrated scores and lack of video/audio review apply. In particular, these are not answer correctness or course-video F1.
+
+```powershell
+python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_DATASET_JSON --sample other --compare-model PATH_TO_LOCAL_MINILM --semantic-threshold 0.4 --segmentation workspace
+```

@@ -15,16 +15,16 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.evaluate_clip_frames import evaluate, validate_label_header, validate_sources
-from video_rag.retrieval.onnx_clip import ClipFrameRetriever, OnnxClipEncoder
 from video_rag.retrieval.fusion import reciprocal_rank_fusion
+from video_rag.retrieval.onnx_clip import ClipFrameRetriever, OnnxClipEncoder
 from video_rag.schemas import SearchHit
 from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
 
 
 class TranscriptAdapter:
     """Use the actual workspace pipeline rather than a separate lexical baseline."""
-    def __init__(self, segments):
-        self.pipeline = build_transcript_segments(segments)
+    def __init__(self, segments, pipeline=None):
+        self.pipeline = pipeline if pipeline is not None else build_transcript_segments(segments)
 
     def search(self, query, count):
         response = self.pipeline.ask(query)
@@ -42,11 +42,11 @@ class FusedAdapter:
                                        self.visual.search(query, count)], k=60, top_k=count)
 
 
-def compare(segments, labels, visual, *, allow_unreviewed=False):
+def compare(segments, labels, visual, *, allow_unreviewed=False, transcript_pipeline=None):
     if len(segments) > 100:
         raise ValueError("At most 100 segments are supported; do not compare different sampled sets")
     validate_label_header(segments, labels, allow_unreviewed=allow_unreviewed)
-    text = TranscriptAdapter(segments)
+    text = TranscriptAdapter(segments, pipeline=transcript_pipeline)
     transcript = evaluate(text, segments, labels, allow_unreviewed=allow_unreviewed)
     visual_metrics = evaluate(visual, segments, labels, allow_unreviewed=allow_unreviewed)
     fused = evaluate(FusedAdapter(text, visual), segments, labels, allow_unreviewed=allow_unreviewed)
@@ -58,6 +58,9 @@ def main():
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--subtitles", type=Path, required=True)
     parser.add_argument("--model-dir", type=Path, required=True)
+    parser.add_argument("--semantic-model", type=Path, help="Optional local MiniLM model directory; default uses keyword search")
+    parser.add_argument("--semantic-threshold", type=float, default=0.4,
+                        help="Uncalibrated semantic threshold (default 0.4)")
     parser.add_argument("--labels", type=Path, required=True)
     parser.add_argument("--allow-unreviewed", action="store_true")
     args = parser.parse_args()
@@ -70,7 +73,17 @@ def main():
         validate_sources(labels, args.video, args.subtitles)
         visual = ClipFrameRetriever(OnnxClipEncoder(args.model_dir))
         visual.build(segments)
-        result = compare(segments, labels, visual, allow_unreviewed=args.allow_unreviewed)
+        transcript_pipeline = None
+        if args.semantic_model:
+            from video_rag.retrieval.onnx_semantic import (
+                OnnxSentenceEncoder,
+                build_semantic_pipeline,
+            )
+
+            transcript_pipeline = build_semantic_pipeline(
+                segments, OnnxSentenceEncoder(args.semantic_model), args.semantic_threshold)
+        result = compare(segments, labels, visual, allow_unreviewed=args.allow_unreviewed,
+                         transcript_pipeline=transcript_pipeline)
         validate_sources(labels, args.video, args.subtitles)
     except (ImportError, OSError, KeyError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Comparison failed: {exc}\n")
@@ -78,6 +91,8 @@ def main():
                                  "separate and fused by experimental reciprocal-rank ranking; "
                                  "results do not measure answer accuracy. "
                                  "Output contains queries and must remain local for private media.",
+                      "transcript_retrieval": "semantic_experimental" if args.semantic_model else "keyword",
+                      "semantic_threshold": args.semantic_threshold if args.semantic_model else None,
                       "metrics": result}, indent=2))
     return 0
 

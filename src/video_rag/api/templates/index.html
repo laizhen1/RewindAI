@@ -245,7 +245,21 @@
   });
   const bookmarkFilter = element("input", "field"); bookmarkFilter.type = "search"; bookmarkFilter.placeholder = "筛选视频名称或备注"; bookmarkFilter.setAttribute("aria-label", "筛选收藏的视频名称或备注"); bookmarkFilter.style.width = "100%"; bookmarkFilter.style.marginBottom = "10px";
   const bookmarkFilterStatus = element("p", "hint"); bookmarkFilterStatus.setAttribute("aria-live", "polite");
-  $("bookmarks").before(bookmarkFilter, bookmarkFilterStatus);
+  const exportBookmarks = button("导出已保存的复习笔记", () => {
+    if (bookmarkDrafts.size || bookmarkSaving.size) { notice("请先保存所有正在编辑的备注，再导出。"); return; }
+    if (!state.bookmarks.length) { notice("还没有可导出的收藏。"); return; }
+    const lines = ["RewindAI 复习笔记", "包含全部已保存的收藏与备注，请仅在本机妥善保管。", ""];
+    state.bookmarks.forEach((item, index) => {
+      lines.push(`${index + 1}. ${videoName(item.video_id)}`, `时间：${fmt(item.start_time)} – ${fmt(item.end_time)}`,
+        `备注：${item.note || "（无）"}`, "");
+    });
+    const url = URL.createObjectURL(new Blob([lines.join("\n")], {type: "text/plain;charset=utf-8"}));
+    const link = document.createElement("a"); link.href = url; link.download = "rewindai-review-notes.txt";
+    document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notice("已准备本地下载；文件可能包含私人课程内容。");
+  });
+  const exportHint = element("p", "hint", "导出全部已保存收藏；文件包含视频名称与备注，请留在本机。");
+  $("bookmarks").before(bookmarkFilter, bookmarkFilterStatus, exportBookmarks, exportHint);
   function filterBookmarks() {
     const query = bookmarkFilter.value.trim().toLocaleLowerCase(); let visible = 0;
     $("bookmarks").querySelectorAll(".bookmark").forEach(card => {

@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.compare_frame_retrieval import compare, FusedAdapter
+from scripts.compare_frame_retrieval import FusedAdapter, compare
 from video_rag.schemas import SearchHit, VideoSegment
 
 
@@ -47,3 +47,27 @@ def test_fusion_deduplicates_agreement_without_mixing_raw_scores():
     hits = FusedAdapter(text, visual).search("question", 3)
     assert [hit.segment_id for hit in hits] == ["b", "a", "c"]
     assert hits[0].source == "transcript+visual"
+
+
+def test_comparison_accepts_actual_semantic_pipeline():
+    import numpy as np
+
+    from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+
+    segments = [VideoSegment("0", "v", "local", 0, 2, transcript="apple"),
+                VideoSegment("1", "v", "local", 2, 4, transcript="orange")]
+    labels = {"review_status": "reviewed", "segment_midpoints_seconds": [1, 3], "queries": [
+        {"query": "fruit", "relevant_segment_indices": [0]}]}
+
+    class Encoder:
+        def encode(self, texts):
+            return np.asarray([[0., 1.] if text == "orange" else [1., 0.] for text in texts], dtype=np.float32)
+
+    class EmptyVisual:
+        def search(self, query, count):
+            return []
+
+    pipeline = build_semantic_pipeline(segments, Encoder(), 0.4)
+    result = compare(segments, labels, EmptyVisual(), transcript_pipeline=pipeline)
+    assert result["transcript"]["tp"] == 1
+    assert result["fused_experimental"]["tp"] == 1
