@@ -119,6 +119,8 @@ Windows 用户也可以在准备好该模型后双击 `Start-RewindAI-Semantic.c
 
 可选的 CLIP 画面检索在 CPU 上运行，按每个字幕片段中点抽取一帧，用英文描述查找相似画面。它与字幕检索分别运行，需已有视频和字幕；不生成回答，也不保证画面能回答问题。由于尚未校准无匹配阈值，**即使没有相关画面也会返回候选**，必须点击画面和原视频核对。可搜索全部视频、当前视频或当前视频所属课程，每次最多搜索 100 个片段的中点画面；范围更大时会在各视频中均匀抽样并提示可能遗漏，范围超过 100 个视频时需要缩小。首次搜索、切换范围及视频库变化后可能需要重新索引。
 
+“实验性融合检索”使用 RRF（k=60）合并字幕和采样画面的候选排名，并标注来源；它不生成回答，也不能证明画面与问题相关。画面检索失败时会提示并保留字幕候选。Windows 用户可运行 `Start-RewindAI-Visual-Answers.cmd` 加载三个本地 CPU 模型；普通 AI 回答仍只基于字幕，融合检索只展示待核对片段。
+
 安装 `python -m pip install -e ".[semantic]" "av>=11,<17"`，并将 [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32) 的 `tokenizer.json` 与 `onnx/model_quantized.onnx` 下载到本机模型目录（模型文件约 154 MB，遵循模型自身许可）。然后运行：
 
 ```powershell

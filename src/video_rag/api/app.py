@@ -450,7 +450,7 @@ def create_app(
         return jsonify({"id": feedback_id}), 201
 
     @app.post("/api/ask")
-    def ask():
+    def ask(*, evidence_only: bool = False):
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return jsonify({"error": "JSON object required"}), 400
@@ -480,12 +480,13 @@ def create_app(
         if invalid_sources(scope):
             return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
         try:
+            options = {"generate_answer": False} if evidence_only else {}
             if course_videos is not None:
-                result = search_pipeline.ask(question, video_ids=course_videos)
+                result = search_pipeline.ask(question, video_ids=course_videos, **options)
             elif video_id is not None:
-                result = search_pipeline.ask(question, video_id=video_id)
+                result = search_pipeline.ask(question, video_id=video_id, **options)
             else:
-                result = search_pipeline.ask(question)
+                result = search_pipeline.ask(question, **options)
         except RuntimeError as exc:
             return jsonify({"error": str(exc)}), 503
         if pipeline is not search_pipeline or invalid_sources(scope):
@@ -582,6 +583,51 @@ def create_app(
                             "visual_error": (visual_response.get_json(silent=True) or {}).get("error", "Visual search failed")})
         return jsonify({"transcript": text_response.get_json(), "visual": visual_response.get_json(),
                         "visual_error": None})
+
+    @app.post("/api/hybrid-search")
+    def hybrid_search():
+        """Fuse transcript and sampled-frame candidate ranks without generating an answer."""
+        if mode != "transcript" or visual_builder is None:
+            return jsonify({"error": "Experimental visual search is not enabled"}), 409
+        payload = request.get_json(silent=True)
+        question = payload.get("question") if isinstance(payload, dict) else None
+        if not isinstance(question, str) or not question.strip() or len(question) > 1000:
+            return jsonify({"error": "question must contain 1 to 1000 characters"}), 400
+        from video_rag.retrieval.fusion import reciprocal_rank_fusion
+        from video_rag.schemas import SearchHit
+
+        with import_lock:
+            text_response = app.make_response(ask(evidence_only=True))
+            if text_response.status_code != 200:
+                return text_response
+            visual_response = app.make_response(visual_search())
+            visual_data = visual_response.get_json(silent=True) or {}
+            if visual_response.status_code == 409 and visual_data.get("error", "").startswith("A video in this search has moved or changed"):
+                return visual_response
+            text_items = text_response.get_json()["evidence"]
+            visual_items = visual_data.get("evidence", []) if visual_response.status_code == 200 else []
+            lists = [[SearchHit(item["segment_id"], 0.0, source, rank)
+                      for rank, item in enumerate(items, 1)]
+                     for source, items in (("transcript", text_items), ("visual", visual_items))]
+            fused = reciprocal_rank_fusion(lists, k=60, top_k=3)
+            text_ids = {item["segment_id"] for item in text_items}
+            visual_ids = {item["segment_id"] for item in visual_items}
+            evidence = []
+            for hit in fused:
+                segment = pipeline.segment(hit.segment_id)
+                if segment is None:
+                    continue
+                sources = [name for name, ids in (("transcript", text_ids), ("visual", visual_ids)) if hit.segment_id in ids]
+                evidence.append({"segment_id": segment.segment_id, "video_id": segment.video_id,
+                                 "start_time": segment.start_time, "end_time": segment.end_time,
+                                 "transcript": segment.transcript if "transcript" in sources else "",
+                                 "visual_caption": "画面相似候选，未生成画面描述" if "transcript" not in sources else "",
+                                 "sources": sources})
+        return jsonify({"evidence": evidence, "visual_available": visual_response.status_code == 200,
+                        "visual_error": None if visual_response.status_code == 200 else visual_data.get("error", "Visual search failed"),
+                        "sampled": visual_data.get("sampled"), "source_segments": visual_data.get("source_segments"),
+                        "indexed_segments": visual_data.get("indexed_segments"),
+                        "warning": "Experimental rank fusion: frame matches may be irrelevant; sampled frames can miss evidence. No answer generated."})
 
     @app.get("/api/videos/<video_id>")
     def video(video_id: str):

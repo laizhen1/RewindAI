@@ -52,7 +52,8 @@ class VideoRAGPipeline:
         for retriever in self._retrievers:
             retriever.search(query, 1)
 
-    def ask(self, query: str, *, video_id: str | None = None, video_ids: set[str] | None = None) -> Answer:
+    def ask(self, query: str, *, video_id: str | None = None, video_ids: set[str] | None = None,
+            generate_answer: bool = True) -> Answer:
         query = query.strip()
         if not query:
             raise ValueError("query must not be empty")
@@ -112,7 +113,7 @@ class VideoRAGPipeline:
         # the material supplied to the answer generator.
         ranked = [(segment, score) for segment, score in ranked if score >= self._minimum_rerank_score]
         selected_segments = [item[0] for item in ranked]
-        answer_text = self._generator.generate(query, selected_segments)
+        answer_text = self._generator.generate(query, selected_segments) if generate_answer else ""
         finished = perf_counter()
         evidence = tuple(
             Evidence(
