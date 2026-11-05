@@ -579,11 +579,11 @@ def create_app(
         # The same lock prevents library or course assignments from changing
         # between the two searches. The visual handler re-enters this RLock.
         with import_lock:
-            text_response = app.make_response(ask())
+            text_response = app.make_response(ask(evidence_only=True))
             if text_response.status_code != 200:
                 return text_response
             visual_response = app.make_response(visual_search())
-        if visual_response.status_code == 409 and (visual_response.get_json(silent=True) or {}).get("error", "").startswith("A video in this search has moved or changed"):
+        if visual_response.status_code == 409:
             return visual_response
         if visual_response.status_code != 200:
             return jsonify({"transcript": text_response.get_json(), "visual": None,
@@ -609,7 +609,7 @@ def create_app(
                 return text_response
             visual_response = app.make_response(visual_search())
             visual_data = visual_response.get_json(silent=True) or {}
-            if visual_response.status_code == 409 and visual_data.get("error", "").startswith("A video in this search has moved or changed"):
+            if visual_response.status_code == 409:
                 return visual_response
             text_items = text_response.get_json()["evidence"]
             visual_items = visual_data.get("evidence", []) if visual_response.status_code == 200 else []

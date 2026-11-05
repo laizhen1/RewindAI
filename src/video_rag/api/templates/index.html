@@ -166,7 +166,7 @@
     $("answer").textContent = "正在本机检索字幕和采样画面，首次运行可能较慢……"; $("evidenceList").replaceChildren(); $("feedbackButtons").classList.add("hidden");
     try {
       const data = await api("/api/compare-search", jsonOptions("POST", payload)); const text = data.transcript;
-      $("answer").textContent = `字幕摘录：${text.answer || "无字幕结果"}` + (text.abstained ? "\n字幕未找到足够证据。" : "") + "\n\n画面候选可能不相关，即使没有匹配也可能返回；请回看核对。";
+      $("answer").textContent = (text.abstained ? "字幕未找到候选。" : "字幕和画面候选分别显示，不生成回答。") + "\n\n候选可能不相关，画面搜索即使没有匹配也可能返回；请回看核对。";
       renderEvidence(text.evidence || [], "字幕候选");
       if (!(text.evidence || []).length) $("evidenceList").append(element("p", "hint", "字幕没有返回候选。"));
       if (data.visual) { const v = data.visual; $("answer").textContent += v.sampled ? `\n仅搜索了 ${v.indexed_segments} / ${v.source_segments} 个片段的中点画面。` : `\n搜索了 ${v.indexed_segments} 个片段的中点画面，其他时刻可能遗漏。`; renderEvidence(v.evidence || [], "画面候选（未验证）", true, "visual"); }

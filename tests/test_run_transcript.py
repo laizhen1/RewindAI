@@ -94,6 +94,11 @@ def test_visual_search_discards_results_if_source_changes_during_query(tmp_path)
                        mode="transcript", visual_builder=lambda _: Visual()).test_client()
     response = fresh.post("/api/compare-search", json={"question": "relevant"})
     assert response.status_code == 409 and "transcript" not in response.get_json()
+    video.write_bytes(b"original")
+    fresh = create_app(build_transcript_segments(segments), database_path=tmp_path / "third.sqlite3",
+                       mode="transcript", visual_builder=lambda _: Visual()).test_client()
+    response = fresh.post("/api/hybrid-search", json={"question": "relevant"})
+    assert response.status_code == 409 and "evidence" not in response.get_json()
 
 
 def test_frame_preview_discards_image_if_source_changes_during_decode(tmp_path, monkeypatch):

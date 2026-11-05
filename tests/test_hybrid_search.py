@@ -30,6 +30,9 @@ def test_hybrid_fuses_ranked_candidates_and_never_generates(tmp_path):
     assert all('source_path' not in item for item in result['evidence'])
     assert result['warning'].endswith('No answer generated.')
     assert client.post('/api/hybrid-search', json={'question': 'attention', 'video_id': 'missing'}).status_code == 404
+    compared = client.post('/api/compare-search', json={'question': 'attention'}).json
+    assert compared['transcript']['evidence'] and compared['transcript']['answer'] == ''
+    assert compared['visual']['evidence']
 
 
 def test_hybrid_degrades_to_transcript_when_visual_fails(tmp_path):
