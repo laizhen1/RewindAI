@@ -492,6 +492,13 @@ def create_app(
         if pipeline is not search_pipeline or invalid_sources(scope):
             return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
         response = result.to_dict()
+        # Only the prompt's exact refusal is recognized; other refusals and
+        # unsupported answers cannot be identified by this check.
+        response["exact_model_refusal"] = bool(
+            answer_mode == "local_experimental" and not evidence_only and not result.abstained
+            and " ".join(result.answer.lower().split()).rstrip(".! ")
+            == "insufficient evidence in the provided excerpts"
+        )
         for evidence in response["evidence"]:
             # Local source paths may contain personal directory names. Video access
             # goes through the indexed ID rather than exposing filesystem paths.

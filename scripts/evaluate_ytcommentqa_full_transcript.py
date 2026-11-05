@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.evaluate_ytcommentqa import evidence_segments, partition
+from video_rag.evaluation.provenance import fingerprint
 from video_rag.schemas import TimedText, VideoSegment
 from video_rag.transcript_baseline import build_transcript_segments, group_subtitle_cues
 
@@ -191,6 +192,11 @@ def main():
                         help="Skip invalid non-reference cues and report incomplete transcripts")
     args = parser.parse_args()
     try:
+        sources = {"dataset": args.dataset}
+        if args.compare_model:
+            sources.update({"semantic_tokenizer": args.compare_model / "tokenizer.json",
+                            "semantic_model": args.compare_model / "onnx" / "model_quantized.onnx"})
+        before = {name: fingerprint(path) for name, path in sources.items()}
         data = json.loads(args.dataset.read_text(encoding="utf-8-sig"))
         if args.compare_model:
             from video_rag.retrieval.onnx_semantic import (
@@ -204,10 +210,13 @@ def main():
                              sample=args.sample, allow_incomplete=args.allow_incomplete_captions, segmentation=args.segmentation)
         else:
             result = evaluate(data, sample=args.sample, allow_incomplete=args.allow_incomplete_captions, segmentation=args.segmentation)
+        if any(fingerprint(path) != before[name] for name, path in sources.items()):
+            raise ValueError("Input changed during evaluation; discard results")
     except (ImportError, OSError, TypeError, ValueError, RuntimeError) as exc:
         parser.exit(2, f"Evaluation failed: {exc}\n")
     print(json.dumps({"warning": "Temporal overlap and reference coverage do not establish answer correctness. "
                                  "Full provided transcripts are searched; actual videos and audio are not used.",
+                      "source_sha256": before,
                       "sample": args.sample, "segmentation": args.segmentation, "allow_incomplete_captions": args.allow_incomplete_captions,
                       "semantic_threshold": args.semantic_threshold if args.compare_model else None,
                       "metrics": result}, indent=2))

@@ -107,3 +107,17 @@ We repeated the same 50 balanced development snippets with the local quantized M
 The keyword counterparts on this same development set were 9/4/16/21 for retrieval, 1/0/24/25 for strict and 3/1/22/24 for balanced. An exact-refusal match is a narrow heuristic and other refusal wording counts as a positive; the evaluation does not check generated-answer correctness. The selected evidence window is supplied in advance and all earlier caveats about dataset labels, prompt tuning, balanced sampling, pretraining and lack of source-video review apply. These figures are not course performance and do not establish a general improvement. The workspace defaults remain keyword retrieval and the strict prompt.
 
 To reproduce this exploratory run, add `--semantic-model PATH_TO_LOCAL_MINILM` and use a new local output path. No threshold was selected using the video-disjoint partition; further tuning requires new independent data.
+
+## Semantic retrieval on the other video partition
+
+On 5 November 2026, using the same fixed semantic threshold of 0.4 and strict workspace prompt, we repeated the snippet-level proxy on the 25 answerable and 25 unanswerable examples from the `other` video-hash partition described above. These 50 examples came from 50 videos distinct from the development partition, but the partition had already been used for the keyword/prompt comparison and is not a pristine final test.
+
+| Rule | TP | FP | FN | TN | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Semantic retrieval: any candidate | 17 | 5 | 8 | 20 | 0.773 | 0.680 | 0.723 |
+| Semantic + strict prompt: exact-refusal proxy | 2 | 0 | 23 | 25 | 1.000 | 0.080 | 0.148 |
+| Semantic + experimental balanced prompt: exact-refusal proxy | 8 | 1 | 17 | 24 | 0.889 | 0.320 | 0.471 |
+
+For context, the keyword retrieval proxy on these same examples was 8/3/17/22 (F1 0.444). The selected evidence snippets are provided in advance, class prevalence is artificially balanced, and the exact-refusal rule does not judge whether generated answers are correct or fully supported. In particular, strict precision of 1.000 comes from only two positive predictions and cannot establish factual accuracy. The balanced prompt produced more positive predictions, but one was on an unanswerable snippet and others may contain unsupported claims; its proxy score is not evidence of safer or more accurate answers. It remains experimental, not the workspace default. No video or audio was reviewed and these are not lecture results. Reproduce with `--partition other --semantic-model PATH_TO_LOCAL_MINILM` and separate new output files for `--prompt strict` and `--prompt balanced`.
+
+As a qualitative check, the assistant inspected the first four positive and first four negative examples in this deterministic sample, comparing each output with the excerpts actually provided to the model. In one positive case, the strict prompt refused even though the supplied sentence appeared to contain the requested event; in another, the strict response appeared supported while the balanced prompt refused. A third question requested an explanation, but the returned text did not appear to explain why; the dataset's positive label alone could not establish that the displayed answer context was sufficient. This is an AI inspection of eight non-random examples, not independent human review or a correctness score; the rest of each video and any omitted captions were not examined. The observations help explain why refusal-proxy counts and answer quality can differ.

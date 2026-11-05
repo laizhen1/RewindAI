@@ -18,7 +18,9 @@ RewindAI is a local learning workspace for finding and reviewing moments in lect
 - Try optional local English semantic search and experimental visual search. A comparison view shows their results separately.
 - Explore the full pipeline's speech, keyframe, hybrid retrieval, reranking and evaluation components; the complete model workflow still needs independent end-to-end validation.
 
-While the page remains open, an unsaved note is retained when the bookmark list refreshes. Select **Save note** to store it. The browser may warn before a reload or close when notes are unsaved or saving; drafts are still lost if the page closes, and browsers may suppress this warning. The export button saves all bookmarks, regardless of the current filter, and requires pending notes to be saved first. The browser writes the text file locally; it contains video titles and notes, so keep course-derived exports private.
+A five-task [usability study plan](docs/USER_STUDY.md) can be run with shareable media; it is not a report of completed research.
+
+While the page remains open, an unsaved note is retained when the bookmark list refreshes. Select **Save note** to store it. The browser may warn before a reload or close when notes are unsaved or saving; drafts are still lost if the page closes, and browsers may suppress this warning. The export button saves all bookmarks, regardless of the current filter, and requires pending notes to be saved first. The browser writes a text file containing video titles and notes. Save course-derived exports in a local folder that is not synchronized to cloud storage.
 
 ## Current limitations
 
@@ -89,7 +91,7 @@ Windows users can also run `Start-RewindAI-Transcribe.cmd`. An unchanged saved v
 
 ### Experimental local AI answers
 
-The optional answer mode uses a locally installed `llama-cpp-python` and an existing GGUF model to answer from retrieved transcript excerpts on CPU. It makes no network request for inference or model download. Answers can be wrong, fabricated, or affected by instructions in the subtitles; numbered excerpts match the order supplied to the model, but a model citation may still be wrong. The excerpts and timestamps are candidates, not proof. A search miss does not show that the whole video lacks an answer. Check the source video. This is text-only, not visual understanding, and it has not been evaluated on human-reviewed lectures.
+The optional answer mode uses a locally installed `llama-cpp-python` and an existing GGUF model to answer from retrieved transcript excerpts on CPU. It makes no network request for inference or model download. Answers can be wrong, fabricated, or affected by instructions in the subtitles; numbered excerpts match the order supplied to the model, but a model citation may still be wrong. The excerpts and timestamps are candidates, not proof. A search miss does not show that the whole video lacks an answer. If the model returns the exact requested refusal phrase, the interface distinguishes that response from a search with no candidates; other refusal wording is not detected. Check the source video. This is text-only, not visual understanding, and it has not been evaluated on human-reviewed lectures.
 
 Install a CPU wheel using the [llama-cpp-python instructions](https://github.com/abetlen/llama-cpp-python#installation), prepare a GGUF model locally, and start:
 

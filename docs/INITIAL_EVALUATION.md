@@ -380,3 +380,5 @@ For top-three overlap, both routes overlapped on 182 questions, only keyword on 
 ```powershell
 python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_DATASET_JSON --sample other --compare-model PATH_TO_LOCAL_MINILM --semantic-threshold 0.4 --segmentation workspace
 ```
+
+The evaluator now fingerprints the dataset and semantic model files before and after processing, rejects results when those fingerprints differ, and includes the fingerprints in its output. A change that is reverted between checks will not be detected. Fingerprints of private inputs are private and should remain on the local computer.

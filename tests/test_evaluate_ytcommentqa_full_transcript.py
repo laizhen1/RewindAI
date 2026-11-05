@@ -99,3 +99,23 @@ def test_workspace_segmentation_matches_real_subtitle_grouping():
     assert ref == (1, 3)
     result = compare({"1": item}, build_transcript_segments, sample="all", segmentation="workspace")
     assert result["keyword"]["top3_reference_half_covered_count"] == 1
+
+
+def test_cli_discards_result_if_dataset_changes(tmp_path, monkeypatch, capsys):
+    import json
+    import sys
+
+    import pytest
+
+    from scripts import evaluate_ytcommentqa_full_transcript as module
+
+    dataset = tmp_path / "dataset.json"
+    dataset.write_text(json.dumps({"1": row([2])}), encoding="utf-8")
+    values = iter(["before", "after"])
+    monkeypatch.setattr(module, "fingerprint", lambda path: next(values))
+    monkeypatch.setattr(sys, "argv", ["evaluate", "--dataset", str(dataset), "--sample", "all"])
+    with pytest.raises(SystemExit) as error:
+        module.main()
+    assert error.value.code == 2
+    output = capsys.readouterr()
+    assert "changed during evaluation" in output.err and "metrics" not in output.out
