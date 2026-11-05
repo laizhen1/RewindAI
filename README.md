@@ -73,6 +73,16 @@ Omit all `--subtitles` arguments to look for same-name SRT or VTT files. This mo
 
 Untimed `.txt` transcripts cannot provide reliable video timestamps and are not imported directly. Use a timed SRT/VTT file or generate one with local transcription. Generating timestamps does not establish transcript accuracy; check the result against the recording.
 
+### Review inaccurate subtitles locally
+
+The local subtitle reviewer lets you play individual cues, correct their text, and export a new SRT draft without modifying the input. It uses no hosted model or external service:
+
+```bash
+python scripts/review_subtitles.py --video /path/to/lecture.mp4 --subtitles /path/to/lecture.srt
+```
+
+Open `http://127.0.0.1:5096/` on the same computer. Search the cues, listen to the source, make corrections, and export to `artifacts/corrected_subtitles/`. Each export is a new file. Only edited cues have been reviewed; unchanged cues may still be wrong, and this tool does not adjust timestamps. To continue after closing the page, restart with the exported SRT as the input. To search the corrections, remove the old index and import the new SRT; removing an index does not delete the original media. Keep the exported captions private. The reviewer normalizes subtitle presentation to plain text and SRT.
+
 For video without subtitles, install faster-whisper and prepare a local cached model as described in [local transcription](docs/LOCAL_TRANSCRIPTION.md). Enter the video path, choose a language, and select **Transcribe locally and load** in the workspace. One job runs at a time on CPU; the interface remains in Chinese. Transcription can be cancelled before indexing starts. A completed transcript is kept under `artifacts/transcripts/` and a copy is saved in the local library. The process does not initiate model downloads or send media to a hosted speech API. Model weights must already be cached; obtaining them initially requires an explicit download. The workflow has been checked on two short public videos, but lecture performance remains unverified.
 
 Windows users can also run `Start-RewindAI-Transcribe.cmd`. An unchanged saved video opens the workspace without retranscription; remove its index first to replace subtitles. A forced service shutdown can bypass best-effort child-process cleanup; see the transcription guide for details.
