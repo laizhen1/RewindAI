@@ -13,6 +13,16 @@ python scripts/evaluate_local_answers.py --video PATH_TO_VIDEO --subtitles PATH_
 ```
 
 The question JSON uses the same `questions` structure as the prepared temporal question files. The script rejects test-split files, fingerprints inputs before and after execution, and writes only to a new JSON file under `artifacts/` or `local_data/`. A source-bound question file is checked against the supplied video and subtitles; unbound files are marked as such. Results include question text, draft answers, retrieved excerpts, timings and input fingerprints. Keep private course outputs local. Human answer and evidence verdicts start empty; retrieval abstention is not a judgment that a generated answer is correct. Review the source recording, references and each claim before calculating or presenting metrics.
+## Start from local question labels
+
+For labels created in the local temporal-label page, the helper below verifies that the CSV is bound to the same video and that its split is development or validation. It creates answer drafts using CPU inference, then starts the review page. The final test split is reserved. All inputs and outputs stay local.
+
+```bash
+python scripts/start_answer_review.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --labels artifacts/private_lecture_review/labels.csv --video-id VIDEO_ID --split development --model PATH_TO_GGUF
+```
+
+Open `http://127.0.0.1:5097/` after processing. Draft questions must exist first. The model may make unsupported claims; a draft and its resulting scores are not independently verified ground truth. Source fingerprints, questions, answers and reports can be private.
+
 ## Review without editing JSON
 
 Start the local review page with the same source video used to produce the review draft:
