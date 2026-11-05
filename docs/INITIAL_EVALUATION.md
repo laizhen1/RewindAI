@@ -382,3 +382,20 @@ python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_D
 ```
 
 The evaluator now fingerprints the dataset and semantic model files before and after processing, rejects results when those fingerprints differ, and includes the fingerprints in its output. A change that is reverted between checks will not be detected. Fingerprints of private inputs are private and should remain on the local computer.
+
+### Synthetic subtitle word-deletion sensitivity
+
+On 5 November 2026, we revisited the 151 script-answerable questions from 126 videos in the previously explored `sample` partition. After workspace grouping, we deterministically removed words selected by a SHA-256 rule from each segment while preserving timestamps; across the per-question transcript inputs, 17,239 of 175,128 whitespace tokens were removed (9.84%). Repeated videos are counted once per question. Questions, reference windows, segmentation, models and the 0.4 semantic threshold stayed fixed. The same strict transcript exclusions described above apply.
+
+| Retrieval | Clean top-three overlap | Deleted-word top-three overlap | Clean only | Deleted-word only |
+| --- | ---: | ---: | ---: | ---: |
+| Keyword | 61 / 151 (0.404) | 55 / 151 (0.364) | 7 | 1 |
+| Experimental semantic | 74 / 151 (0.490) | 74 / 151 (0.490) | 8 | 8 |
+
+For the semantic route, equal aggregate rates mask 16 individual questions changing hit status; they do not establish robustness. This artificial deletion pattern is neither a realistic model of speech-recognition errors nor a measurement of any course transcript. It does not cover substitutions, technical terms, timing errors, accents, answer correctness, or visual search. The data were previously explored, the reference windows are broad, and no video/audio was reviewed. No settings were changed based on this result.
+
+```powershell
+python scripts/evaluate_subtitle_noise.py --dataset PATH_TO_LOCAL_DATASET_JSON --semantic-model PATH_TO_LOCAL_MINILM --sample sample --output artifacts/evaluation/noise.json
+```
+
+The evaluator writes only a new local aggregate file under `artifacts/` or `local_data/` and checks input fingerprints before and after the run. Private input fingerprints and results remain private. A realistic assessment requires independently corrected transcripts and held-out questions from authorized recordings.
