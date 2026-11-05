@@ -273,3 +273,51 @@ def test_model_suggestion_origin_is_preserved_in_development_only(labeler):
                                   allowed_roots=(tmp / 'private',)).test_client()
     payload['revision'] = validation.get('/api/entries').get_json()['revision']
     assert validation.post('/api/entries', json=payload).status_code == 400
+
+
+def test_candidates_are_source_bound_development_only_and_never_auto_saved(labeler):
+    import hashlib
+
+    _client, video, output, tmp = labeler
+    subtitle = tmp / 'sample.srt'
+    subtitle.write_text('1\n00:00:01,000 --> 00:00:03,000\nA sample\n', encoding='utf-8')
+    candidates = tmp / 'private' / 'suggestions.json'
+    suggestions = {'status': 'model_generated_unverified', 'split': 'development',
+                   'input_sha256': {'video': hashlib.sha256(video.read_bytes()).hexdigest(),
+                                    'subtitles': hashlib.sha256(subtitle.read_bytes()).hexdigest()},
+                   'suggestions': [{'question': 'What?', 'answer': 'Sample', 'start_seconds': 1,
+                                    'end_seconds': 3, 'status': 'model_generated_unverified'}]}
+    candidates.write_text(json.dumps(suggestions), encoding='utf-8')
+    app = create_label_app(video, output, 'sample', 'development', 100, allowed_roots=(tmp / 'private',),
+                           subtitles=subtitle, candidates=candidates)
+    client = app.test_client()
+    assert client.get('/api/entries').json['model_candidates_available'] is True
+    assert client.get('/api/development-candidates').json['candidates'][0]['question'] == 'What?'
+    assert client.get('/api/entries').json['count'] == 0
+    subtitle.write_text('changed', encoding='utf-8')
+    assert client.get('/api/development-candidates').status_code == 400
+    with pytest.raises(ValueError, match='development'):
+        create_label_app(video, tmp / 'private' / 'validation.csv', 'sample', 'validation', 100,
+                         allowed_roots=(tmp / 'private',), subtitles=subtitle, candidates=candidates)
+
+
+def test_candidate_origin_survives_into_answer_review(labeler):
+    from scripts.evaluate_local_answers import prepare_review
+    from video_rag.schemas import Answer
+
+    client, _video, output, _tmp = labeler
+    revision = client.get('/api/entries').json['revision']
+    payload = {'revision': revision, 'question': 'What is the topic?', 'question_type': 'audio',
+               'answerable': True, 'answer': 'A topic', 'start': 3.0, 'end': 8.0,
+               'model_generated_candidate': True}
+    assert client.post('/api/entries', json=payload).status_code == 201
+    with output.open(encoding='utf-8', newline='') as f:
+        data = prepare(list(csv.DictReader(f)), 'sample', 'development')
+
+    class StubPipeline:
+        def ask(self, question):
+            return Answer(answer='No answer', evidence=(), abstained=True)
+
+    row = prepare_review(StubPipeline(), data)[0]
+    assert row['annotation_source'] == 'model_generated_candidate_unverified'
+    assert row['human_answer_verdict'] is None

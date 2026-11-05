@@ -55,7 +55,7 @@ def case_result(question: dict, row: dict) -> dict:
 
 def create_label_app(video: Path, output: Path, video_id: str, split: str, duration: float,
                      *, allowed_roots: tuple[Path, ...], subtitles: Path | None = None,
-                     semantic_model: Path | None = None) -> Flask:
+                     semantic_model: Path | None = None, candidates: Path | None = None) -> Flask:
     video = Path(video).expanduser().resolve()
     output = private_output(output, roots=allowed_roots)
     if not video.is_file() or video.suffix.lower() not in {".mp4", ".webm", ".ogv", ".mov", ".m4v"}:
@@ -68,6 +68,10 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         subtitles = Path(subtitles).expanduser().resolve()
         if not subtitles.is_file() or subtitles.suffix.lower() not in {".srt", ".vtt"}:
             raise ValueError("Provide existing timed SRT/VTT subtitles")
+    if candidates is not None:
+        candidates = private_output(candidates, roots=allowed_roots)
+        if split != "development" or subtitles is None or not candidates.is_file() or candidates.suffix.lower() != ".json":
+            raise ValueError("Model suggestions require a development video, subtitles and a private JSON file")
     model_files = ()
     if semantic_model is not None:
         semantic_model = Path(semantic_model).expanduser().resolve()
@@ -162,7 +166,8 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             return jsonify({"error": "Unable to read the annotation file"}), 500
         return jsonify({"count": len(rows), "revision": revision, "split": split, "duration": duration,
                         "evaluation_available": subtitles is not None and split != "test",
-                        "suggestions_available": subtitles is not None and split == "development", "entries": rows})
+                        "suggestions_available": subtitles is not None and split == "development",
+                        "model_candidates_available": candidates is not None, "entries": rows})
 
     @app.get("/api/development-excerpts")
     def development_excerpts():
@@ -186,6 +191,41 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                             "warning": "Transcript text may be wrong. Excerpts are not questions or verified evidence."})
         except (OSError, UnicodeError, ValueError, RuntimeError):
             return jsonify({"error": "Could not prepare local transcript excerpts"}), 400
+
+    @app.get("/api/development-candidates")
+    def development_candidates():
+        if candidates is None or split != "development" or subtitles is None:
+            return jsonify({"error": "Model suggestions are unavailable"}), 409
+        try:
+            if candidates.stat().st_size > 1024 * 1024:
+                raise ValueError("Candidate file is too large")
+            before = fingerprint(candidates)
+            data = json.loads(candidates.read_text(encoding="utf-8-sig"))
+            hashes = data.get("input_sha256") if isinstance(data, dict) else None
+            if (not isinstance(hashes, dict) or data.get("status") != "model_generated_unverified" or
+                    data.get("split") != "development" or hashes.get("video") != binding["video_sha256"] or
+                    fingerprint(video) != hashes.get("video") or fingerprint(subtitles) != hashes.get("subtitles")):
+                raise ValueError("Suggestions are not bound to these sources")
+            rows = data.get("suggestions")
+            if not isinstance(rows, list) or not 1 <= len(rows) <= 12:
+                raise ValueError("Invalid suggestions")
+            result = []
+            for item in rows:
+                if not isinstance(item, dict) or item.get("status") != "model_generated_unverified":
+                    raise ValueError("Invalid suggestion")
+                question, answer = item.get("question"), item.get("answer")
+                start, end = item.get("start_seconds"), item.get("end_seconds")
+                if (not isinstance(question, str) or not question.strip() or len(question) > 1000 or
+                        not isinstance(answer, str) or not answer.strip() or len(answer) > 1000 or
+                        type(start) not in (int, float) or type(end) not in (int, float) or
+                        not math.isfinite(start) or not math.isfinite(end) or not 0 <= start < end <= duration):
+                    raise ValueError("Invalid suggestion content or time")
+                result.append({"question": question, "answer": answer, "start": start, "end": end})
+            if fingerprint(candidates) != before or fingerprint(video) != hashes["video"] or fingerprint(subtitles) != hashes["subtitles"]:
+                raise ValueError("Suggestion sources changed")
+            return jsonify({"candidates": result})
+        except (OSError, UnicodeError, ValueError, TypeError):
+            return jsonify({"error": "Could not load source-bound development suggestions"}), 400
 
     @app.post("/api/evaluate")
     def evaluate_drafts():
@@ -362,6 +402,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--subtitles", type=Path, help="Optional local timed subtitles for draft evaluation")
     parser.add_argument("--semantic-model", type=Path, help="Optional local ONNX model for paired comparison")
+    parser.add_argument("--candidates", type=Path, help="Private, source-bound model suggestions (development only)")
     parser.add_argument("--port", type=int, default=5095)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
@@ -375,7 +416,7 @@ def main() -> int:
             duration = container.duration / av.time_base if container.duration else 0
         app = create_label_app(args.video, args.output, args.video_id, args.split, duration,
                                allowed_roots=(ROOT / "artifacts", ROOT / "local_data"), subtitles=args.subtitles,
-                               semantic_model=args.semantic_model)
+                               semantic_model=args.semantic_model, candidates=args.candidates)
     except (OSError, ValueError, av.error.FFmpegError) as exc:
         parser.exit(2, f"Cannot start local labeler ({type(exc).__name__}); check video and PyAV.\n")
     print(f"Local-only labeling: http://127.0.0.1:{args.port}/", flush=True)
