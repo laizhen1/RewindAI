@@ -20,8 +20,8 @@ def find_review(video: Path, directory: Path, *, allowed_roots=PRIVATE_ROOTS) ->
     if not directory.is_dir() or not Path(video).is_file():
         raise ValueError('Local video or review directory not found')
     video_hash = fingerprint(video)
+    candidates = []
     for pattern in ('progress-*.json', 'answer-draft-*.json'):
-        candidates = []
         for path in directory.glob(pattern):
             try:
                 path = private_output(path, roots=allowed_roots)
@@ -29,17 +29,19 @@ def find_review(video: Path, directory: Path, *, allowed_roots=PRIVATE_ROOTS) ->
                     candidates.append((path.stat().st_mtime_ns, path))
             except (OSError, ValueError):
                 continue
-        for _, path in sorted(candidates, reverse=True):
-            try:
-                report = json.loads(path.read_text(encoding='utf-8-sig'))
-                if (isinstance(report, dict) and report.get('status') == 'unreviewed_answer_drafts'
-                        and report.get('split') in {'development', 'validation'}
-                        and isinstance(report.get('input_sha256'), dict)
-                        and report['input_sha256'].get('video') == video_hash
-                        and isinstance(report.get('rows'), list) and report['rows']):
-                    return path
-            except (OSError, UnicodeError, ValueError, TypeError):
-                continue
+    # Prefer the latest activity across both kinds: a newly regenerated draft
+    # must not silently reopen stale progress from an earlier version.
+    for _, path in sorted(candidates, reverse=True):
+        try:
+            report = json.loads(path.read_text(encoding='utf-8-sig'))
+            if (isinstance(report, dict) and report.get('status') == 'unreviewed_answer_drafts'
+                    and report.get('split') in {'development', 'validation'}
+                    and isinstance(report.get('input_sha256'), dict)
+                    and report['input_sha256'].get('video') == video_hash
+                    and isinstance(report.get('rows'), list) and report['rows']):
+                return path
+        except (OSError, UnicodeError, ValueError, TypeError):
+            continue
     raise ValueError('No matching local development or validation review found')
 
 

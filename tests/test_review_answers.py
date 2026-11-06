@@ -128,3 +128,18 @@ def test_resume_finds_progress_for_matching_video_only(review_app, tmp_path):
     assert find_review(video, review.parent, allowed_roots=(review.parent,)).name == saved
     with pytest.raises(ValueError, match='No matching'):
         find_review(other, review.parent, allowed_roots=(review.parent,))
+
+
+def test_resume_prefers_newer_regenerated_draft_over_older_progress(review_app):
+    import os
+
+    from scripts.resume_answer_review import find_review
+
+    client, video, review = review_app
+    judgments = [{'answer': 'correct', 'evidence': 'supported'}, {'answer': '', 'evidence': ''}]
+    progress = review.parent / client.post('/api/progress', json={'judgments': judgments}).json['filename']
+    draft = review.parent / 'answer-draft-new.json'
+    draft.write_bytes(review.read_bytes())
+    os.utime(progress, ns=(1_000_000_000, 1_000_000_000))
+    os.utime(draft, ns=(2_000_000_000, 2_000_000_000))
+    assert find_review(video, review.parent, allowed_roots=(review.parent,)) == draft

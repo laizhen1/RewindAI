@@ -122,7 +122,7 @@ Windows 用户安装依赖后也可双击 `Download-Qwen3-Embedding.cmd`。该�
 python scripts/run_transcript.py --semantic-model PATH_TO_QWEN3_GGUF
 ```
 
-Windows 用户可以双击 `Start-RewindAI-Semantic.cmd`；启动器默认查找项目缓存中的固定版本 `370f27d7550e0def9b39c1f16d3fbaa13aa67728`。也可设置 `REWINDAI_SEMANTIC_MODEL` 指向其他位置的 GGUF 文件。启动器不会下载模型。向量在本机 CPU 生成，使用最后一个 token 的池化向量，仅对查询添加检索指令，输入截断为 512 个 token。重建索引时，内存中的有限缓存可复用未变化的字幕向量；进程退出后缓存清除，不会将字幕或向量写入磁盘。0.4 相似度阈值尚未针对 Qwen3 校准，请回看视频核对证据。下方历史评测使用 MiniLM，不能作为 Qwen3 的结果。
+Windows 用户可以双击 `Start-RewindAI-Semantic.cmd`；启动器默认查找项目缓存中的固定版本 `370f27d7550e0def9b39c1f16d3fbaa13aa67728`。也可设置 `REWINDAI_SEMANTIC_MODEL` 指向其他位置的 GGUF 文件。启动器不会下载模型。向量在本机 CPU 生成，使用最后一个 token 的池化向量，仅对查询添加检索指令，输入截断为 512 个 token。内存中的有限缓存可在重建索引时复用未变化的字幕向量，并在召回和重排时复用最近的问题向量；进程退出后缓存清除，不会将字幕、问题或向量写入磁盘。0.4 相似度阈值尚未针对 Qwen3 校准，请回看视频核对证据。下方历史评测使用 MiniLM，不能作为 Qwen3 的结果。
 
 在此前已探索的 YTCommentQA 公开视频字幕片段中，Qwen3 对 284 道题的**检索候选可回答性代理指标**为 Precision 0.847、Recall 0.919、F1 0.882；61 个标为无答案的片段中，37 个仍返回候选。这不是回答正确率或课程录像结果，详见[方法与计数](docs/INITIAL_EVALUATION.md#qwen3-single-model-snippet-proxy)。
 
@@ -175,7 +175,7 @@ CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完�
 
 本地证据标注页面可以一边看视频、一边记录问题及时间范围，输出为私人 CSV 草稿；使用方式和限制见[课程视频评估与人工标注方案](docs/REWINDAI_EVALUATION_ZH.md)。保存并不证明标签已独立核验，CSV 和来源绑定文件不得上传。
 
-回答复核页支持“保存进度”和“恢复已保存的进度”。重新启动时，可用 `python scripts/resume_answer_review.py --video 本地视频路径`，恢复同一视频最近保存的开发或验证进度；课程题目、进度和结果均须留在本机。
+回答复核页支持“保存进度”和“恢复已保存的进度”。重新启动时，可用 `python scripts/resume_answer_review.py --video 本地视频路径`，恢复同一视频最近更新的开发或验证草稿或进度；课程题目、进度和结果均须留在本机。
 
 标注页面可选用本地英文语义模型，与关键词检索对同一批开发或验证草稿做时间证据对照；两者都只检索字幕，结果不是回答准确率。测试集保留给独立评估。
 

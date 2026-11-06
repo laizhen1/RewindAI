@@ -43,6 +43,8 @@ def test_qwen_rejects_invalid_embedding_output():
     from threading import Lock
     encoder._lock = Lock()
     encoder._cache_lock = Lock()
+    encoder._query_lock = Lock()
+    encoder._last_query = None
     encoder._document_cache = OrderedDict()
     encoder._model = types.SimpleNamespace(embed=lambda *args, **kwargs: [[float('nan')] * 1024])
     with pytest.raises(ValueError, match='invalid vectors'):
@@ -112,3 +114,53 @@ def test_document_cache_reuses_embeddings_without_losing_evicted_batch_items(tmp
     assert len(calls) == 2
     encoder.encode_documents(['new2'])
     assert calls[-1] == ['new2']
+
+
+def test_query_cache_is_bounded_and_returned_vectors_do_not_mutate_it(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            pass
+
+        def embed(self, texts, **kwargs):
+            calls.append(texts[:])
+            return [[1.0] + [0.0] * 1023 for _ in texts]
+
+    monkeypatch.setitem(sys.modules, 'llama_cpp', types.SimpleNamespace(Llama=FakeLlama))
+    monkeypatch.setitem(sys.modules, 'llama_cpp.llama_cpp', types.SimpleNamespace(LLAMA_POOLING_TYPE_LAST=7))
+    model = tmp_path / 'model.gguf'
+    model.touch()
+    encoder = Qwen3EmbeddingEncoder(model)
+    result = encoder.encode_query(' question ')
+    result[0] = 0.0
+    assert encoder.encode_query('question')[0] == 1.0
+    assert len(calls) == 1
+    encoder.encode_query('another question')
+    encoder.encode_query('question')
+    assert len(calls) == 3
+
+
+def test_qwen_pipeline_embeds_one_query_across_retrieval_and_reranking(tmp_path, monkeypatch):
+    from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+    from video_rag.schemas import VideoSegment
+
+    calls = []
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            pass
+
+        def embed(self, texts, **kwargs):
+            calls.append(texts[:])
+            return [[1.0] + [0.0] * 1023 for _ in texts]
+
+    monkeypatch.setitem(sys.modules, 'llama_cpp', types.SimpleNamespace(Llama=FakeLlama))
+    monkeypatch.setitem(sys.modules, 'llama_cpp.llama_cpp', types.SimpleNamespace(LLAMA_POOLING_TYPE_LAST=7))
+    model = tmp_path / 'model.gguf'
+    model.touch()
+    pipeline = build_semantic_pipeline([VideoSegment('a', 'v', 'v.mp4', 0, 3, transcript='document')],
+                                       Qwen3EmbeddingEncoder(model), 0.4)
+    assert not pipeline.ask('question').abstained
+    assert len(calls) == 2
+    assert calls[0] == ['document'] and calls[1][0].endswith('Query:question')

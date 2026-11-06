@@ -27,6 +27,8 @@ class Qwen3EmbeddingEncoder:
                             n_ctx=512, n_batch=512, n_ubatch=512, n_gpu_layers=0, verbose=False)
         self._lock = Lock()
         self._cache_lock = Lock()
+        self._query_lock = Lock()
+        self._last_query: tuple[str, np.ndarray] | None = None
         self._document_cache: OrderedDict[str, np.ndarray] = OrderedDict()
 
     def _embed(self, texts: list[str]) -> np.ndarray:
@@ -68,4 +70,12 @@ class Qwen3EmbeddingEncoder:
     def encode_query(self, query: str) -> np.ndarray:
         if not isinstance(query, str) or not query.strip():
             raise ValueError('A nonempty query is required')
-        return self._embed([f'Instruct: {QUERY_INSTRUCTION}\nQuery:{query.strip()}'])[0]
+        query = query.strip()
+        # Retrieval and reranking use the same query. Retain only the latest
+        # vector in memory, return copies, and never persist question text.
+        with self._query_lock:
+            if self._last_query is not None and self._last_query[0] == query:
+                return self._last_query[1].copy()
+            vector = self._embed([f'Instruct: {QUERY_INSTRUCTION}\nQuery:{query}'])[0]
+            self._last_query = (query, vector.copy())
+            return vector.copy()
