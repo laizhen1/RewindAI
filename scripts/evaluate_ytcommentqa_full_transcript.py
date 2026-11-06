@@ -7,6 +7,7 @@ questions; snippet-level unanswerable labels are not whole-video negatives.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -165,6 +166,29 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
     return result
 
 
+
+def select_eligible(dataset, limit, *, sample="sample", allow_incomplete=False, segmentation="sentence"):
+    """Take stable SHA-256-ranked IDs after checking transcript eligibility."""
+    if limit <= 0:
+        raise ValueError("Question limit must be positive")
+    eligible = []
+    for row_id, row in dataset.items():
+        try:
+            if not isinstance(row_id, str) or not isinstance(row, dict):
+                continue
+            video, labels, question = row.get("videoID"), row.get("answerability"), row.get("question")
+            if (not isinstance(video, str) or not video or (sample != "all" and partition(video) != sample)
+                    or not isinstance(labels, list) or any(type(x) is not int for x in labels)
+                    or labels not in ([2], [1, 2], [2, 1]) or not isinstance(question, str) or not question.strip()):
+                continue
+            full_transcript(row, allow_incomplete=allow_incomplete, segmentation=segmentation)
+            eligible.append((hashlib.sha256(row_id.encode("utf-8")).digest(), row_id))
+        except (KeyError, TypeError, ValueError):
+            continue
+    chosen = sorted(eligible)[:limit]
+    return {row_id: dataset[row_id] for _, row_id in chosen}, len(eligible)
+
+
 def compare(dataset, semantic_builder, *, sample="sample", allow_incomplete=False, segmentation="sentence"):
     keyword = evaluate(dataset, sample=sample, include_rows=True, allow_incomplete=allow_incomplete, segmentation=segmentation)
     semantic = evaluate(dataset, sample=sample, builder=semantic_builder, include_rows=True, allow_incomplete=allow_incomplete, segmentation=segmentation)
@@ -184,7 +208,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--sample", choices=("sample", "other", "all"), default="sample")
-    parser.add_argument("--compare-model", type=Path, help="Optional local English ONNX model directory")
+    models = parser.add_mutually_exclusive_group()
+    models.add_argument("--compare-model", type=Path, help="Optional local English ONNX model directory")
+    models.add_argument("--semantic-model", type=Path, help="Evaluate one local semantic model without comparison")
+    parser.add_argument("--max-questions", type=int, help="Use the first N eligible IDs ordered by SHA-256")
     parser.add_argument("--semantic-threshold", type=float, default=0.4)
     parser.add_argument("--segmentation", choices=("sentence", "workspace"), default="sentence",
                         help="Use supplied sentences or the workspace's subtitle grouping")
@@ -193,12 +220,34 @@ def main():
     args = parser.parse_args()
     try:
         sources = {"dataset": args.dataset}
+        if args.semantic_model:
+            from video_rag.retrieval.semantic_models import semantic_model_files
+
+            sources.update(semantic_model_files(args.semantic_model))
         if args.compare_model:
             sources.update({"semantic_tokenizer": args.compare_model / "tokenizer.json",
                             "semantic_model": args.compare_model / "onnx" / "model_quantized.onnx"})
         before = {name: fingerprint(path) for name, path in sources.items()}
         data = json.loads(args.dataset.read_text(encoding="utf-8-sig"))
-        if args.compare_model:
+        eligible_count = None
+        if args.max_questions is not None:
+            data, eligible_count = select_eligible(data, args.max_questions, sample=args.sample,
+                                                  allow_incomplete=args.allow_incomplete_captions,
+                                                  segmentation=args.segmentation)
+        if args.semantic_model:
+            from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+            from video_rag.retrieval.semantic_models import load_semantic_encoder
+
+            if not math.isfinite(args.semantic_threshold) or not -1 <= args.semantic_threshold <= 1:
+                raise ValueError("Invalid semantic threshold")
+            encoder = load_semantic_encoder(args.semantic_model)
+            result = evaluate(data, sample=args.sample, allow_incomplete=args.allow_incomplete_captions,
+                              segmentation=args.segmentation,
+                              builder=lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold))
+            for key in ("first_three_caption_overlap_count", "first_three_caption_overlap_rate",
+                        "first_three_reference_half_covered_count", "mean_first_three_reference_coverage"):
+                result.pop(key)
+        elif args.compare_model:
             from video_rag.retrieval.onnx_semantic import (
                 OnnxSentenceEncoder,
                 build_semantic_pipeline,
@@ -218,7 +267,8 @@ def main():
                                  "Full provided transcripts are searched; actual videos and audio are not used.",
                       "source_sha256": before,
                       "sample": args.sample, "segmentation": args.segmentation, "allow_incomplete_captions": args.allow_incomplete_captions,
-                      "semantic_threshold": args.semantic_threshold if args.compare_model else None,
+                      "eligible_before_limit": eligible_count, "max_questions": args.max_questions,
+                      "semantic_threshold": args.semantic_threshold if args.compare_model or args.semantic_model else None,
                       "metrics": result}, indent=2))
     return 0
 

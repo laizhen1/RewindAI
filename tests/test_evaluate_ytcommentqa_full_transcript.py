@@ -119,3 +119,40 @@ def test_cli_discards_result_if_dataset_changes(tmp_path, monkeypatch, capsys):
     assert error.value.code == 2
     output = capsys.readouterr()
     assert "changed during evaluation" in output.err and "metrics" not in output.out
+
+
+def test_limited_sample_is_deterministic_and_eligible():
+    from scripts.evaluate_ytcommentqa_full_transcript import select_eligible
+
+    invalid = row([2])
+    invalid['caption'][0]['end'] = -1
+    dataset = {'a': row([2]), 'b': row([2, 1]), 'c': row([0]), 'd': invalid, 'e': row([2])}
+    sample, eligible = select_eligible(dataset, 2, sample='all', segmentation='workspace')
+    reversed_sample, _ = select_eligible(dict(reversed(list(dataset.items()))), 2, sample='all',
+                                         segmentation='workspace')
+    assert eligible == 3 and len(sample) == 2
+    assert list(sample) == list(reversed_sample)
+    assert all(key in {'a', 'b', 'e'} for key in sample)
+
+
+def test_single_semantic_cli_uses_one_model_and_reports_sampling(tmp_path, monkeypatch, capsys):
+    import json
+    import sys
+
+    from scripts import evaluate_ytcommentqa_full_transcript as module
+    from video_rag.retrieval import onnx_semantic, semantic_models
+
+    dataset = tmp_path / 'dataset.json'
+    dataset.write_text(json.dumps({'1': row([2]), '2': row([2]), '3': row([0])}), encoding='utf-8')
+    model = tmp_path / 'model.gguf'
+    model.write_bytes(b'synthetic model')
+    monkeypatch.setattr(sys, 'argv', ['eval', '--dataset', str(dataset), '--sample', 'all',
+                                      '--semantic-model', str(model), '--max-questions', '1'])
+    monkeypatch.setattr(semantic_models, 'load_semantic_encoder', lambda path: object())
+    monkeypatch.setattr(onnx_semantic, 'build_semantic_pipeline',
+                        lambda segments, encoder, threshold: build_transcript_segments(segments))
+    module.main()
+    result = json.loads(capsys.readouterr().out)
+    assert result['eligible_before_limit'] == 2 and result['metrics']['evaluated_questions'] == 1
+    assert 'keyword' not in result['metrics'] and 'first_three_caption_overlap_rate' not in result['metrics']
+    assert len(result['source_sha256']['semantic_model']) == 64

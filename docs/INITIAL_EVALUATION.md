@@ -414,3 +414,20 @@ python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_PUBLIC_DATASET_JSON --s
 ```
 
 The command reads local files and prints aggregate results; it does not download videos. Treat inputs and fingerprints from private course data as private.
+
+
+### Qwen3 single-model full-transcript temporal pilot
+
+On 6 November 2026 we ran Qwen3-Embedding-0.6B-Q8_0 over the provided full captions for 30 script-answerable YTCommentQA questions, one per each of 30 videos. This uses the workspace's subtitle grouping and the fixed, uncalibrated 0.4 threshold. The 30 were selected independently of model outputs: after the existing deterministic video partition and strict full-caption validation, question IDs were ordered by SHA-256 and the first 30 of 151 eligible questions selected. The source sample was explored previously; this is a small pilot, not a final held-out test.
+
+The top returned segment overlapped the annotated reference window on **16/30** questions; at least one of the top three overlapped on **24/30**. Top-three segments together covered at least half of the reference window on **16/30**. Overlap requires only positive-duration intersection. Two questions returned no candidates.
+
+For micro-aggregated reference-window time, matched time was 330.286 s, returned time 1373.099 s and reference time 889.382 s: **precision 0.241, recall 0.371, F1 0.292**. These metrics measure the overlap of time intervals, not answer correctness or factual precision. The reference windows can be broad or incomplete and include gaps, while workspace grouping can include irrelevant material. All questions were annotated script-answerable; there are no full-video unanswerable examples, and no video or audio was inspected. The pilot is not a measurement of private university recordings.
+
+Dataset SHA-256 `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc368`; Qwen3 model revision `370f27d7550e0def9b39c1f16d3fbaa13aa67728`, SHA-256 `06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439`. Inputs were fingerprinted before and after the run. CPU inference used llama-cpp-python 0.3.36.
+
+```powershell
+python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_PUBLIC_DATASET_JSON --sample sample --semantic-model PATH_TO_QWEN3_GGUF --semantic-threshold 0.4 --segmentation workspace --max-questions 30
+```
+
+This single-model command does not download media. Protect course data, derived results and fingerprints; do not commit them.

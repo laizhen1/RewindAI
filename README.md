@@ -124,6 +124,8 @@ On Windows, `Start-RewindAI-Semantic.cmd` looks for revision `370f27d7550e0def9b
 
 A Qwen3 run on 284 previously explored public YTCommentQA snippet questions produced **precision 0.847, recall 0.919, F1 0.882** for a retrieval-based answerability proxy. It returned candidates for 37 of 61 snippets labeled unanswerable. This is not answer accuracy or a lecture result; see the [method and full counts](docs/INITIAL_EVALUATION.md#qwen3-single-model-snippet-proxy).
 
+In a separate Qwen3 pilot searching 30 provided full public transcripts, top-three candidates overlapped the annotated time window on **24/30** questions; the micro time-overlap precision / recall / F1 was **0.241 / 0.371 / 0.292**. These are temporal measures, not answer correctness. See [sampling, exclusions and limits](docs/INITIAL_EVALUATION.md#qwen3-single-model-full-transcript-temporal-pilot).
+
 ### Experimental local visual search
 
 Optional CLIP search compares an English description with one midpoint frame per subtitle segment on CPU. It requires an existing video and subtitles. Results are candidates for inspection, not verified answers. There is no calibrated no-match threshold: **unrelated queries can still return candidates**. Search can cover the library, one video or one course. At most 100 segments are sampled across the selected scope; unsampled content can be missed, and scopes over 100 videos must be narrowed. The first search and subsequent scope or library changes may require reindexing.
