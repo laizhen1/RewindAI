@@ -77,9 +77,9 @@ def select_cases(dataset: dict, per_class: int, sample: str = "sample") -> list[
     return [(key, positive, row) for _, key, positive, row in selected]
 
 
-def score(cases: list[tuple[str, bool, dict]], generator, builder=build_transcript_segments) -> dict:
+def score(cases: list[tuple[str, bool, dict]], generator, builder=build_transcript_segments, progress=None) -> dict:
     counts = {'retrieval': Counter(), 'exact_refusal_proxy': Counter()}
-    for _, positive, row in cases:
+    for index, (_, positive, row) in enumerate(cases, 1):
         pipeline = builder(evidence_segments(row), generator=generator)
         result = pipeline.ask(row['question'])
         retrieved = bool(result.evidence)
@@ -88,6 +88,8 @@ def score(cases: list[tuple[str, bool, dict]], generator, builder=build_transcri
         for name, predicted in [('retrieval', retrieved), ('exact_refusal_proxy', generated_positive)]:
             key = 'tp' if positive and predicted else 'fn' if positive else 'fp' if predicted else 'tn'
             counts[name][key] += 1
+        if progress is not None:
+            progress(index)
     metrics = {}
     for name, values in counts.items():
         tp, fp, fn, tn = (values[key] for key in ('tp', 'fp', 'fn', 'tn'))
@@ -105,7 +107,8 @@ def main() -> int:
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--per-class', type=int, default=25)
     parser.add_argument('--partition', choices=['sample', 'other'], default='sample')
-    parser.add_argument('--semantic-model', type=Path, help='Optional local MiniLM directory for experimental semantic retrieval')
+    parser.add_argument('--progress', action='store_true', help='Print processed-question counts to stderr')
+    parser.add_argument('--semantic-model', type=Path, help='Optional local Qwen3 embedding GGUF file for semantic retrieval')
     parser.add_argument('--prompt', choices=['strict', 'balanced'], default='strict',
                         help='Balanced is an experimental alternate prompt, not the workspace default')
     args = parser.parse_args()
@@ -115,8 +118,9 @@ def main() -> int:
             raise ValueError('Choose a new local JSON output')
         sources = {'dataset': args.dataset, 'model': args.model}
         if args.semantic_model:
-            sources.update({'semantic_tokenizer': args.semantic_model / 'tokenizer.json',
-                            'semantic_model': args.semantic_model / 'onnx' / 'model_quantized.onnx'})
+            from video_rag.retrieval.semantic_models import semantic_model_files
+
+            sources.update(semantic_model_files(args.semantic_model))
         before = {key: fingerprint(path) for key, path in sources.items()}
         dataset = json.loads(args.dataset.read_text(encoding='utf-8-sig'))
         cases = select_cases(dataset, args.per_class, args.partition)
@@ -124,14 +128,16 @@ def main() -> int:
                      else LocalAnswerGenerator(args.model))
         builder = build_transcript_segments
         if args.semantic_model:
-            from video_rag.retrieval.onnx_semantic import (
-                OnnxSentenceEncoder,
-                build_semantic_pipeline,
-            )
+            from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+            from video_rag.retrieval.semantic_models import load_semantic_encoder
 
-            encoder = OnnxSentenceEncoder(args.semantic_model)
+            encoder = load_semantic_encoder(args.semantic_model)
             builder = lambda segments, generator: build_semantic_pipeline(segments, encoder, 0.4, generator=generator)
-        metrics = score(cases, generator, builder)
+        def progress(count):
+            if count % 5 == 0:
+                print(f'Processed {count} questions', file=sys.stderr, flush=True)
+
+        metrics = score(cases, generator, builder, progress=progress if args.progress else None)
         if any(fingerprint(path) != before[key] for key, path in sources.items()):
             raise ValueError('Input changed; discard run')
         result = {'status': 'exploratory_snippet_proxy', 'input_sha256': before,

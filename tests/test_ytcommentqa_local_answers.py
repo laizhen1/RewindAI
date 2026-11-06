@@ -33,3 +33,51 @@ def test_literal_refusal_proxy_is_not_retrieval_abstention(monkeypatch):
     result = score([('a', True, {'question': 'yes'}), ('b', False, {'question': 'no'})], object(), builder)
     assert result['retrieval']['fp'] == 1 and result['retrieval']['tp'] == 1
     assert result['exact_refusal_proxy']['tn'] == 1 and result['exact_refusal_proxy']['tp'] == 1
+
+
+def test_public_answer_cli_loads_qwen_gguf_and_fingerprints_it(tmp_path, monkeypatch):
+    import json
+    import sys
+
+    from scripts import evaluate_ytcommentqa_local_answers as module
+    from video_rag.retrieval import onnx_semantic, semantic_models
+
+    dataset = tmp_path / 'dataset.json'
+    dataset.write_text('{}', encoding='utf-8')
+    answer_model = tmp_path / 'answer.gguf'
+    answer_model.write_bytes(b'answer weights')
+    embedding = tmp_path / 'embedding.gguf'
+    embedding.write_bytes(b'embedding weights')
+    target = tmp_path / 'result.json'
+    monkeypatch.setattr(sys, 'argv', ['eval', '--dataset', str(dataset), '--model', str(answer_model),
+                                      '--semantic-model', str(embedding), '--output', str(target), '--per-class', '1'])
+    monkeypatch.setattr(module, 'private_output', lambda path: path)
+    monkeypatch.setattr(module, 'select_cases', lambda *a: [('x', True, {'videoID': 'public'})])
+    monkeypatch.setattr(module, 'LocalAnswerGenerator', lambda path: SimpleNamespace(metadata=dict))
+    sentinel = object()
+    monkeypatch.setattr(semantic_models, 'load_semantic_encoder', lambda path: sentinel)
+    monkeypatch.setattr(onnx_semantic, 'build_semantic_pipeline',
+                        lambda segments, encoder, threshold, generator: (encoder, threshold, generator))
+
+    def fake_score(cases, generator, builder, progress=None):
+        encoder, threshold, used_generator = builder([], generator)
+        assert encoder is sentinel and threshold == 0.4 and used_generator is generator
+        return {'single_model': {}}
+
+    monkeypatch.setattr(module, 'score', fake_score)
+    assert module.main() == 0
+    report = json.loads(target.read_text(encoding='utf-8'))
+    assert len(report['input_sha256']['semantic_model']) == 64
+    assert 'semantic_tokenizer' not in report['input_sha256']
+
+
+def test_answer_experiment_progress_exposes_only_counts(monkeypatch):
+    class Pipeline:
+        def ask(self, question):
+            return SimpleNamespace(evidence=[object()], answer='red')
+
+    monkeypatch.setattr('scripts.evaluate_ytcommentqa_local_answers.evidence_segments', lambda row: row)
+    counts = []
+    cases = [('a', True, {'question': 'private draft text'}), ('b', False, {'question': 'other'})]
+    score(cases, object(), lambda segments, generator: Pipeline(), progress=counts.append)
+    assert counts == [1, 2]
