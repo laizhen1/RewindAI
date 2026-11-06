@@ -29,5 +29,5 @@ class EvidenceGenerator:
         content = evidence.transcript.strip() or evidence.visual_caption.strip()
         if not content:
             return "根据当前视频内容无法确定。"
-        return f"{content}（证据：{evidence.segment_id}，{evidence.start_time:.1f}–{evidence.end_time:.1f}秒）"
+        return f"{content}（视频片段：{evidence.start_time:.1f}–{evidence.end_time:.1f}秒）"
 

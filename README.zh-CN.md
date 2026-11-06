@@ -126,7 +126,7 @@ Windows 用户可以双击 `Start-RewindAI-Semantic.cmd`；启动器默认查找
 
 在此前已探索的 YTCommentQA 公开视频字幕片段中，Qwen3 对 284 道题的**检索候选可回答性代理指标**为 Precision 0.847、Recall 0.919、F1 0.882；61 个标为无答案的片段中，37 个仍返回候选。这不是回答正确率或课程录像结果，详见[方法与计数](docs/INITIAL_EVALUATION.md#qwen3-single-model-snippet-proxy)。
 
-另一次 Qwen3 试点评测搜索了 30 段公开视频的完整字幕：**24/30** 道题的前 3 个候选与参考时间范围重合；按时间重合计算的微平均 Precision / Recall / F1 为 **0.241 / 0.371 / 0.292**。这些是时间定位指标，不是回答正确率；详见[抽样、排除条件与限制](docs/INITIAL_EVALUATION.md#qwen3-single-model-full-transcript-temporal-pilot)。
+Qwen3 对 151 道公开视频完整字幕问题的评测中，**108/151** 道题的前 3 个候选与参考时间范围重合；按时间重合计算的微平均 Precision / Recall / F1 为 **0.248 / 0.389 / 0.303**。这是时间定位指标，不是回答正确率；77 条字幕因格式异常被排除。详见[样本和限制](docs/INITIAL_EVALUATION.md#qwen3-complete-eligible-public-transcript-partition)。
 
 ### 实验性本地画面搜索
 

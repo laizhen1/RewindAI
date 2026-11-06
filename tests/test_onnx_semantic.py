@@ -42,3 +42,14 @@ def test_semantic_index_survives_import_and_restart(tmp_path):
 def test_semantic_threshold_must_be_finite():
     with pytest.raises(ValueError):
         build_semantic_pipeline([], FakeEncoder(), float("nan"))
+
+
+def test_extractive_response_keeps_time_but_hides_internal_id():
+    from video_rag.adapters.local import EvidenceGenerator
+    from video_rag.schemas import VideoSegment
+
+    segment = VideoSegment('internal-segment-id', 'v', 'video.mp4', 1, 2, transcript='A useful excerpt')
+    result = EvidenceGenerator().generate('question', [segment])
+    assert 'A useful excerpt' in result
+    assert '1.0–2.0' in result
+    assert 'internal-segment-id' not in result

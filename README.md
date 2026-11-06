@@ -124,7 +124,7 @@ On Windows, `Start-RewindAI-Semantic.cmd` looks for revision `370f27d7550e0def9b
 
 A Qwen3 run on 284 previously explored public YTCommentQA snippet questions produced **precision 0.847, recall 0.919, F1 0.882** for a retrieval-based answerability proxy. It returned candidates for 37 of 61 snippets labeled unanswerable. This is not answer accuracy or a lecture result; see the [method and full counts](docs/INITIAL_EVALUATION.md#qwen3-single-model-snippet-proxy).
 
-In a separate Qwen3 pilot searching 30 provided full public transcripts, top-three candidates overlapped the annotated time window on **24/30** questions; the micro time-overlap precision / recall / F1 was **0.241 / 0.371 / 0.292**. These are temporal measures, not answer correctness. See [sampling, exclusions and limits](docs/INITIAL_EVALUATION.md#qwen3-single-model-full-transcript-temporal-pilot).
+In a Qwen3 run over 151 eligible questions with provided full public transcripts, top-three candidates overlapped the annotated time window on **108/151** questions; the micro time-overlap precision / recall / F1 was **0.248 / 0.389 / 0.303**. These are temporal measures, not answer correctness; 77 invalid transcripts were excluded. See [sampling and limits](docs/INITIAL_EVALUATION.md#qwen3-complete-eligible-public-transcript-partition).
 
 ### Experimental local visual search
 

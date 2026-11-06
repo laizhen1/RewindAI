@@ -156,3 +156,34 @@ def test_single_semantic_cli_uses_one_model_and_reports_sampling(tmp_path, monke
     assert result['eligible_before_limit'] == 2 and result['metrics']['evaluated_questions'] == 1
     assert 'keyword' not in result['metrics'] and 'first_three_caption_overlap_rate' not in result['metrics']
     assert len(result['source_sha256']['semantic_model']) == 64
+
+
+def test_progress_reports_counts_without_question_text():
+    counts = []
+    data = {'1': row([2], 'private example'), '2': row([0]), '3': row([2])}
+    result = evaluate(data, sample='all', progress=counts.append)
+    assert result['evaluated_questions'] == 2
+    assert counts == [1, 2]
+
+
+def test_single_model_progress_goes_to_stderr_only(tmp_path, monkeypatch, capsys):
+    import json
+    import sys
+
+    from scripts import evaluate_ytcommentqa_full_transcript as module
+    from video_rag.retrieval import onnx_semantic, semantic_models
+
+    dataset = tmp_path / 'dataset.json'
+    dataset.write_text(json.dumps({str(i): row([2], 'private example') for i in range(5)}), encoding='utf-8')
+    model = tmp_path / 'model.gguf'
+    model.write_bytes(b'synthetic model')
+    monkeypatch.setattr(sys, 'argv', ['eval', '--dataset', str(dataset), '--sample', 'all',
+                                      '--semantic-model', str(model), '--progress'])
+    monkeypatch.setattr(semantic_models, 'load_semantic_encoder', lambda path: object())
+    monkeypatch.setattr(onnx_semantic, 'build_semantic_pipeline',
+                        lambda segments, encoder, threshold: build_transcript_segments(segments))
+    module.main()
+    output = capsys.readouterr()
+    assert json.loads(output.out)['metrics']['evaluated_questions'] == 5
+    assert output.err.strip() == 'Processed 5 questions'
+    assert 'private example' not in output.err

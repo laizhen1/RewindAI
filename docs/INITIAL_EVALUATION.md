@@ -430,4 +430,21 @@ Dataset SHA-256 `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc36
 python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_PUBLIC_DATASET_JSON --sample sample --semantic-model PATH_TO_QWEN3_GGUF --semantic-threshold 0.4 --segmentation workspace --max-questions 30
 ```
 
-This single-model command does not download media. Protect course data, derived results and fingerprints; do not commit them.
+This single-model command does not download media. Add `--progress` to print only a processed-question count every five questions to stderr; JSON results remain on stdout. Protect course data, derived results and fingerprints; do not commit them.
+
+
+### Qwen3 complete eligible public transcript partition
+
+On 6 November 2026, the Qwen3 full-transcript pilot was extended to all eligible questions in the same previously explored `sample` video partition, without changing the model, 0.4 threshold, workspace grouping or strict caption validation. Of 446 selected records, 218 had non-script-answerable labels and 77 had invalid full transcripts; **151 questions from 126 videos** remained. This is a larger exploratory sample, not an independent held-out test. Only supplied captions were processed; video and audio were not examined.
+
+The top candidate overlapped the reference window on **69/151** questions, and at least one of the top three overlapped on **108/151**; top-three candidates together covered at least half of the reference on **66/151**. Five questions returned no candidate. Any positive-duration intersection counts as overlap.
+
+Micro-aggregated reference-window time: matched **1649.770 s**, returned **6646.876 s**, reference **4246.108 s**; time-overlap **precision 0.248, recall 0.389, F1 0.303**. This measures time overlap, not answer correctness or factual precision. Reference windows may contain extra context or omit other valid evidence, 77 invalid transcripts were excluded, there were no full-video unanswerable questions, and lecture performance remains unmeasured.
+
+The dataset SHA-256 was `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc368`, and the Qwen3 model SHA-256 was `06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439`; inputs were fingerprinted before and after the run. The evaluation started from commit `8a3ebaecdd71be688b1e3755990983060808d2a0` using llama-cpp-python 0.3.36 on CPU. Later display and optional progress changes do not change the retrieval evidence used for these metrics.
+
+```powershell
+python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_PUBLIC_DATASET_JSON --sample sample --semantic-model PATH_TO_QWEN3_GGUF --semantic-threshold 0.4 --segmentation workspace --progress
+```
+
+The command performs no model or video download. Keep private course inputs, fingerprints and results local.

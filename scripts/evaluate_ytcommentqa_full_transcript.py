@@ -86,7 +86,7 @@ def reference_coverage(segments, reference):
     return union_duration(spans) / (end - start)
 
 
-def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, include_rows=False, allow_incomplete=False, segmentation="sentence"):
+def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, include_rows=False, allow_incomplete=False, segmentation="sentence", progress=None):
     if sample not in {"sample", "other", "all"} or not isinstance(dataset, dict):
         raise ValueError("Invalid dataset or sample")
     counts = Counter()
@@ -136,6 +136,8 @@ def evaluate(dataset, *, sample="sample", builder=build_transcript_segments, inc
         counts["returned_segments"] += len(hits)
         videos.add(row["videoID"])
         outcomes[row_id] = (top1, top3)
+        if progress is not None:
+            progress(len(outcomes))
     n = len(outcomes)
     matched, predicted, reference = counts["matched_seconds"], counts["returned_seconds"], counts["reference_seconds"]
     result = {"selected_rows": counts["selected_rows"], "evaluated_questions": n,
@@ -212,6 +214,7 @@ def main():
     models.add_argument("--compare-model", type=Path, help="Optional local English ONNX model directory")
     models.add_argument("--semantic-model", type=Path, help="Evaluate one local semantic model without comparison")
     parser.add_argument("--max-questions", type=int, help="Use the first N eligible IDs ordered by SHA-256")
+    parser.add_argument("--progress", action="store_true", help="Print single-model processed-question counts to stderr")
     parser.add_argument("--semantic-threshold", type=float, default=0.4)
     parser.add_argument("--segmentation", choices=("sentence", "workspace"), default="sentence",
                         help="Use supplied sentences or the workspace's subtitle grouping")
@@ -241,8 +244,12 @@ def main():
             if not math.isfinite(args.semantic_threshold) or not -1 <= args.semantic_threshold <= 1:
                 raise ValueError("Invalid semantic threshold")
             encoder = load_semantic_encoder(args.semantic_model)
+            def progress(count):
+                if count % 5 == 0:
+                    print(f"Processed {count} questions", file=sys.stderr, flush=True)
+
             result = evaluate(data, sample=args.sample, allow_incomplete=args.allow_incomplete_captions,
-                              segmentation=args.segmentation,
+                              segmentation=args.segmentation, progress=progress if args.progress else None,
                               builder=lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold))
             for key in ("first_three_caption_overlap_count", "first_three_caption_overlap_rate",
                         "first_three_reference_half_covered_count", "mean_first_three_reference_coverage"):

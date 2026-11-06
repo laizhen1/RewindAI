@@ -48,7 +48,8 @@ class PipelineTests(unittest.TestCase):
         result = make_pipeline().ask("飞机在哪里降落")
         self.assertFalse(result.abstained)
         self.assertEqual(result.evidence[0].segment.segment_id, "v1_0000")
-        self.assertIn("v1_0000", result.answer)
+        self.assertIn("飞机在机场附近降落", result.answer)
+        self.assertNotIn("v1_0000", result.answer)
         self.assertGreaterEqual(result.latency_ms["total"], 0)
 
     def test_pipeline_abstains_for_unrelated_question(self):
@@ -77,4 +78,3 @@ class PipelineTests(unittest.TestCase):
         result = pipeline.ask("飞机蛋糕")
         self.assertEqual([item.segment.segment_id for item in result.evidence], ["v1_0000"])
         self.assertEqual([item.segment_id for item in capture.seen], ["v1_0000"])
-
