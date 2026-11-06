@@ -98,3 +98,51 @@ def test_metrics_can_save_private_summary_without_subtitle_text(review):
     assert 'A large model' not in raw and 'A model' not in raw
     assert client.post('/api/metrics', json={**payload, 'save_report': 'yes'}).status_code == 400
     assert len(list(output.glob('subtitle-metrics-*.json'))) == 1
+
+
+def test_review_progress_can_be_resumed_only_for_matching_sources(review, tmp_path):
+    client, video, subtitles, output = review
+    payload = {'edits': {'0': 'A corrected\n  model'}, 'reviewed': [0, 1]}
+    response = client.post('/api/progress', json=payload)
+    assert response.status_code == 201 and (output / response.json['filename']).is_file()
+    reopened = create_review_app(video, subtitles, output, allowed_roots=(tmp_path / 'private',)).test_client()
+    saved = reopened.get('/api/progress/latest')
+    assert saved.status_code == 200 and saved.json == payload
+    other = tmp_path / 'other.mp4'
+    other.write_bytes(b'a different video')
+    other_client = create_review_app(other, subtitles, output, allowed_roots=(tmp_path / 'private',)).test_client()
+    assert other_client.get('/api/progress/latest').status_code == 404
+    subtitles.write_text('1\n00:00:01,000 --> 00:00:03,000\nChanged\n', encoding='utf-8')
+    assert reopened.get('/api/progress/latest').status_code == 409
+    changed = create_review_app(video, subtitles, output, allowed_roots=(tmp_path / 'private',)).test_client()
+    assert changed.get('/api/progress/latest').status_code == 404
+
+
+def test_review_progress_rejects_bad_or_empty_input_and_cross_origin(review):
+    client, _video, _subtitles, output = review
+    for payload in ({'edits': {}, 'reviewed': []}, {'edits': {'-1': 'x'}, 'reviewed': []},
+                    {'edits': {}, 'reviewed': [True]}, {'edits': {}, 'reviewed': [0, 0]}):
+        assert client.post('/api/progress', json=payload).status_code == 400
+    assert client.post('/api/progress', json={'edits': {}, 'reviewed': [0]},
+                       headers={'Origin': 'https://outside.example'}).status_code == 403
+    assert not output.exists()
+
+
+def test_progress_requires_matching_optional_alternative(tmp_path):
+    video = tmp_path / 'video.mp4'
+    video.write_bytes(b'synthetic video')
+    subtitles = tmp_path / 'sub.srt'
+    subtitles.write_text('1\n00:00:01,000 --> 00:00:03,000\nA model\n', encoding='utf-8')
+    alternative = tmp_path / 'alternative.txt'
+    alternative.write_text('A model', encoding='utf-8')
+    output = tmp_path / 'private' / 'corrections'
+    client = create_review_app(video, subtitles, output, alternative=alternative,
+                               allowed_roots=(tmp_path / 'private',)).test_client()
+    assert client.post('/api/progress', json={'edits': {}, 'reviewed': [0]}).status_code == 201
+    same = create_review_app(video, subtitles, output, alternative=alternative,
+                             allowed_roots=(tmp_path / 'private',)).test_client()
+    assert same.get('/api/progress/latest').status_code == 200
+    alternative.write_text('A changed model', encoding='utf-8')
+    changed = create_review_app(video, subtitles, output, alternative=alternative,
+                                allowed_roots=(tmp_path / 'private',)).test_client()
+    assert changed.get('/api/progress/latest').status_code == 404

@@ -18,7 +18,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from flask import Flask, jsonify, render_template, request, send_file
 
 from video_rag.evaluation.private_output import PRIVATE_ROOTS, private_output
-from video_rag.evaluation.subtitle_metrics import reviewed_token_error
+from video_rag.evaluation.provenance import fingerprint
+from video_rag.evaluation.subtitle_metrics import reviewed_token_error, validate_reviewed
 from video_rag.transcript_baseline import MAX_SUBTITLE_BYTES, parse_subtitles
 
 
@@ -136,7 +137,7 @@ def create_review_app(video: Path, subtitles: Path, output_dir: Path, *, alterna
         return jsonify(cues=[{"start": c.start_time, "end": c.end_time, "text": c.text,
                               **(aligned[i] if aligned is not None else {})} for i, c in enumerate(cues)])
 
-    def parse_edits(edits):
+    def parse_edits(edits, *, normalize=True):
         if not isinstance(edits, dict) or len(edits) > len(cues):
             raise ValueError("Invalid corrections")
         checked = {}
@@ -146,11 +147,77 @@ def create_review_app(video: Path, subtitles: Path, output_dir: Path, *, alterna
             i = int(key)
             if i >= len(cues) or not isinstance(value, str) or not value.strip() or len(value) > 5000:
                 raise ValueError("Invalid cue text")
-            value = " ".join(value.split())
-            if "-->" in value:
+            normalized = " ".join(value.split())
+            if "-->" in normalized:
                 raise ValueError("Cue text cannot contain a timing arrow")
-            checked[i] = value
+            checked[i] = normalized if normalize else value
         return checked
+
+    @app.post("/api/progress")
+    def save_progress():
+        if not unchanged():
+            return jsonify(error="Source changed; restart review"), 409
+        data = request.get_json(silent=True)
+        try:
+            if not isinstance(data, dict):
+                raise TypeError("Invalid review progress")
+            checked = parse_edits(data.get("edits"), normalize=False)
+            reviewed = validate_reviewed(data.get("reviewed"), len(cues), allow_empty=True)
+            if not checked and not reviewed:
+                raise ValueError("No review progress to save")
+            video_digest = fingerprint(video)
+            if not unchanged():
+                return jsonify(error="Source changed; restart review"), 409
+            output_dir.mkdir(parents=True, exist_ok=True)
+            target = output_dir / f"subtitle-draft-{uuid.uuid4().hex}.json"
+            draft = {"status": "local_review_draft_not_independently_verified",
+                     "video_sha256": video_digest, "source_sha256": source_digest,
+                     "alternative_sha256": alternative_digest, "edits": {str(key): value for key, value in checked.items()}, "reviewed": reviewed}
+            serialized = json.dumps(draft, ensure_ascii=False, indent=2) + "\n"
+            if len(serialized.encode("utf-8")) > MAX_SUBTITLE_BYTES:
+                raise ValueError("Review progress exceeds the local size limit")
+            with target.open("x", encoding="utf-8", newline="\n") as handle:
+                handle.write(serialized)
+            return jsonify(filename=target.name), 201
+        except (OSError, TypeError, ValueError) as exc:
+            return jsonify(error=str(exc)), 400
+
+    @app.get("/api/progress/latest")
+    def latest_progress():
+        if not unchanged():
+            return jsonify(error="Source changed; restart review"), 409
+        candidates = []
+        for path in output_dir.glob("subtitle-draft-*.json"):
+            try:
+                path = private_output(path, roots=allowed_roots)
+                if path.is_file() and path.stat().st_size <= MAX_SUBTITLE_BYTES:
+                    candidates.append((path.stat().st_mtime_ns, path))
+            except (OSError, ValueError):
+                continue
+        if not candidates:
+            return jsonify(error="No matching saved subtitle progress"), 404
+        try:
+            video_digest = fingerprint(video)
+            if not unchanged():
+                return jsonify(error="Source changed; restart review"), 409
+            for _, path in sorted(candidates, reverse=True):
+                try:
+                    draft = json.loads(path.read_text(encoding="utf-8-sig"))
+                    if (not isinstance(draft, dict)
+                            or draft.get("status") != "local_review_draft_not_independently_verified"
+                            or draft.get("video_sha256") != video_digest
+                            or draft.get("source_sha256") != source_digest
+                            or draft.get("alternative_sha256") != alternative_digest):
+                        continue
+                    checked = parse_edits(draft.get("edits"), normalize=False)
+                    reviewed = validate_reviewed(draft.get("reviewed"), len(cues), allow_empty=True)
+                    if checked or reviewed:
+                        return jsonify(edits={str(key): value for key, value in checked.items()}, reviewed=reviewed)
+                except (OSError, UnicodeError, TypeError, ValueError):
+                    continue
+        except OSError:
+            return jsonify(error="Could not verify the local video"), 400
+        return jsonify(error="No matching saved subtitle progress"), 404
 
     @app.post("/api/metrics")
     def metrics():

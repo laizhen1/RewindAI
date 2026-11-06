@@ -34,11 +34,17 @@ def edit_counts(reference: list[str], hypothesis: list[str]) -> tuple[int, int, 
     return prev[-1][1:]
 
 
-def reviewed_token_error(cues, edits: dict[int, str], reviewed: list[int]) -> dict:
-    if (not isinstance(reviewed, list) or not 1 <= len(reviewed) <= MAX_REVIEWED_CUES
-            or any(type(i) is not int or not 0 <= i < len(cues) for i in reviewed)
+def validate_reviewed(reviewed, cue_count: int, *, allow_empty: bool = False) -> list[int]:
+    minimum = 0 if allow_empty else 1
+    if (not isinstance(reviewed, list) or not minimum <= len(reviewed) <= MAX_REVIEWED_CUES
+            or any(type(i) is not int or not 0 <= i < cue_count for i in reviewed)
             or len(set(reviewed)) != len(reviewed)):
-        raise ValueError('Choose 1 to 200 distinct subtitle cues to review')
+        raise ValueError('Choose up to 200 distinct subtitle cues to review')
+    return reviewed
+
+
+def reviewed_token_error(cues, edits: dict[int, str], reviewed: list[int]) -> dict:
+    validate_reviewed(reviewed, len(cues))
     substitutions = deletions = insertions = reference_tokens = 0
     for i in reviewed:
         ref = tokens(edits.get(i, cues[i].text))
