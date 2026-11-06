@@ -108,7 +108,13 @@ On Windows, `Start-RewindAI-Semantic-Answers.cmd` combines the optional semantic
 
 ### Qwen3 semantic search
 
-Install `python -m pip install -e ".[qwen-semantic]"` and download the public [Qwen3-Embedding-0.6B GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) model file `Qwen3-Embedding-0.6B-Q8_0.gguf`. Point the application to the local file:
+Install `python -m pip install -e ".[qwen-semantic]" huggingface-hub`. Then explicitly download the public [Qwen3-Embedding-0.6B GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) weights (639 MB) and verify their pinned checksum:
+
+```powershell
+python scripts/setup_qwen_embedding.py
+```
+
+On Windows you can instead run `Download-Qwen3-Embedding.cmd` after installing dependencies. The setup requests only the public model file; course materials stay local. Use `python scripts/setup_qwen_embedding.py --check-only` to verify the cached model offline. Installing `llama-cpp-python` may require a suitable CPU wheel or a C++ build environment; see its [installation instructions](https://github.com/abetlen/llama-cpp-python#installation). For a manually downloaded model, point the application to the local file:
 
 ```powershell
 python scripts/run_transcript.py --semantic-model PATH_TO_QWEN3_GGUF

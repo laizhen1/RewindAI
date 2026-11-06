@@ -110,7 +110,13 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 
 ### Qwen3 语义搜索
 
-安装 `python -m pip install -e ".[qwen-semantic]"`，并从 [Qwen3-Embedding-0.6B GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) 下载公开模型文件 `Qwen3-Embedding-0.6B-Q8_0.gguf`，然后指定本地文件：
+先运行 `python -m pip install -e ".[qwen-semantic]" huggingface-hub` 安装依赖，再通过以下命令下载 [Qwen3-Embedding-0.6B GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) 公开模型（639 MB）并校验固定版本的哈希：
+
+```powershell
+python scripts/setup_qwen_embedding.py
+```
+
+Windows 用户安装依赖后也可双击 `Download-Qwen3-Embedding.cmd`。该步骤只获取公开模型，不上传课程资料；`python scripts/setup_qwen_embedding.py --check-only` 可离线检查缓存。`llama-cpp-python` 的安装可能需要 CPU wheel 或 C++ 编译环境，详见[安装说明](https://github.com/abetlen/llama-cpp-python#installation)。如果已手动下载模型，也可直接指定文件：
 
 ```powershell
 python scripts/run_transcript.py --semantic-model PATH_TO_QWEN3_GGUF
