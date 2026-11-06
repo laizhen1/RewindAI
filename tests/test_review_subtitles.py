@@ -49,3 +49,52 @@ def test_refuses_output_outside_private_root(tmp_path):
     subtitle = tmp_path / 'sample.srt'; subtitle.write_text('1\n00:00:01,000 --> 00:00:03,000\nx\n')
     with pytest.raises(ValueError, match='Private evaluation outputs'):
         create_review_app(video, subtitle, tmp_path / 'public', allowed_roots=(tmp_path / 'private',))
+
+
+def test_metrics_only_use_explicitly_reviewed_cues(review):
+    client, _video, subtitles, output = review
+    before = subtitles.read_bytes()
+    payload = {'confirm_reviewed': True, 'reviewed': [0],
+               'edits': {'0': 'A large model', '1': 'A completely different sentence'}}
+    result = client.post('/api/metrics', json=payload)
+    assert result.status_code == 200
+    metrics = result.json['metrics']
+    assert metrics == {'reviewed_cues': 1, 'reference_tokens': 3, 'substitutions': 0,
+                       'deletions': 1, 'insertions': 0, 'token_errors': 1, 'token_error_rate': 1 / 3}
+    assert subtitles.read_bytes() == before and not output.exists()
+    assert 'not independently verified' in result.json['warning']
+    assert client.post('/api/metrics', json={**payload, 'confirm_reviewed': False}).status_code == 400
+    assert client.post('/api/metrics', json={**payload, 'reviewed': [0, 0]}).status_code == 400
+    assert client.post('/api/metrics', json={**payload, 'reviewed': [True]}).status_code == 400
+    assert client.post('/api/metrics', json=payload, headers={'Origin': 'https://outside.example'}).status_code == 403
+    subtitles.write_text('changed', encoding='utf-8')
+    assert client.post('/api/metrics', json=payload).status_code == 409
+
+
+def test_metrics_handle_insertions_substitutions_and_cjk_tokens():
+    from video_rag.evaluation.subtitle_metrics import edit_counts, tokens
+
+    assert edit_counts(tokens('a model'), tokens('a large model')) == (0, 0, 1)
+    assert edit_counts(tokens('red model'), tokens('blue model')) == (1, 0, 0)
+    assert tokens('ＡＢＣ，中文！') == ['abc', '中', '文']
+    with pytest.raises(ValueError, match='too many'):
+        edit_counts(['x'] * 201, ['y'])
+
+
+def test_metrics_can_save_private_summary_without_subtitle_text(review):
+    import json
+
+    client, _video, _subtitles, output = review
+    payload = {'confirm_reviewed': True, 'reviewed': [0], 'edits': {'0': 'A large model'}, 'save_report': True}
+    response = client.post('/api/metrics', json=payload)
+    assert response.status_code == 200
+    target = output / response.json['filename']
+    raw = target.read_text(encoding='utf-8')
+    report = json.loads(raw)
+    assert report['reviewed_cue_indices'] == [0]
+    assert report['reference_text_included'] is False
+    assert report['metrics']['token_error_rate'] == 1 / 3
+    assert len(report['source_sha256']) == len(report['reference_sha256']) == 64
+    assert 'A large model' not in raw and 'A model' not in raw
+    assert client.post('/api/metrics', json={**payload, 'save_report': 'yes'}).status_code == 400
+    assert len(list(output.glob('subtitle-metrics-*.json'))) == 1

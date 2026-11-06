@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import json
 import re
 import sys
 import uuid
@@ -17,6 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from flask import Flask, jsonify, render_template, request, send_file
 
 from video_rag.evaluation.private_output import PRIVATE_ROOTS, private_output
+from video_rag.evaluation.subtitle_metrics import reviewed_token_error
 from video_rag.transcript_baseline import MAX_SUBTITLE_BYTES, parse_subtitles
 
 
@@ -134,26 +136,71 @@ def create_review_app(video: Path, subtitles: Path, output_dir: Path, *, alterna
         return jsonify(cues=[{"start": c.start_time, "end": c.end_time, "text": c.text,
                               **(aligned[i] if aligned is not None else {})} for i, c in enumerate(cues)])
 
+    def parse_edits(edits):
+        if not isinstance(edits, dict) or len(edits) > len(cues):
+            raise ValueError("Invalid corrections")
+        checked = {}
+        for key, value in edits.items():
+            if not isinstance(key, str) or not key.isascii() or not key.isdecimal() or str(int(key)) != key:
+                raise ValueError("Invalid cue index")
+            i = int(key)
+            if i >= len(cues) or not isinstance(value, str) or not value.strip() or len(value) > 5000:
+                raise ValueError("Invalid cue text")
+            value = " ".join(value.split())
+            if "-->" in value:
+                raise ValueError("Cue text cannot contain a timing arrow")
+            checked[i] = value
+        return checked
+
+    @app.post("/api/metrics")
+    def metrics():
+        if not unchanged():
+            return jsonify(error="Source changed; restart review"), 409
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or data.get("confirm_reviewed") is not True:
+            return jsonify(error="Confirm the selected cues were reviewed against the recording"), 400
+        try:
+            checked = parse_edits(data.get("edits"))
+            result = reviewed_token_error(cues, checked, data.get("reviewed"))
+        except (TypeError, ValueError) as exc:
+            return jsonify(error=str(exc)), 400
+        if not unchanged():
+            return jsonify(error="Source changed; restart review"), 409
+        save_report = data.get("save_report", False)
+        if type(save_report) is not bool:
+            return jsonify(error="Save option must be true or false"), 400
+        warning = ("User-declared reviewed cues only; not independently verified. "
+                   "Punctuation and case ignored; English words and CJK characters are tokens. "
+                   "Scores are not representative of unchecked subtitles.")
+        response = {"metrics": result, "warning": warning}
+        if save_report:
+            selected = sorted(data["reviewed"])
+            references = [[i, checked.get(i, cues[i].text)] for i in selected]
+            reference_bytes = json.dumps(references, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            report = {"status": "user_declared_review_not_independently_verified", "metrics": result,
+                      "warning": warning, "source_sha256": source_digest,
+                      "reference_sha256": hashlib.sha256(reference_bytes).hexdigest(),
+                      "reference_text_included": False, "reviewed_cue_indices": selected,
+                      "reproducibility": "Export corrected subtitles separately to preserve edited reference text."}
+            if not unchanged():
+                return jsonify(error="Source changed; restart review"), 409
+            output_dir.mkdir(parents=True, exist_ok=True)
+            target = output_dir / f"subtitle-metrics-{uuid.uuid4().hex}.json"
+            with target.open("x", encoding="utf-8", newline="\n") as handle:
+                json.dump(report, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+            response["filename"] = target.name
+        return jsonify(response)
+
     @app.post("/api/export")
     def export():
         if not unchanged():
             return jsonify(error="Source changed; restart review"), 409
         data = request.get_json(silent=True)
-        edits = data.get("edits") if isinstance(data, dict) else None
-        if not isinstance(edits, dict) or len(edits) > len(cues):
-            return jsonify(error="Invalid corrections"), 400
-        checked = {}
-        for key, value in edits.items():
-            if not isinstance(key, str) or not key.isascii() or not key.isdecimal() or str(int(key)) != key:
-                return jsonify(error="Invalid cue index"), 400
-            i = int(key)
-            if i >= len(cues) or not isinstance(value, str) or not value.strip() or len(value) > 5000:
-                return jsonify(error="Invalid cue text"), 400
-            # A single line avoids blank-line and timing-line SRT injection.
-            value = " ".join(value.split())
-            if "-->" in value:
-                return jsonify(error="Cue text cannot contain a timing arrow"), 400
-            checked[i] = value
+        try:
+            checked = parse_edits(data.get("edits") if isinstance(data, dict) else None)
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
         if not checked:
             return jsonify(error="No corrections to export"), 400
         srt = "\n\n".join(f"{i+1}\n{timestamp(c.start_time)} --> {timestamp(c.end_time)}\n{html.escape(checked.get(i, c.text))}" for i, c in enumerate(cues)) + "\n"
