@@ -152,3 +152,8 @@ python scripts/evaluate_ytcommentqa_local_answers.py --dataset PATH_TO_PUBLIC_DA
 ```
 
 The script writes a new local aggregate report, never overwrites an existing one, and does not download media. Keep any course-derived inputs, fingerprints and results private.
+
+
+#### Small qualitative audit of the Qwen3 answer proxy
+
+A subsequent desk inspection of the first five script-answerable development snippets found different possible reasons behind four fixed refusals. Two supplied captions contain relevant clues: one question has a premise contradicted by the transcript, while another appears to require a commonsense category inference not explicitly stated. The other two ask for a demonstration or later steps that may not be fully specified in the supplied snippet. The remaining, very short question received a non-refusal based on a retrieved caption. This inspection used only the supplied captions, not the source videos, and neither the labels nor our judgments were independently verified. It does not establish an error rate or show that every refusal was wrong. Future prompt changes should be checked against video-reviewed answerable and unanswerable examples, including false-premise questions.
