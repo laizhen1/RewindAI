@@ -116,7 +116,7 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 python scripts/run_transcript.py --semantic-model PATH_TO_QWEN3_GGUF
 ```
 
-Windows 用户可以双击 `Start-RewindAI-Semantic.cmd`；启动器默认查找项目缓存中的固定版本 `370f27d7550e0def9b39c1f16d3fbaa13aa67728`。也可设置 `REWINDAI_SEMANTIC_MODEL` 指向其他位置的 GGUF 文件。启动器不会下载模型。向量在本机 CPU 生成，使用最后一个 token 的池化向量，仅对查询添加检索指令，输入截断为 512 个 token。0.4 相似度阈值尚未针对 Qwen3 校准，请回看视频核对证据。下方历史评测使用 MiniLM，不能作为 Qwen3 的结果。
+Windows 用户可以双击 `Start-RewindAI-Semantic.cmd`；启动器默认查找项目缓存中的固定版本 `370f27d7550e0def9b39c1f16d3fbaa13aa67728`。也可设置 `REWINDAI_SEMANTIC_MODEL` 指向其他位置的 GGUF 文件。启动器不会下载模型。向量在本机 CPU 生成，使用最后一个 token 的池化向量，仅对查询添加检索指令，输入截断为 512 个 token。重建索引时，内存中的有限缓存可复用未变化的字幕向量；进程退出后缓存清除，不会将字幕或向量写入磁盘。0.4 相似度阈值尚未针对 Qwen3 校准，请回看视频核对证据。下方历史评测使用 MiniLM，不能作为 Qwen3 的结果。
 
 ### 实验性本地画面搜索
 

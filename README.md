@@ -114,7 +114,7 @@ Install `python -m pip install -e ".[qwen-semantic]"` and download the public [Q
 python scripts/run_transcript.py --semantic-model PATH_TO_QWEN3_GGUF
 ```
 
-On Windows, `Start-RewindAI-Semantic.cmd` looks for revision `370f27d7550e0def9b39c1f16d3fbaa13aa67728` in the project cache. Set `REWINDAI_SEMANTIC_MODEL` to a GGUF file elsewhere. The launcher does not download weights. Embeddings are computed locally on CPU with last-token pooling, and the retrieval instruction is applied only to queries. Inputs are truncated to 512 tokens. The 0.4 similarity threshold is uncalibrated for Qwen3; verify evidence against the video. Earlier evaluation figures below used MiniLM and do not measure Qwen3.
+On Windows, `Start-RewindAI-Semantic.cmd` looks for revision `370f27d7550e0def9b39c1f16d3fbaa13aa67728` in the project cache. Set `REWINDAI_SEMANTIC_MODEL` to a GGUF file elsewhere. The launcher does not download weights. Embeddings are computed locally on CPU with last-token pooling, and the retrieval instruction is applied only to queries. Inputs are truncated to 512 tokens. A bounded in-memory cache reuses unchanged document vectors during index rebuilds and is cleared when the process exits; it does not write transcripts or embeddings to disk. The 0.4 similarity threshold is uncalibrated for Qwen3; verify evidence against the video. Earlier evaluation figures below used MiniLM and do not measure Qwen3.
 
 ### Experimental local visual search
 
