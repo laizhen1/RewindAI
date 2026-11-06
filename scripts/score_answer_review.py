@@ -42,6 +42,8 @@ def summarize(report: dict) -> dict:
             raise ValueError('A correct answer requires an answerable question and supported evidence')
         if verdict == 'abstain' and evidence != 'not_applicable':
             raise ValueError('An abstention requires evidence verdict not_applicable')
+        if verdict != 'abstain' and evidence == 'not_applicable':
+            raise ValueError('Evidence not_applicable is only valid for an abstention')
         if verdict == 'correct':
             tp += 1
         elif verdict == 'incorrect':

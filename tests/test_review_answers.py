@@ -143,3 +143,13 @@ def test_resume_prefers_newer_regenerated_draft_over_older_progress(review_app):
     os.utime(progress, ns=(1_000_000_000, 1_000_000_000))
     os.utime(draft, ns=(2_000_000_000, 2_000_000_000))
     assert find_review(video, review.parent, allowed_roots=(review.parent,)) == draft
+
+
+def test_final_review_rejects_not_applicable_evidence_for_a_wrong_answer(review_app):
+    client, _video, review = review_app
+    judgments = [{'answer': 'incorrect', 'evidence': 'not_applicable'},
+                 {'answer': 'abstain', 'evidence': 'not_applicable'}]
+    response = client.post('/api/save', json={'confirm_human_review': True, 'judgments': judgments})
+    assert response.status_code == 400
+    assert 'only valid for an abstention' in response.json['error']
+    assert not list(review.parent.glob('reviewed-*.json'))
