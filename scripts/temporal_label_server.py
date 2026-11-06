@@ -169,7 +169,7 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
         return jsonify({"count": len(rows), "revision": revision, "split": split, "duration": duration,
                         "evaluation_available": subtitles is not None and split != "test",
                         "suggestions_available": subtitles is not None and split == "development",
-                        "model_candidates_available": candidates is not None, "entries": rows})
+                        "model_candidates_available": candidates is not None, "semantic_available": semantic_model is not None, "entries": rows})
 
     @app.get("/api/development-excerpts")
     def development_excerpts():
@@ -238,8 +238,11 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             return jsonify({"error": "A current annotation revision is required"}), 400
         include_cases = payload.get("include_cases", False)
         save_report = payload.get("save_report", False)
-        if type(include_cases) is not bool or type(save_report) is not bool:
+        semantic_only = payload.get("semantic_only", False)
+        if type(include_cases) is not bool or type(save_report) is not bool or type(semantic_only) is not bool:
             return jsonify({"error": "Report and case options must be true or false"}), 400
+        if semantic_only and semantic_model is None:
+            return jsonify({"error": "No local semantic model is configured"}), 400
         try:
             rows, revision = read_rows()
             if payload.get("revision") != revision:
@@ -265,19 +268,26 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             segments = segments_from_subtitles(video, subtitles)
             if max(segment.end_time for segment in segments) > duration + 1:
                 return jsonify({"error": "Subtitle timestamps exceed the video duration"}), 400
-            keyword = build_transcript_segments(segments)
+            keyword = None if semantic_only else build_transcript_segments(segments)
             if semantic_model is not None:
                 from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
                 from video_rag.retrieval.semantic_models import load_semantic_encoder
 
                 encoder = load_semantic_encoder(semantic_model)
                 semantic = build_semantic_pipeline(segments, encoder, 0.4)
-                comparison = compare(questions, keyword, semantic)
-                individual = comparison.pop("results")
-                keyword_result = comparison["keyword"]
-                semantic_result = comparison["semantic"]
-                pairs = {"answerable": comparison["paired_answerable"],
-                         "unanswerable": comparison["paired_unanswerable"]}
+                if semantic_only:
+                    results = diagnose(semantic, questions)
+                    individual = [{"keyword": None, "semantic": result} for result in results]
+                    keyword_result = {"metrics": metrics(results), "operating": operating_metrics(results),
+                                      "by_question_type": comparison_by_question_type(results)}
+                    semantic_result = pairs = None
+                else:
+                    comparison = compare(questions, keyword, semantic)
+                    individual = comparison.pop("results")
+                    keyword_result = comparison["keyword"]
+                    semantic_result = comparison["semantic"]
+                    pairs = {"answerable": comparison["paired_answerable"],
+                             "unanswerable": comparison["paired_unanswerable"]}
             else:
                 results = diagnose(keyword, questions)
                 individual = [{"keyword": result, "semantic": None} for result in results]
@@ -289,7 +299,8 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                 return jsonify({"error": "An input changed during evaluation; retry after checking it"}), 409
             report = {"warning": "Draft time-overlap diagnostic only; not answer accuracy or a verified test.",
                       "split": split, **keyword_result, "semantic": semantic_result, "paired": pairs,
-                      "semantic_threshold": 0.4 if semantic_result is not None else None,
+                      "retrieval_mode": "semantic" if semantic_only else "paired" if semantic_result else "keyword",
+                      "semantic_threshold": 0.4 if semantic_result is not None or semantic_only else None,
                       "subtitle_last_end_seconds": max(segment.end_time for segment in segments),
                       "video_duration_seconds": duration}
             if save_report:
@@ -305,8 +316,8 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                              "warning": "Private local data. Timestamp overlap is not answer accuracy.",
                              "source_sha256": {"video": binding["video_sha256"], "subtitles": subtitle_hash,
                                                "annotation_csv": revision, "semantic_files": list(model_hashes)},
-                             "retrieval": {"keyword": "local_keyword", "semantic_threshold": report["semantic_threshold"],
-                                           "semantic_device": "cpu" if semantic_result is not None else None,
+                             "retrieval": {"keyword": None if semantic_only else "local_keyword", "semantic_threshold": report["semantic_threshold"],
+                                           "semantic_device": "cpu" if semantic_result is not None or semantic_only else None,
                                            "reference_coverage_threshold": 0.5},
                              "summary": report}
                     with target.open("x", encoding="utf-8", newline="\n") as handle:
@@ -317,7 +328,7 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                 report["cases"] = [{"question_id": question["question_id"],
                                     "reference_range": [question["evidence_start_seconds"], question["evidence_end_seconds"]]
                                                        if question["expected_answerable"] else None,
-                                    "keyword": case_result(question, result["keyword"]),
+                                    "keyword": case_result(question, result["keyword"]) if result["keyword"] is not None else None,
                                     "semantic": case_result(question, result["semantic"])
                                                 if result["semantic"] is not None else None}
                                    for question, result in zip(questions, individual, strict=True)]

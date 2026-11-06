@@ -128,6 +128,8 @@ A Qwen3 run on 284 previously explored public YTCommentQA snippet questions prod
 
 In a Qwen3 run over 151 eligible questions with provided full public transcripts, top-three candidates overlapped the annotated time window on **108/151** questions; the micro time-overlap precision / recall / F1 was **0.248 / 0.389 / 0.303**. These are temporal measures, not answer correctness; 77 invalid transcripts were excluded. See [sampling and limits](docs/INITIAL_EVALUATION.md#qwen3-complete-eligible-public-transcript-partition).
 
+When the local annotation page is started with a Qwen3 semantic model, its draft timestamp diagnostic runs that semantic model alone. The labels and results remain local and require human verification.
+
 ### Experimental local visual search
 
 Optional CLIP search compares an English description with one midpoint frame per subtitle segment on CPU. It requires an existing video and subtitles. Results are candidates for inspection, not verified answers. There is no calibrated no-match threshold: **unrelated queries can still return candidates**. Search can cover the library, one video or one course. At most 100 segments are sampled across the selected scope; unsampled content can be missed, and scopes over 100 videos must be narrowed. The first search and subsequent scope or library changes may require reindexing.

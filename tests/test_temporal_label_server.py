@@ -321,3 +321,35 @@ def test_candidate_origin_survives_into_answer_review(labeler):
     row = prepare_review(StubPipeline(), data)[0]
     assert row['annotation_source'] == 'model_generated_candidate_unverified'
     assert row['human_answer_verdict'] is None
+
+
+def test_labeler_semantic_only_does_not_run_keyword_pipeline(tmp_path, monkeypatch):
+    from scripts import temporal_label_server as module
+    from video_rag.retrieval import onnx_semantic, semantic_models
+    from video_rag.transcript_baseline import build_transcript_segments
+
+    video = tmp_path / 'sample.mp4'
+    video.write_bytes(b'video')
+    subs = tmp_path / 'sample.srt'
+    subs.write_text('1\n00:00:03,000 --> 00:00:08,000\nAttention mechanism.\n', encoding='utf-8')
+    model = tmp_path / 'embedding.gguf'
+    model.write_bytes(b'model')
+    monkeypatch.setattr(semantic_models, 'load_semantic_encoder', lambda path: object())
+    monkeypatch.setattr(onnx_semantic, 'build_semantic_pipeline',
+                        lambda segments, encoder, threshold: build_transcript_segments(segments))
+    monkeypatch.setattr(module, 'build_transcript_segments', lambda segments: pytest.fail('keyword pipeline ran'))
+    app = create_label_app(video, tmp_path / 'private' / 'draft.csv', 'sample', 'development', 100,
+                           allowed_roots=(tmp_path / 'private',), subtitles=subs, semantic_model=model)
+    client = app.test_client()
+    entries = client.get('/api/entries').get_json()
+    assert entries['semantic_available'] is True
+    saved = client.post('/api/entries', json={'revision': entries['revision'], 'question': 'attention',
+                        'question_type': 'audio', 'answerable': True, 'answer': 'answer',
+                        'start': 3, 'end': 8}).get_json()
+    response = client.post('/api/evaluate', json={'revision': saved['revision'], 'semantic_only': True,
+                                                   'include_cases': True, 'save_report': True})
+    assert response.status_code == 200
+    report = response.get_json()
+    assert report['retrieval_mode'] == 'semantic' and report['metrics']['f1'] == 1
+    assert report['paired'] is None and report['semantic_threshold'] == 0.4
+    assert report['cases'][0]['keyword'] is None and report['cases'][0]['semantic']['status'] == 'time_match'
