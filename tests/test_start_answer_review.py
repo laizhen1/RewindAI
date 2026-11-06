@@ -6,6 +6,7 @@ import pytest
 
 from scripts.start_answer_review import create_draft
 from scripts.temporal_label_server import FIELDS
+from video_rag.adapters.local_answer import LocalAnswerGenerator
 
 
 @pytest.fixture
@@ -31,6 +32,8 @@ def test_create_draft_from_bound_local_labels(sources, monkeypatch):
     video, subs, labels, model, root = sources
 
     class Generator:
+        model_input = staticmethod(LocalAnswerGenerator.model_input)
+
         def __init__(self, path):
             assert path == model
 
@@ -48,6 +51,8 @@ def test_create_draft_from_bound_local_labels(sources, monkeypatch):
     assert report['retrieval_config'] == {'type': 'keyword', 'threshold': None}
     assert report['rows'][0]['human_answer_verdict'] is None
     assert report['rows'][0]['answer'] == 'It halves the range.'
+    assert report['rows'][0]['model_question'] == report['rows'][0]['question']
+    assert report['rows'][0]['evidence'][0]['model_excerpt'] == 'Binary search halves the range.'
     assert report['input_sha256']['video'] == hashlib.sha256(video.read_bytes()).hexdigest()
 
 
@@ -62,6 +67,8 @@ def test_create_semantic_draft_records_models_and_configuration(sources, monkeyp
     (semantic / 'onnx' / 'model_quantized.onnx').write_bytes(b'encoder')
 
     class Generator:
+        model_input = staticmethod(LocalAnswerGenerator.model_input)
+
         def __init__(self, path):
             pass
         def metadata(self):
@@ -83,6 +90,8 @@ def test_create_semantic_draft_records_models_and_configuration(sources, monkeyp
     assert report['retrieval_config'] == {'type': 'semantic_experimental', 'threshold': 0.4}
     assert report['input_sha256']['semantic_model'] == hashlib.sha256(b'encoder').hexdigest()
     assert report['rows'][0]['answer'] == 'It halves the range.'
+    assert report['rows'][0]['model_question'] == report['rows'][0]['question']
+    assert report['rows'][0]['evidence'][0]['model_excerpt'] == 'Binary search halves the range.'
 
 
 def test_rejects_wrong_binding_and_test_split_without_outputs(sources):

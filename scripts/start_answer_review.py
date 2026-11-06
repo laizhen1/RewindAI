@@ -64,7 +64,8 @@ def create_draft(video: Path, subtitles: Path, labels: Path, video_id: str, spli
 
         pipeline = build_semantic_pipeline(segments, load_semantic_encoder(semantic_model),
                                            semantic_threshold, generator=generator)
-    review_rows = prepare_review(pipeline, data, allow_frozen_test=split == 'test')
+    review_rows = prepare_review(pipeline, data, allow_frozen_test=split == 'test',
+                                 model_input_builder=generator.model_input)
     if split == 'test':
         read_and_verify(manifest, frozen_paths, settings)
     if any(fingerprint(path) != before[key] for key, path in sources.items()):

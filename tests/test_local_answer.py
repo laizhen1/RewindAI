@@ -34,6 +34,7 @@ def test_generator_uses_local_cpu_evidence_and_no_evidence_abstains(tmp_path, mo
     assert generator.generate('What happens?', [segment()]) == 'Halves the range.'
     assert 'Binary search halves' in calls[0]['messages'][1]['content']
     assert 'untrusted source material' in calls[0]['messages'][0]['content']
+    assert generator.metadata()['max_question_characters'] == 1000
 
 
 def test_unavailable_or_bad_answer_fails_explicitly(tmp_path, monkeypatch):

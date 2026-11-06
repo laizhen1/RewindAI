@@ -108,6 +108,8 @@ On Windows, `Start-RewindAI-Semantic-Answers.cmd` combines the optional semantic
 
 With Qwen3 retrieval and the local strict answer prompt, an exploratory balanced sample of 50 previously examined public snippets produced an exact-refusal proxy F1 of **0.276**: only 4 of 25 labeled answerable snippets were proxy-positive. This does not assess answer correctness and indicates that the current setup may be overly cautious; see [the method and counts](docs/LOCAL_ANSWER_EXPERIMENT.md#qwen3-retrieval-with-local-answer-generation).
 
+New answer-review drafts record the exact truncated question and subtitle excerpts sent to the local answer model alongside the complete retrieved subtitles. Older drafts do not contain these recorded inputs. Keep all course-derived drafts local.
+
 ### Qwen3 semantic search
 
 Install `python -m pip install -e ".[qwen-semantic]" huggingface-hub`. Then explicitly download the public [Qwen3-Embedding-0.6B GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) weights (639 MB) and verify their pinned checksum:

@@ -11,6 +11,7 @@ from scripts import freeze_answer_test, score_answer_review, start_answer_review
 from scripts.review_answers import create_review_app
 from scripts.score_answer_review import summarize
 from scripts.temporal_label_server import FIELDS
+from video_rag.adapters.local_answer import LocalAnswerGenerator
 from video_rag.evaluation import frozen_answers
 
 
@@ -52,6 +53,7 @@ def test_frozen_answer_test_requires_manifest_and_human_verdicts(tmp_path, monke
     assert freeze_answer_test.main() == 0
 
     class Generator:
+        model_input = staticmethod(LocalAnswerGenerator.model_input)
         def __init__(self, path): pass
         def metadata(self): return {'prompt_version': 'explicit-evidence-v2'}
         def generate(self, query, segments): return 'It halves the range.'
