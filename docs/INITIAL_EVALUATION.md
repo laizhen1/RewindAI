@@ -399,3 +399,18 @@ python scripts/evaluate_subtitle_noise.py --dataset PATH_TO_LOCAL_DATASET_JSON -
 ```
 
 The evaluator writes only a new local aggregate file under `artifacts/` or `local_data/` and checks input fingerprints before and after the run. Private input fingerprints and results remain private. A realistic assessment requires independently corrected transcripts and held-out questions from authorized recordings.
+
+
+### Qwen3 single-model snippet proxy
+
+On 6 November 2026 we evaluated Qwen3-Embedding-0.6B-Q8_0 on the previously explored deterministic `sample` partition of [YTCommentQA](https://github.com/lgresearch/YTCommentQA), using the supplied annotated caption snippet for each question and an uncalibrated 0.4 cosine cutoff. No university lecture, video or audio was used. Of 446 selected records, 145 were excluded as visual-only or combined-required and 17 had invalid evidence captions, leaving 284 questions from 239 videos.
+
+The proxy labels a question as answerable whenever any caption candidate passes the retrieval threshold. The measured counts were TP 205, FP 37, FN 18 and TN 24: **precision 0.847, recall 0.919, F1 0.882**. Candidates were returned for **37 of 61 snippets labeled unanswerable**. This is not answer correctness, evidence sufficiency, full-video rejection, or a course-video score. The dataset supplies the annotated evidence snippet, the threshold is uncalibrated, and the partition has been explored previously; it is not a held-out final result.
+
+The dataset SHA-256 was `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc368`; the [Qwen GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) revision was `370f27d7550e0def9b39c1f16d3fbaa13aa67728`, model SHA-256 `06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439`. Both files were fingerprinted before and after the evaluation; in this run, the dataset had already been read before its first fingerprint. The current command fingerprints it before reading as well. Source data are credited to Yang, Park, Jang and Lee, *YTCommentQA*, AAAI 2024, DOI 10.1609/aaai.v38i17.29906.
+
+```powershell
+python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_PUBLIC_DATASET_JSON --sample sample --semantic-model PATH_TO_QWEN3_GGUF --semantic-threshold 0.4
+```
+
+The command reads local files and prints aggregate results; it does not download videos. Treat inputs and fingerprints from private course data as private.

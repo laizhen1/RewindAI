@@ -129,12 +129,30 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, required=True, help="Locally obtained YTCommentQA dataset.json")
     parser.add_argument("--sample", choices=("sample", "other", "all"), default="sample")
-    parser.add_argument("--compare-model", type=Path, help="Optional local English ONNX model directory")
+    models = parser.add_mutually_exclusive_group()
+    models.add_argument("--compare-model", type=Path, help="Optional local English ONNX model directory")
+    models.add_argument("--semantic-model", type=Path, help="Single local semantic GGUF model; no comparison")
     parser.add_argument("--semantic-threshold", type=float, default=0.4, help="Uncalibrated cosine cutoff")
     args = parser.parse_args()
     try:
+        if args.semantic_model:
+            from video_rag.evaluation.provenance import fingerprint
+
+            input_hashes = {"dataset": fingerprint(args.dataset), "semantic_model": fingerprint(args.semantic_model)}
         dataset = json.loads(args.dataset.read_text(encoding="utf-8-sig"))
-        if args.compare_model:
+        if args.semantic_model:
+            from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+            from video_rag.retrieval.semantic_models import load_semantic_encoder
+
+            if not math.isfinite(args.semantic_threshold) or not -1 <= args.semantic_threshold <= 1:
+                raise ValueError("Semantic threshold must be finite and between -1 and 1")
+            encoder = load_semantic_encoder(args.semantic_model)
+            result = evaluate(dataset, sample=args.sample,
+                              builder=lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold))
+            if (fingerprint(args.dataset) != input_hashes["dataset"] or
+                    fingerprint(args.semantic_model) != input_hashes["semantic_model"]):
+                raise ValueError("Dataset or semantic model changed during evaluation")
+        elif args.compare_model:
             from video_rag.retrieval.onnx_semantic import (
                 OnnxSentenceEncoder,
                 build_semantic_pipeline,
@@ -151,7 +169,8 @@ def main():
     print(json.dumps({"warning": "Annotated evidence snippets only; predicted answerability is proxied by "
                                  "retrieval returning a candidate, not evidence sufficiency or answer correctness. "
                                  "Video files were not used.", "sample": args.sample,
-                      "semantic_threshold": args.semantic_threshold if args.compare_model else None, "metrics": result}, indent=2))
+                      "semantic_threshold": args.semantic_threshold if args.compare_model or args.semantic_model else None,
+                      "input_sha256": input_hashes if args.semantic_model else None, "metrics": result}, indent=2))
     return 0
 
 

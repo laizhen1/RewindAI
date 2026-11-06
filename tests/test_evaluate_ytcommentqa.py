@@ -53,3 +53,82 @@ def test_paired_comparison_distinguishes_each_method():
 
 def test_boolean_labels_are_not_treated_as_integer_categories():
     assert evaluate({"1": row([False])}, sample="all")["invalid_rows"] == 1
+
+
+def test_cli_single_semantic_model_does_not_run_comparison(tmp_path, monkeypatch, capsys):
+    import json
+    import sys
+
+    from scripts import evaluate_ytcommentqa as module
+    from video_rag.retrieval import onnx_semantic, semantic_models
+
+    dataset = tmp_path / 'dataset.json'
+    dataset.write_text(json.dumps({'1': row([2])}), encoding='utf-8')
+    model = tmp_path / 'model.gguf'
+    model.write_bytes(b'synthetic model')
+    monkeypatch.setattr(sys, 'argv', ['eval', '--dataset', str(dataset), '--sample', 'all',
+                                      '--semantic-model', str(model)])
+    monkeypatch.setattr(semantic_models, 'load_semantic_encoder', lambda path: object())
+    from video_rag.transcript_baseline import build_transcript_segments
+    monkeypatch.setattr(onnx_semantic, 'build_semantic_pipeline',
+                        lambda segments, encoder, threshold: build_transcript_segments(segments))
+    monkeypatch.setattr(module, 'compare', lambda *args, **kwargs: pytest.fail('comparison was requested'))
+    module.main()
+    result = json.loads(capsys.readouterr().out)
+    assert result['metrics']['tp'] == 1
+    assert len(result['input_sha256']['semantic_model']) == 64
+
+
+def test_single_model_cli_rejects_model_change_during_evaluation(tmp_path, monkeypatch, capsys):
+    import json
+    import sys
+
+    from scripts import evaluate_ytcommentqa as module
+    from video_rag.retrieval import semantic_models
+
+    dataset = tmp_path / 'dataset.json'
+    dataset.write_text(json.dumps({'1': row([2])}), encoding='utf-8')
+    model = tmp_path / 'model.gguf'
+    model.write_bytes(b'initial')
+    monkeypatch.setattr(sys, 'argv', ['eval', '--dataset', str(dataset), '--semantic-model', str(model)])
+    monkeypatch.setattr(semantic_models, 'load_semantic_encoder', lambda path: object())
+
+    def change_model(*args, **kwargs):
+        model.write_bytes(b'changed')
+        return {'tp': 1}
+
+    monkeypatch.setattr(module, 'evaluate', change_model)
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 2
+    assert 'changed during evaluation' in capsys.readouterr().err
+
+
+def test_single_model_cli_detects_dataset_change_while_loading(tmp_path, monkeypatch, capsys):
+    import json
+    import sys
+    from pathlib import Path
+
+    from scripts import evaluate_ytcommentqa as module
+    from video_rag.retrieval import semantic_models
+
+    dataset = tmp_path / 'dataset.json'
+    dataset.write_text(json.dumps({'1': row([2])}), encoding='utf-8')
+    model = tmp_path / 'model.gguf'
+    model.write_bytes(b'synthetic')
+    monkeypatch.setattr(sys, 'argv', ['eval', '--dataset', str(dataset), '--semantic-model', str(model)])
+    monkeypatch.setattr(semantic_models, 'load_semantic_encoder', lambda path: object())
+    monkeypatch.setattr(module, 'evaluate', lambda *args, **kwargs: {'tp': 1})
+    read_text = Path.read_text
+
+    def changed_after_read(path, *args, **kwargs):
+        text = read_text(path, *args, **kwargs)
+        if path == dataset:
+            dataset.write_text('{}', encoding='utf-8')
+        return text
+
+    monkeypatch.setattr(Path, 'read_text', changed_after_read)
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 2
+    assert 'changed during evaluation' in capsys.readouterr().err
