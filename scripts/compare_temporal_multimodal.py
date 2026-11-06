@@ -136,7 +136,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('video', 'subtitles', 'questions', 'visual-model', 'output'):
         parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--semantic-model', type=Path, help='Use local MiniLM; default is keyword retrieval')
+    parser.add_argument('--semantic-model', type=Path, help='Use local Qwen3 GGUF; default is keyword retrieval')
     parser.add_argument('--video-id', help='Required for a local labeler CSV')
     parser.add_argument('--split', choices=('development', 'validation', 'test'), help='Required for a local labeler CSV')
     parser.add_argument('--frozen-test-manifest', type=Path, help='Required only for a declared frozen test CSV')
@@ -162,8 +162,9 @@ def main():
                  'visual_tokenizer': args.visual_model / 'tokenizer.json',
                  'visual_model': args.visual_model / 'onnx' / 'model_quantized.onnx'}
         if args.semantic_model:
-            paths.update({'semantic_tokenizer': args.semantic_model / 'tokenizer.json',
-                          'semantic_model': args.semantic_model / 'onnx' / 'model_quantized.onnx'})
+            from video_rag.retrieval.semantic_models import semantic_model_files
+
+            paths.update(semantic_model_files(args.semantic_model))
         if args.questions.suffix.lower() == '.csv':
             paths['annotation_binding'] = args.questions.with_suffix(args.questions.suffix + '.source.json')
         before = {name: fingerprint(path) for name, path in paths.items()}
@@ -181,12 +182,10 @@ def main():
         binding = csv_binding or verify_sources(data, args.video, args.subtitles)
         segments = segments_from_subtitles(args.video, args.subtitles)
         if args.semantic_model:
-            from video_rag.retrieval.onnx_semantic import (
-                OnnxSentenceEncoder,
-                build_semantic_pipeline,
-            )
+            from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+            from video_rag.retrieval.semantic_models import load_semantic_encoder
 
-            transcript = build_semantic_pipeline(segments, OnnxSentenceEncoder(args.semantic_model), args.semantic_threshold)
+            transcript = build_semantic_pipeline(segments, load_semantic_encoder(args.semantic_model), args.semantic_threshold)
         else:
             transcript = build_transcript_segments(segments)
         selected = sample_visual_segments(tuple(segments), limit=100)

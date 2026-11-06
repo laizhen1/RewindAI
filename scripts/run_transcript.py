@@ -32,7 +32,7 @@ def main() -> None:
     parser.add_argument("--save-startup-video", action="store_true",
                         help="Save the single startup video to the local library")
     parser.add_argument("--answer-model", type=Path, help="Optional experimental local GGUF answer model (CPU only)")
-    parser.add_argument("--semantic-model", type=Path, help="Optional local English ONNX model directory")
+    parser.add_argument("--semantic-model", type=Path, help="Local Qwen3 embedding GGUF file")
     parser.add_argument("--visual-model", type=Path, help="Optional experimental local CLIP ONNX model directory")
     parser.add_argument("--semantic-threshold", type=float, default=0.4,
                         help="Experimental uncalibrated cosine threshold (default 0.4)")
@@ -57,12 +57,10 @@ def main() -> None:
             pipeline = builder(list(pipeline.segments()))
         retrieval_type = "keyword"
         if args.semantic_model:
-            from video_rag.retrieval.onnx_semantic import (
-                OnnxSentenceEncoder,
-                build_semantic_pipeline,
-            )
+            from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+            from video_rag.retrieval.semantic_models import load_semantic_encoder
 
-            encoder = OnnxSentenceEncoder(args.semantic_model)
+            encoder = load_semantic_encoder(args.semantic_model)
             builder = lambda segments: build_semantic_pipeline(segments, encoder, args.semantic_threshold, generator=generator)
             pipeline = builder(list(pipeline.segments()))
             retrieval_type = "semantic_experimental"

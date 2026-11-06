@@ -55,7 +55,8 @@ class SemanticRetriever:
             return
         self.ids = [segment.segment_id for segment in items]
         self.vectors = np.concatenate([
-            self.encoder.encode([segment.transcript for segment in items[i:i + 32]])
+            (self.encoder.encode_documents if hasattr(self.encoder, 'encode_documents') else self.encoder.encode)(
+                [segment.transcript for segment in items[i:i + 32]])
             for i in range(0, len(items), 32)
         ])
 
@@ -64,7 +65,9 @@ class SemanticRetriever:
             raise RuntimeError("Index is not built")
         if top_k <= 0 or not query.strip():
             return []
-        scores = self.vectors @ self.encoder.encode([query])[0]
+        query_vector = (self.encoder.encode_query(query) if hasattr(self.encoder, 'encode_query')
+                        else self.encoder.encode([query])[0])
+        scores = self.vectors @ query_vector
         order = sorted(range(len(scores)), key=lambda i: (-float(scores[i]), self.ids[i]))[:top_k]
         return [SearchHit(self.ids[i], float(scores[i]), self.name, rank)
                 for rank, i in enumerate(order, 1)]
@@ -75,6 +78,10 @@ class SemanticReranker:
         self.encoder = encoder
 
     def score(self, query: str, segments: list[VideoSegment]) -> list[float]:
+        if hasattr(self.encoder, 'encode_query') and hasattr(self.encoder, 'encode_documents'):
+            query_vector = self.encoder.encode_query(query)
+            vectors = self.encoder.encode_documents([segment.transcript for segment in segments])
+            return [float(value) for value in vectors @ query_vector]
         vectors = self.encoder.encode([query, *[segment.transcript for segment in segments]])
         return [float(value) for value in vectors[1:] @ vectors[0]]
 

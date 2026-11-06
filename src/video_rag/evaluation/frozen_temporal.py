@@ -8,6 +8,7 @@ import platform
 from pathlib import Path
 
 from video_rag.evaluation.provenance import fingerprint
+from video_rag.retrieval.semantic_models import semantic_model_files
 
 ROOT = Path(__file__).resolve().parents[3]
 CODE_FILES = (
@@ -20,6 +21,7 @@ CODE_FILES = (
     'src/video_rag/schemas.py', 'src/video_rag/retrieval/fusion.py',
     'src/video_rag/retrieval/in_memory.py', 'src/video_rag/retrieval/base.py',
     'src/video_rag/adapters/local.py',
+    'src/video_rag/retrieval/qwen_semantic.py', 'src/video_rag/retrieval/semantic_models.py',
     'src/video_rag/retrieval/onnx_clip.py', 'src/video_rag/retrieval/onnx_semantic.py',
 )
 
@@ -32,8 +34,7 @@ def input_paths(video, subtitles, questions, visual_model, semantic_model=None):
              'visual_tokenizer': Path(visual_model) / 'tokenizer.json',
              'visual_model': Path(visual_model) / 'onnx' / 'model_quantized.onnx'}
     if semantic_model is not None:
-        paths.update({'semantic_tokenizer': Path(semantic_model) / 'tokenizer.json',
-                      'semantic_model': Path(semantic_model) / 'onnx' / 'model_quantized.onnx'})
+        paths.update(semantic_model_files(semantic_model))
     return paths
 
 
@@ -55,7 +56,7 @@ def config(video_id, semantic_model, semantic_threshold, visual_min_score, min_c
 
 def runtime_versions():
     versions = {'python': platform.python_version()}
-    for name in ('numpy', 'onnxruntime', 'tokenizers', 'av', 'faiss-cpu', 'flask'):
+    for name in ('numpy', 'onnxruntime', 'tokenizers', 'av', 'faiss-cpu', 'flask', 'llama-cpp-python'):
         try:
             versions[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:

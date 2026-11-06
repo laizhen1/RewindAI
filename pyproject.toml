@@ -13,6 +13,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+qwen-semantic = [
+  "llama-cpp-python>=0.3.36,<0.4",
+]
 semantic = [
   "onnxruntime>=1.17,<2",
   "tokenizers>=0.20,<1",
@@ -48,4 +51,3 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-

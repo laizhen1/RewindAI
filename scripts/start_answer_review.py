@@ -34,8 +34,9 @@ def create_draft(video: Path, subtitles: Path, labels: Path, video_id: str, spli
     sources = {'video': video, 'subtitles': subtitles, 'annotations': labels,
                'annotation_binding': binding_path, 'model': model}
     if semantic_model is not None:
-        sources.update({'semantic_tokenizer': semantic_model / 'tokenizer.json',
-                        'semantic_model': semantic_model / 'onnx' / 'model_quantized.onnx'})
+        from video_rag.retrieval.semantic_models import semantic_model_files
+
+        sources.update(semantic_model_files(semantic_model))
     before = {key: fingerprint(path) for key, path in sources.items()}
     if split == 'test':
         from video_rag.evaluation.frozen_answers import config, input_paths, read_and_verify
@@ -58,9 +59,10 @@ def create_draft(video: Path, subtitles: Path, labels: Path, video_id: str, spli
     if semantic_model is None:
         pipeline = build_transcript_segments(segments, generator=generator)
     else:
-        from video_rag.retrieval.onnx_semantic import OnnxSentenceEncoder, build_semantic_pipeline
+        from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+        from video_rag.retrieval.semantic_models import load_semantic_encoder
 
-        pipeline = build_semantic_pipeline(segments, OnnxSentenceEncoder(semantic_model),
+        pipeline = build_semantic_pipeline(segments, load_semantic_encoder(semantic_model),
                                            semantic_threshold, generator=generator)
     review_rows = prepare_review(pipeline, data, allow_frozen_test=split == 'test')
     if split == 'test':
@@ -90,7 +92,7 @@ def main() -> int:
     parser.add_argument('--split', choices=['development', 'validation', 'test'], required=True)
     parser.add_argument('--frozen-test-manifest', type=Path, help='Required only for a declared frozen answer test')
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'artifacts/private_lecture_review/answer_runs')
-    parser.add_argument('--semantic-model', type=Path, help='Optional existing local MiniLM directory')
+    parser.add_argument('--semantic-model', type=Path, help='Optional local Qwen3 embedding GGUF file')
     parser.add_argument('--semantic-threshold', type=float, default=0.4, help='Uncalibrated semantic cutoff')
     parser.add_argument('--port', type=int, default=5097)
     args = parser.parse_args()

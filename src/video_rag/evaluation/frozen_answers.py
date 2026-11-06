@@ -8,6 +8,7 @@ from pathlib import Path
 
 from video_rag.evaluation.frozen_temporal import ROOT, runtime_versions
 from video_rag.evaluation.provenance import fingerprint
+from video_rag.retrieval.semantic_models import semantic_model_files
 
 CODE_FILES = (
     'scripts/freeze_answer_test.py', 'scripts/validate_frozen_labels.py', 'scripts/compare_temporal_multimodal.py',
@@ -16,6 +17,7 @@ CODE_FILES = (
     'src/video_rag/api/templates/answer_review.html', 'src/video_rag/adapters/local_answer.py',
     'src/video_rag/adapters/local.py', 'src/video_rag/transcript_baseline.py', 'src/video_rag/pipeline.py',
     'src/video_rag/schemas.py', 'src/video_rag/retrieval/in_memory.py', 'src/video_rag/retrieval/fusion.py',
+    'src/video_rag/retrieval/qwen_semantic.py', 'src/video_rag/retrieval/semantic_models.py',
     'src/video_rag/retrieval/onnx_semantic.py', 'src/video_rag/evaluation/frozen_answers.py',
     'src/video_rag/evaluation/frozen_temporal.py', 'src/video_rag/evaluation/provenance.py',
     'src/video_rag/evaluation/private_output.py',
@@ -29,8 +31,7 @@ def input_paths(video, subtitles, labels, model, semantic_model=None):
     paths = {'video': Path(video), 'subtitles': Path(subtitles), 'annotations': labels,
              'annotation_binding': labels.with_suffix(labels.suffix + '.source.json'), 'model': Path(model)}
     if semantic_model is not None:
-        paths.update({'semantic_tokenizer': Path(semantic_model) / 'tokenizer.json',
-                      'semantic_model': Path(semantic_model) / 'onnx' / 'model_quantized.onnx'})
+        paths.update(semantic_model_files(semantic_model))
     return paths
 
 

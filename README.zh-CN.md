@@ -41,7 +41,7 @@
 python scripts/run_transcript.py --answer-model /path/to/model.gguf
 ```
 
-Windows 用户也可运行 `Start-RewindAI-Semantic-Answers.cmd`，组合本地语义检索与本地回答，两者均为实验功能并在 CPU 推理；语义索引重建可能较慢。可通过 `REWINDAI_SEMANTIC_MODEL_DIR` 和 `REWINDAI_ANSWER_MODEL` 修改本地模型路径。
+Windows 用户也可运行 `Start-RewindAI-Semantic-Answers.cmd`，组合本地语义检索与本地回答，两者均为实验功能并在 CPU 推理；语义索引重建可能较慢。可通过 `REWINDAI_SEMANTIC_MODEL` 和 `REWINDAI_ANSWER_MODEL` 修改本地模型路径。
 
 Windows 用户可运行 `Start-RewindAI-Local-Answers.cmd`；它使用本地缓存的 Qwen2.5 3B Q4_K_M 指定版本，也可设置 `REWINDAI_ANSWER_MODEL` 指向其他本地模型。启动脚本不下载模型，请单独查看[模型许可证](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)。在 12 个自编的简单合成题中，3B 模型回答了 6 个有答案问题，并对 6 个无答案问题表示无法回答；0.5B 模型对其中 5 个无答案问题编造了答案。这只是初步检查，不能作为课程准确率或 F1。另一个此前已探索过的 50 条公开视频片段样本中，以固定拒答文本为代理的可回答性 Recall 为 0.040、F1 为 0.077；这不是回答正确率。在随后的公开视频草稿问题中，模型对糖尿病治疗产生了无证据支持的陈述，即使它同时承认没有具体信息。详见[本地回答评估、可视化人工复核及评分工具](docs/LOCAL_ANSWER_EXPERIMENT.md)。
 
@@ -108,17 +108,15 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 
 若视频没有字幕，安装 faster-whisper 并准备本地缓存模型后，可以在字幕工作台输入本地视频路径，选择语言并点击“本机转录并加载”；一次只能处理一个视频。也可以使用 [本地转字幕指南](docs/LOCAL_TRANSCRIPTION.md)中的命令行工具。Windows 用户完成安装并缓存模型后，可双击 `Start-RewindAI-Transcribe.cmd` 选择视频进行本地转录，再打开搜索界面；新视频会保存到本地资料库，以便下次恢复。已保存且未变化的视频会直接打开工作台，避免重复转录；替换字幕前须先移除旧索引。默认使用本地缓存和 CPU，不向云端上传视频或音频；首次获取模型需显式允许下载。转录已在两段公开短视频上使用本地模型验证；课程录制的效果仍需评估。
 
-### 实验性英语语义搜索
+### Qwen3 语义搜索
 
-可选择本地 ONNX 英语向量模型尝试搜索相近表达。先安装 `python -m pip install -e ".[semantic]"`，并自行准备 [Xenova/all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2) 的 `tokenizer.json` 和 `onnx/model_quantized.onnx` 到同一模型目录，然后启动：
+安装 `python -m pip install -e ".[qwen-semantic]"`，并从 [Qwen3-Embedding-0.6B GGUF](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) 下载公开模型文件 `Qwen3-Embedding-0.6B-Q8_0.gguf`，然后指定本地文件：
 
 ```powershell
-python scripts/run_transcript.py --semantic-model PATH_TO_LOCAL_MODEL_DIRECTORY
+python scripts/run_transcript.py --semantic-model PATH_TO_QWEN3_GGUF
 ```
 
-Windows 用户也可以在准备好该模型后双击 `Start-RewindAI-Semantic.cmd`。启动器默认查找项目的 `artifacts/hf-cache` 中的固定版本 `08a308f628bc9d6774b7922f319eb1b65afa1a82`；如果模型放在其他位置，可先设置 `REWINDAI_SEMANTIC_MODEL_DIR` 指向模型目录。启动器不下载模型。
-
-语义模式仅在本机 CPU 推理，不下载模型或上传字幕。它使用尚未校准的余弦阈值 0.4，只针对英语实验，可能返回不相关片段；未另行开启本地回答模式时，它不生成回答；它也不理解视频画面。索引较多字幕时启动和导入可能变慢。结果需回看核对。此前小样本评估有较多误报，详见 [评估报告](docs/INITIAL_EVALUATION.md)。不传该参数时仍使用默认关键词搜索。
+Windows 用户可以双击 `Start-RewindAI-Semantic.cmd`；启动器默认查找项目缓存中的固定版本 `370f27d7550e0def9b39c1f16d3fbaa13aa67728`。也可设置 `REWINDAI_SEMANTIC_MODEL` 指向其他位置的 GGUF 文件。启动器不会下载模型。向量在本机 CPU 生成，使用最后一个 token 的池化向量，仅对查询添加检索指令，输入截断为 512 个 token。0.4 相似度阈值尚未针对 Qwen3 校准，请回看视频核对证据。下方历史评测使用 MiniLM，不能作为 Qwen3 的结果。
 
 ### 实验性本地画面搜索
 
@@ -179,7 +177,7 @@ CPU 演示仅使用模拟片段、词汇检索和简单回答拼接；以上完�
 
 上游候选问题集用于诊断，不是经过完整人工核验的正式金标准。不要把历史候选集中的结果写成经验证的准确率。课程视频测试应逐条核验答案和证据，按视频划分数据，分别检查语音、画面、综合和无答案问题。
 
-**可复现的初步结果：**在 TutorialVQA 的 18 个教学视频、294 个问题上，按参考字幕句子范围计算，关键词检索的 Precision / Recall / F1 为 **0.394 / 0.095 / 0.153**；实验性英语语义检索为 **0.388 / 0.129 / 0.194**。这是字幕句子重合度，不是视频时间戳或回答正确率；数据集不含无答案问题，且此前整体数据已用于探索，不能视为完全未接触过的最终测试集。
+**可复现的初步结果：**此前使用 MiniLM，在 TutorialVQA 的 18 个教学视频、294 个问题上，按参考字幕句子范围计算，关键词检索的 Precision / Recall / F1 为 **0.394 / 0.095 / 0.153**；实验性英语语义检索为 **0.388 / 0.129 / 0.194**。这是字幕句子重合度，不是视频时间戳或回答正确率；数据集不含无答案问题，且此前整体数据已用于探索，不能视为完全未接触过的最终测试集。
 
 在独立的 YTCommentQA 公开数据子集中，对 284 个教学视频字幕片段问题，以“关键词检索是否返回候选”作为可回答性的粗略代理，得到 Precision / Recall / F1 **0.939 / 0.413 / 0.573**；61 个标注为片段内无答案的问题中有 6 个返回候选。同一批问题上，实验性语义检索为 **0.945 / 0.614 / 0.745**，无答案片段有 **8 / 61** 返回候选。这是片段级启发式对照，不是回答正确率或整段视频表现；详见[方法和排除条件](docs/INITIAL_EVALUATION.md#ytcommentqa-independent-snippet-level-retrieval-proxy)。
 

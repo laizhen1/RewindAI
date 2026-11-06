@@ -74,8 +74,10 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             raise ValueError("Model suggestions require a development video, subtitles and a private JSON file")
     model_files = ()
     if semantic_model is not None:
-        semantic_model = Path(semantic_model).expanduser().resolve()
-        model_files = (semantic_model / "tokenizer.json", semantic_model / "onnx" / "model_quantized.onnx")
+        semantic_model = Path(semantic_model).expanduser().absolute()
+        from video_rag.retrieval.semantic_models import semantic_model_files
+
+        model_files = semantic_model_files(semantic_model).values()
         if not all(path.is_file() for path in model_files):
             raise ValueError("Local semantic model files are missing")
     initial = video.stat()
@@ -265,12 +267,10 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
                 return jsonify({"error": "Subtitle timestamps exceed the video duration"}), 400
             keyword = build_transcript_segments(segments)
             if semantic_model is not None:
-                from video_rag.retrieval.onnx_semantic import (
-                    OnnxSentenceEncoder,
-                    build_semantic_pipeline,
-                )
+                from video_rag.retrieval.onnx_semantic import build_semantic_pipeline
+                from video_rag.retrieval.semantic_models import load_semantic_encoder
 
-                encoder = OnnxSentenceEncoder(semantic_model)
+                encoder = load_semantic_encoder(semantic_model)
                 semantic = build_semantic_pipeline(segments, encoder, 0.4)
                 comparison = compare(questions, keyword, semantic)
                 individual = comparison.pop("results")
