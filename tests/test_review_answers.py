@@ -88,3 +88,43 @@ def test_progress_rejects_invalid_verdict_and_changed_input(review_app):
     assert not list(review.parent.glob('progress-*.json'))
     video.write_bytes(b'changed')
     assert client.post('/api/progress', json={'judgments': []}).status_code == 409
+
+
+def test_restore_latest_matching_progress_without_changing_draft(review_app):
+    client, _video, review = review_app
+    original = review.read_bytes()
+    assert client.get('/api/progress/latest').status_code == 404
+    first = [{'answer': 'incorrect', 'evidence': 'unsupported'}, {'answer': '', 'evidence': ''}]
+    second = [{'answer': 'correct', 'evidence': 'supported'}, {'answer': '', 'evidence': ''}]
+    assert client.post('/api/progress', json={'judgments': first}).status_code == 201
+    assert client.post('/api/progress', json={'judgments': second}).status_code == 201
+    assert client.get('/api/progress/latest').json['judgments'] == second
+    assert review.read_bytes() == original
+    assert client.get('/api/progress/latest', headers={'Origin': 'https://outside.example'}).status_code == 403
+
+
+def test_restore_ignores_unrelated_or_malformed_progress(review_app):
+    client, _video, review = review_app
+    judgments = [{'answer': 'correct', 'evidence': 'supported'}, {'answer': '', 'evidence': ''}]
+    response = client.post('/api/progress', json={'judgments': judgments})
+    matching = review.parent / response.json['filename']
+    data = json.loads(matching.read_text(encoding='utf-8'))
+    data['rows'][0]['question'] = 'different question'
+    (review.parent / 'progress-unrelated.json').write_text(json.dumps(data), encoding='utf-8')
+    (review.parent / 'progress-malformed.json').write_text('{', encoding='utf-8')
+    assert client.get('/api/progress/latest').json['judgments'] == judgments
+    matching.unlink()
+    assert client.get('/api/progress/latest').status_code == 404
+
+
+def test_resume_finds_progress_for_matching_video_only(review_app, tmp_path):
+    from scripts.resume_answer_review import find_review
+
+    client, video, review = review_app
+    judgments = [{'answer': 'correct', 'evidence': 'supported'}, {'answer': '', 'evidence': ''}]
+    saved = client.post('/api/progress', json={'judgments': judgments}).json['filename']
+    other = tmp_path / 'other.mp4'
+    other.write_bytes(b'other video')
+    assert find_review(video, review.parent, allowed_roots=(review.parent,)).name == saved
+    with pytest.raises(ValueError, match='No matching'):
+        find_review(other, review.parent, allowed_roots=(review.parent,))

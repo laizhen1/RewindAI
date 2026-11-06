@@ -100,6 +100,46 @@ def create_review_app(video: Path, review: Path, *, allowed_roots=PRIVATE_ROOTS,
         return jsonify(rows=rows, split=report.get('split'), binding=report.get('binding'),
                        retrieval_config=report.get('retrieval_config'))
 
+    def review_identity(value):
+        # Match the complete draft, excluding only editable judgments and review state.
+        value = json.loads(json.dumps(value, ensure_ascii=False))
+        value.pop('human_review_state', None)
+        value.pop('human_review_declaration', None)
+        for row in value.get('rows', []):
+            row.pop('human_answer_verdict', None)
+            row.pop('human_evidence_verdict', None)
+        return value
+
+    @app.get('/api/progress/latest')
+    def latest_progress():
+        if not unchanged():
+            return jsonify(error='Video or review changed; restart'), 409
+        identity = review_identity(report)
+        candidates = []
+        for path in review.parent.glob('progress-*.json'):
+            try:
+                path = private_output(path, roots=allowed_roots)
+                if path.is_file() and path.stat().st_size <= 20 * 1024 * 1024:
+                    candidates.append((path.stat().st_mtime_ns, path))
+            except (OSError, ValueError):
+                continue
+        for _, candidate in sorted(candidates, reverse=True):
+            try:
+                saved = json.loads(candidate.read_text(encoding='utf-8-sig'))
+                if (not isinstance(saved, dict) or saved.get('human_review_state') != 'in_progress_not_verified'
+                        or review_identity(saved) != identity):
+                    continue
+                judgments = [{'answer': row.get('human_answer_verdict') or '',
+                              'evidence': row.get('human_evidence_verdict') or ''} for row in saved['rows']]
+                if any(item['answer'] not in {'', 'correct', 'incorrect', 'abstain'} or
+                       item['evidence'] not in {'', 'supported', 'unsupported', 'not_applicable'}
+                       for item in judgments):
+                    continue
+                return jsonify(judgments=judgments)
+            except (OSError, UnicodeError, ValueError, TypeError, KeyError):
+                continue
+        return jsonify(error='No matching saved progress found'), 404
+
     @app.post('/api/progress')
     def save_progress():
         if not unchanged():
