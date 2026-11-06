@@ -22,3 +22,9 @@ python scripts/run_transcript.py --video /path/to/ai_ethics_kicampus.webm --subt
 - 视频许可：[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)。请保留作者署名、许可链接及修改说明，分享改编材料时遵循相同方式共享条件。
 - [英文字幕页面](https://commons.wikimedia.org/wiki/TimedText:Artificial_intelligence_explained_in_2_minutes_-_What_exactly_is_AI%3F.webm.en.srt)。视频和字幕保留在本地，不纳入仓库。
 
+
+## 本地真实模型工作台流程检查
+
+2026 年 11 月 6 日，使用本页面所述公开教学视频及其英文字幕，在隔离的本地数据库中启动 Qwen3-Embedding-0.6B 和 Qwen2.5-3B-Instruct 回答模式，均在 CPU 推理。输入一条字幕相关问题后，页面显示生成回答及三个带时间戳的字幕候选；选择其中一个 0:19 片段时页面显示该起点，另一个片段可加入本地复习清单。此次未使用私人课程资料，也未将资料上传。
+
+这是一次功能冒烟测试，不是答案正确率或视频理解的评测；字幕、回答和参考问题仍需对照源视频独立核验。
