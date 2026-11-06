@@ -41,6 +41,8 @@
 python scripts/run_transcript.py --answer-model /path/to/model.gguf
 ```
 
+准备固定版本的公开 Qwen2.5 回答模型（约 2.1 GB）时，先安装 `huggingface-hub`，然后运行 `python scripts/setup_answer_model.py`；Windows 用户也可在安装依赖后双击 `Download-Qwen-Answer.cmd`。脚本会校验模型哈希，附加 `--check-only` 可离线检查已有缓存。请单独查看[模型许可证](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)。此步骤只下载公开权重，不上传课程资料。
+
 Windows 用户也可运行 `Start-RewindAI-Semantic-Answers.cmd`，组合本地语义检索与本地回答，两者均为实验功能并在 CPU 推理；语义索引重建可能较慢。可通过 `REWINDAI_SEMANTIC_MODEL` 和 `REWINDAI_ANSWER_MODEL` 修改本地模型路径。
 
 Windows 用户可运行 `Start-RewindAI-Local-Answers.cmd`；它使用本地缓存的 Qwen2.5 3B Q4_K_M 指定版本，也可设置 `REWINDAI_ANSWER_MODEL` 指向其他本地模型。启动脚本不下载模型，请单独查看[模型许可证](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF)。在 12 个自编的简单合成题中，3B 模型回答了 6 个有答案问题，并对 6 个无答案问题表示无法回答；0.5B 模型对其中 5 个无答案问题编造了答案。这只是初步检查，不能作为课程准确率或 F1。另一个此前已探索过的 50 条公开视频片段样本中，以固定拒答文本为代理的可回答性 Recall 为 0.040、F1 为 0.077；这不是回答正确率。在随后的公开视频草稿问题中，模型对糖尿病治疗产生了无证据支持的陈述，即使它同时承认没有具体信息。详见[本地回答评估、可视化人工复核及评分工具](docs/LOCAL_ANSWER_EXPERIMENT.md)。
