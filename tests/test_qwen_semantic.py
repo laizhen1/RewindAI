@@ -49,3 +49,33 @@ def test_qwen_rejects_invalid_embedding_output():
         encoder.encode_documents(['document'])
     with pytest.raises(ValueError, match='nonempty'):
         encoder.encode_query('  ')
+
+
+def test_qwen_rerank_reuses_indexed_documents_and_handles_changed_text():
+    from video_rag.retrieval.onnx_semantic import SemanticReranker, SemanticRetriever
+    from video_rag.schemas import VideoSegment
+
+    class Encoder:
+        def __init__(self):
+            self.document_calls = 0
+
+        def encode_documents(self, texts):
+            self.document_calls += 1
+            return np.asarray([[1.0, 0.0] if 'apple' in t else [0.0, 1.0] for t in texts])
+
+        def encode_query(self, query):
+            return np.asarray([1.0, 0.0])
+
+    encoder = Encoder()
+    retriever = SemanticRetriever(encoder)
+    original = VideoSegment('a', 'v', 'v.mp4', 0, 1, transcript='apple')
+    retriever.build([original])
+    reranker = SemanticReranker(encoder, retriever)
+    assert reranker.score('apple', [original]) == [1.0]
+    assert encoder.document_calls == 1
+    changed = VideoSegment('a', 'v', 'v.mp4', 0, 1, transcript='orange')
+    assert reranker.score('apple', [changed]) == [0.0]
+    assert encoder.document_calls == 2
+    retriever.build([changed])
+    assert reranker.score('apple', [changed]) == [0.0]
+    assert encoder.document_calls == 3

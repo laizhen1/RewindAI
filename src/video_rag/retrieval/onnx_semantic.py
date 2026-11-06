@@ -46,14 +46,17 @@ class SemanticRetriever:
         self.encoder = encoder
         self.ids: list[str] = []
         self.vectors: np.ndarray | None = None
+        self.indexed_texts: dict[str, tuple[str, int]] = {}
 
     def build(self, segments: list[VideoSegment]) -> None:
         items = [segment for segment in segments if segment.transcript.strip()]
         if not items:
             self.ids = []
+            self.indexed_texts = {}
             self.vectors = None
             return
         self.ids = [segment.segment_id for segment in items]
+        self.indexed_texts = {segment.segment_id: (segment.transcript, i) for i, segment in enumerate(items)}
         self.vectors = np.concatenate([
             (self.encoder.encode_documents if hasattr(self.encoder, 'encode_documents') else self.encoder.encode)(
                 [segment.transcript for segment in items[i:i + 32]])
@@ -74,12 +77,21 @@ class SemanticRetriever:
 
 
 class SemanticReranker:
-    def __init__(self, encoder: OnnxSentenceEncoder) -> None:
+    def __init__(self, encoder: OnnxSentenceEncoder, retriever: SemanticRetriever | None = None) -> None:
         self.encoder = encoder
+        self.retriever = retriever
 
     def score(self, query: str, segments: list[VideoSegment]) -> list[float]:
         if hasattr(self.encoder, 'encode_query') and hasattr(self.encoder, 'encode_documents'):
             query_vector = self.encoder.encode_query(query)
+            if not segments:
+                return []
+            retriever = self.retriever
+            if retriever is not None and retriever.vectors is not None:
+                indices = [retriever.indexed_texts.get(segment.segment_id) for segment in segments]
+                if all(item is not None and item[0] == segment.transcript
+                       for item, segment in zip(indices, segments, strict=True)):
+                    return [float(retriever.vectors[item[1]] @ query_vector) for item in indices]
             vectors = self.encoder.encode_documents([segment.transcript for segment in segments])
             return [float(value) for value in vectors @ query_vector]
         vectors = self.encoder.encode([query, *[segment.transcript for segment in segments]])
@@ -93,7 +105,8 @@ def build_semantic_pipeline(segments: list[VideoSegment], encoder: OnnxSentenceE
 
     if not np.isfinite(threshold) or not -1 <= threshold <= 1:
         raise ValueError("Semantic threshold must be finite and between -1 and 1")
-    pipeline = VideoRAGPipeline(retrievers=[SemanticRetriever(encoder)], reranker=SemanticReranker(encoder),
+    retriever = SemanticRetriever(encoder)
+    pipeline = VideoRAGPipeline(retrievers=[retriever], reranker=SemanticReranker(encoder, retriever),
                                 generator=generator if generator is not None else EvidenceGenerator(), minimum_rerank_score=threshold)
     pipeline.build(segments)
     return pipeline
