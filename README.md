@@ -54,6 +54,8 @@ I built RewindAI as a local AI learning workspace for finding and reviewing know
 
    If the page shows the classic interface, rerun `npm run build` in `frontend` and restart the launcher. If a model is reported missing, rerun its setup command; add `--check-only` to check the cache without downloading. If port 5000 is already in use, stop the other service or follow the manual startup instructions in the [full setup guide](docs/REACT_WORKSPACE.md).
 
+Need a non-private video to try first? See the [public English-language video samples and licenses](docs/PUBLIC_SAMPLE_EN.md).
+
 The browser uploads files only to the local RewindAI server. Video copies and derived files remain on your computer, and removing a library entry does not erase them. Use recordings only when their owner and institution permit processing; see the [privacy and setup guide](docs/REACT_WORKSPACE.md) for details and other platforms.
 
 ## Features
@@ -266,7 +268,7 @@ Visual retrieval has only a small public-video frame diagnostic with assistant-d
 - [Annotation template](data/evaluation/rewindai_annotation_template.csv)
 - [Experiment record template](data/evaluation/rewindai_experiment_template.md)
 - [Product and development plan (Chinese)](docs/REWINDAI_PLAN_ZH.md)
-- [Public educational samples and licenses (Chinese)](docs/PUBLIC_SAMPLE_ZH.md)
+- [Public educational samples and licenses](docs/PUBLIC_SAMPLE_EN.md)
 
 ## License
 
