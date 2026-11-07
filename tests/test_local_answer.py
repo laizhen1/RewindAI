@@ -54,6 +54,30 @@ def test_unavailable_or_bad_answer_fails_explicitly(tmp_path, monkeypatch):
         LocalAnswerGenerator(model).generate('query', [segment()])
 
 
+def test_model_context_overflow_and_incomplete_answer_are_not_silent(tmp_path, monkeypatch):
+    model = tmp_path / 'model.gguf'; model.write_bytes(b'x')
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            self.result = None
+
+        def create_chat_completion(self, **kwargs):
+            if isinstance(self.result, Exception):
+                raise self.result
+            return self.result
+
+    monkeypatch.setitem(sys.modules, 'llama_cpp', SimpleNamespace(Llama=FakeLlama))
+    generator = LocalAnswerGenerator(model)
+    generator._model.result = ValueError('Requested tokens (2607) exceed context window of 2048')
+    with pytest.raises(RuntimeError, match='exceed the model'):
+        generator.generate('query', [segment()])
+    generator._model.result = {'choices': [{'message': {'content': 'unfinished'}, 'finish_reason': 'length'}]}
+    with pytest.raises(RuntimeError, match='cut off'):
+        generator.generate('query', [segment()])
+    generator._model.result = {'choices': [{'message': {'content': 'complete'}, 'finish_reason': 'stop'}]}
+    assert generator.generate('query', [segment()]) == 'complete'
+
+
 def test_opt_in_answer_mode_retains_timestamped_evidence(tmp_path):
     video = tmp_path / 'sample.mp4'; video.write_bytes(b'synthetic')
     subtitle = tmp_path / 'sample.srt'; subtitle.write_text('1\n00:00:01,000 --> 00:00:03,000\nBinary search halves the range.\n', encoding='utf-8')

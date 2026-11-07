@@ -45,7 +45,7 @@ python scripts/run_transcript.py --answer-model /path/to/model.gguf
 
 Windows 用户也可运行 `Start-RewindAI-Semantic-Answers.cmd`，组合本地语义检索与本地回答，两者均为实验功能并在 CPU 推理；语义索引重建可能较慢。可通过 `REWINDAI_SEMANTIC_MODEL` 和 `REWINDAI_ANSWER_MODEL` 修改本地模型路径。
 
-本地回答模式将问题限制为 1,000 字符以内，避免模型静默忽略问题后半部分。检索字幕超过模型片段长度时，证据卡片会同时显示完整字幕和模型实际收到的部分。
+本地回答模式将问题限制为 1,000 字符以内，避免模型静默忽略问题后半部分。检索字幕超过模型片段长度时，证据卡片会同时显示完整字幕和模型实际收到的部分。字符数限制不能保证所有输入都在模型的 token 上下文范围内；如果上下文超限或回答被截断，工作台会提示，而不会把不完整的回答当作完整结果。
 
 Windows 用户可运行 `Start-RewindAI-Local-Answers.cmd`，使用本地缓存的 Qwen2.5 3B Q4_K_M 模型；也可设置 `REWINDAI_ANSWER_MODEL` 指向其他本地模型。启动脚本不会下载权重。此前的探索性回答测试与限制保留在[本地回答评估](docs/LOCAL_ANSWER_EXPERIMENT.md)。
 

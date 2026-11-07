@@ -61,9 +61,16 @@ class LocalAnswerGenerator:
                     ],
                     temperature=0.0, max_tokens=160,
                 )
-                answer = response["choices"][0]["message"]["content"].strip()
+                choice = response["choices"][0]
+                answer = choice["message"]["content"].strip()
+            except ValueError as exc:
+                if "exceed context window" in str(exc):
+                    raise RuntimeError("The question and excerpts exceed the model's context; shorten the question or search a narrower scope. / 问题和字幕片段超出模型上下文，请缩短问题或缩小搜索范围。") from exc
+                raise RuntimeError("Local answer generation failed") from exc
             except Exception as exc:
                 raise RuntimeError("Local answer generation failed") from exc
+        if choice.get("finish_reason") == "length":
+            raise RuntimeError("The local answer was cut off; shorten the question or search a narrower scope. / 本地回答被截断，请缩短问题或缩小搜索范围。")
         if not answer:
             raise RuntimeError("Local answer generator returned an empty response")
         return answer
