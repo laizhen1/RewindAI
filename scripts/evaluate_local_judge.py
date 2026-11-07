@@ -31,6 +31,7 @@ def evaluate(report: dict, judge) -> dict:
         raise ValueError('Only development or validation reviews are supported')
     summarize(report)  # Reject missing or inconsistent human judgments.
     cases, counts = [], Counter()
+    confusion = {human: {suggestion: 0 for suggestion in sorted(LABELS)} for human in sorted(LABELS)}
     for index, row in enumerate(report['rows'], 1):
         evidence = row.get('evidence')
         question, answer = row.get('model_question'), row.get('answer')
@@ -49,12 +50,14 @@ def evaluate(report: dict, judge) -> dict:
         else:
             counts['valid'] += 1
             counts['agreed'] += int(suggestion == human)
+            confusion[human][suggestion] += 1
         cases.append({'row': index, 'human_verdict': human, 'judge_suggestion': suggestion})
     total = len(cases)
     return {'eligible': total, 'excluded_missing_model_input': counts['excluded_missing_model_input'],
             'valid': counts['valid'], 'invalid': counts['invalid'], 'agreed': counts['agreed'],
             'agreement_valid': counts['agreed'] / counts['valid'] if counts['valid'] else None,
-            'agreement_all': counts['agreed'] / total if total else None, 'cases': cases}
+            'agreement_all': counts['agreed'] / total if total else None,
+            'confusion_human_by_judge': confusion, 'cases': cases}
 
 
 def local_judge(model_path: Path):
@@ -73,7 +76,7 @@ def local_judge(model_path: Path):
                 return 'INVALID'
             label = choice['message']['content'].strip().upper().rstrip('. ')
             return label if label in LABELS else 'INVALID'
-        except (ValueError, KeyError, TypeError, IndexError):
+        except (ValueError, KeyError, TypeError, IndexError, AttributeError):
             return 'INVALID'
 
     return judge

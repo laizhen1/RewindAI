@@ -19,6 +19,8 @@ def test_judge_agreement_excludes_missing_inputs_and_counts_invalid_separately()
     assert result['eligible'] == 2 and result['excluded_missing_model_input'] == 1
     assert result['valid'] == 1 and result['invalid'] == 1 and result['agreed'] == 1
     assert result['agreement_valid'] == 1 and result['agreement_all'] == 0.5
+    assert result['confusion_human_by_judge']['SUPPORTED']['SUPPORTED'] == 1
+    assert result['confusion_human_by_judge']['UNSUPPORTED']['SUPPORTED'] == 0
     assert result['cases'][1]['judge_suggestion'] == 'INVALID'
     assert 'Synthetic question' not in str(result)
 
@@ -31,6 +33,14 @@ def test_judge_evaluator_rejects_test_data_and_inconsistent_reviews():
     report['rows'] = [row('correct', 'unsupported')]
     with pytest.raises(ValueError, match='supported evidence'):
         evaluate(report, lambda *args: 'SUPPORTED')
+
+
+def test_confusion_identifies_unsupported_answer_marked_supported():
+    report = {'status': 'unreviewed_answer_drafts', 'split': 'development',
+              'rows': [row('incorrect', 'unsupported')]}
+    result = evaluate(report, lambda *args: 'SUPPORTED')
+    assert result['confusion_human_by_judge']['UNSUPPORTED']['SUPPORTED'] == 1
+    assert result['agreed'] == 0
 
 
 def test_judge_cli_saves_only_local_diagnostic_without_source_text(tmp_path, monkeypatch):
@@ -57,3 +67,20 @@ def test_judge_cli_saves_only_local_diagnostic_without_source_text(tmp_path, mon
     assert 'Synthetic question' not in content and 'Synthetic excerpt' not in content
     with pytest.raises(SystemExit):
         module.main()  # A previous report must never be overwritten.
+
+
+def test_empty_model_message_is_an_invalid_judgment(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+
+    from scripts.evaluate_local_judge import local_judge
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            pass
+
+        def create_chat_completion(self, **kwargs):
+            return {'choices': [{'message': {'content': None}, 'finish_reason': 'stop'}]}
+
+    monkeypatch.setitem(sys.modules, 'llama_cpp', SimpleNamespace(Llama=FakeLlama))
+    assert local_judge(tmp_path / 'model.gguf')('question', 'answer', ['excerpt']) == 'INVALID'

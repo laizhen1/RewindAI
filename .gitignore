@@ -34,3 +34,5 @@ data/processed/
 *.db-shm
 *.db-wal
 local_data/
+node_modules/
+dist/

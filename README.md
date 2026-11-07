@@ -35,6 +35,12 @@ Subtitle and experimental visual searches recheck the source after processing; a
 
 Search covers all indexed videos by default and can be scoped to the selected video or its course. Scoped search scans the index and may be slow for large collections. The demo does not include real media. Full multimodal mode requires preprocessing and indexes. The server accepts loopback Host values and same-origin browser requests, but has no accounts, multi-user isolation or production authentication; remote use requires an SSH tunnel to the local service.
 
+## React workspace
+
+The React interface connects the local video library, Qwen3 semantic retrieval, timestamped evidence and saved study notes. To prepare the frontend and the pre-trained models, follow the [React workspace setup and privacy guide](docs/REACT_WORKSPACE.md). On Windows, after setup, start `Start-RewindAI-React.cmd` and open `http://127.0.0.1:5000/`.
+
+The import dialog accepts an authorized local video and optional timed subtitles. It requires confirmation of permission and local storage before importing. Without subtitles, a cached Whisper base model performs local transcription. Qwen3 builds the retrieval index; importing a video does not train the model. The full privacy and deletion details are in the guide. Some advanced functions remain available in the original interface at `/classic`.
+
 ## Quick start
 
 The CPU demo needs no large model download. From the project root:
@@ -90,7 +96,7 @@ Open `http://127.0.0.1:5096/` on the same computer. Search the cues, listen to t
 
 To assess subtitle quality locally, listen to individual cues, correct their text if needed, and mark only the cues you have checked. **Calculate reviewed-token error** reports substitutions, deletions and insertions against those user-declared corrections; English words and Chinese characters count as tokens. The per-cue calculation ignores punctuation and case, supports up to 200 selected cues, and is not independent verification or a whole-video error rate. Save progress to resume later; this private draft contains corrected subtitle text and is bound to the source video and subtitles. An optional private summary contains counts, selected indices and fingerprints but no subtitle text. Keep both files local. Export the corrected SRT separately if you want to use it for search; the summary does not contain reference text.
 
-For video without subtitles, install faster-whisper and prepare a local cached model as described in [local transcription](docs/LOCAL_TRANSCRIPTION.md). Enter the video path, choose a language, and select **Transcribe locally and load** in the workspace. One job runs at a time on CPU; the interface remains in Chinese. Transcription can be cancelled before indexing starts. A completed transcript is kept under `artifacts/transcripts/` and a copy is saved in the local library. The process does not initiate model downloads or send media to a hosted speech API. Model weights must already be cached; obtaining them initially requires an explicit download. The workflow has been checked on two short public videos, but lecture performance remains unverified.
+For video without subtitles, install faster-whisper and prepare a local cached model as described in [local transcription](docs/LOCAL_TRANSCRIPTION.md). Enter the video path, choose a language, and select **Transcribe locally and load** in the workspace. One job runs at a time on CPU; the classic interface is in Chinese. Transcription can be cancelled before indexing starts. A completed transcript is kept under `artifacts/transcripts/` and a copy is saved in the local library. The process does not initiate model downloads or send media to a hosted speech API. Model weights must already be cached; obtaining them initially requires an explicit download. The workflow has been checked on two short public videos, but lecture performance remains unverified.
 
 Windows users can also run `Start-RewindAI-Transcribe.cmd`. An unchanged saved video opens the workspace without retranscription; remove its index first to replace subtitles. A forced service shutdown can bypass best-effort child-process cleanup; see the transcription guide for details.
 

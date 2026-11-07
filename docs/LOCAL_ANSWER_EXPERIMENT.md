@@ -67,7 +67,7 @@ I provide a research-only command to compare a local text-only judge against com
 python scripts/evaluate_local_judge.py --review PATH_TO_LOCAL_REVIEW_JSON --model PATH_TO_LOCAL_GGUF --output artifacts/local_answer_review/judge-agreement.json --confirm-reviewed
 ```
 
-The report shows agreement on valid judge labels, agreement including invalid outputs, and exclusions for missing model input. It contains row numbers, judgments and fingerprints, so it must remain private when course material is used. Agreement with a reviewer is not factual accuracy, independent verification or a replacement for human review. The judge can be wrong, can misinterpret the transcript, and cannot verify the recording. This command is diagnostic only; it does not train a model or alter review judgments.
+The report shows agreement on valid judge labels, agreement including invalid outputs, exclusions for missing model input, and a human-by-judge confusion table for valid labels. It contains row numbers, judgments and fingerprints, so it must remain private when course material is used. Agreement with a reviewer is not factual accuracy, independent verification or a replacement for human review. The judge can be wrong, can misinterpret the transcript, and cannot verify the recording. This command is diagnostic only; it does not train a model or alter review judgments.
 
 ## Human review and question-level metrics
 

@@ -3,12 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from threading import RLock
 from urllib.parse import urlsplit
 
-from flask import Flask, Response, jsonify, render_template, request, send_file
+from flask import Flask, Response, jsonify, render_template, request, send_file, send_from_directory
+from werkzeug.utils import secure_filename
 
 from video_rag.adapters.local_answer import LocalAnswerGenerationError
 from video_rag.api.library import LibraryStore
@@ -26,11 +28,12 @@ def create_app(
     retrieval_type: str = "keyword",
     visual_builder: Callable[[list[VideoSegment]], object] | None = None,
     answer_mode: str = "extractive",
+    upload_dir: str | Path = "artifacts/uploads",
 ) -> Flask:
     if answer_mode not in {"extractive", "local_experimental"}:
         raise ValueError("Unknown answer mode")
     app = Flask(__name__)
-    app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024 + 12 * 1024 * 1024
     store = LibraryStore(database_path)
     import_lock = RLock()
     if mode not in {"demo", "full", "transcript", "unknown"}:
@@ -109,6 +112,8 @@ def create_app(
             host = None
         if host not in {"localhost", "127.0.0.1", "::1"}:
             return jsonify({"error": "local access only"}), 403
+        if request.path != "/api/library/upload" and request.content_length is not None and request.content_length > 64 * 1024:
+            return jsonify({"error": "Request too large"}), 413
         origin = request.headers.get("Origin")
         if origin:
             try:
@@ -126,7 +131,19 @@ def create_app(
 
     @app.get("/")
     def index():
+        build = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+        if (build / "index.html").is_file():
+            return send_from_directory(build, "index.html")
         return render_template("index.html")
+
+    @app.get("/classic")
+    def classic_workspace():
+        return render_template("index.html")
+
+    @app.get("/workspace/assets/<path:filename>")
+    def workspace_asset(filename):
+        build = Path(__file__).resolve().parents[3] / "frontend" / "dist" / "assets"
+        return send_from_directory(build, filename)
 
     @app.get("/api/health")
     def health():
@@ -322,6 +339,75 @@ def create_app(
         except RuntimeError:
             return jsonify({"error": "Could not start the local transcription task"}), 503
         return jsonify(transcription_job.status()), 202
+
+    @app.post("/api/library/upload")
+    def upload_local_video():
+        """Copy an authorized upload to the local private workspace and index it."""
+        if mode != "transcript":
+            return jsonify({"error": "Uploads are available only in the local transcript workspace"}), 409
+        if request.content_length is None:
+            return jsonify({"error": "Upload size is required"}), 411
+        if request.form.get("permission") != "yes" or request.form.get("local_storage") != "yes":
+            return jsonify({"error": "Confirm permission and local storage before importing"}), 400
+        video = request.files.get("video")
+        subtitle = request.files.get("subtitle")
+        language = request.form.get("language", "")
+        if not video or not video.filename or language not in {"", "en", "zh"}:
+            return jsonify({"error": "Select a video and a supported language"}), 400
+        from video_rag.transcript_baseline import VIDEO_SUFFIXES
+
+        video_suffix = Path(video.filename).suffix.lower()
+        has_subtitle = bool(subtitle and subtitle.filename)
+        subtitle_suffix = Path(subtitle.filename).suffix.lower() if has_subtitle else None
+        if video_suffix not in VIDEO_SUFFIXES or (has_subtitle and subtitle_suffix not in {".srt", ".vtt"}):
+            return jsonify({"error": "Use an MP4, WebM, OGV, MOV or M4V video and optional SRT/VTT subtitles"}), 400
+        upload_root = Path(upload_dir).expanduser().resolve()
+        directory = upload_root / uuid.uuid4().hex
+        accepted = False
+        video_path = subtitle_path = None
+        try:
+            directory.mkdir(parents=True, exist_ok=False)
+            name = secure_filename(video.filename) or f"lecture{video_suffix}"
+            if Path(name).suffix.lower() != video_suffix:
+                name = f"lecture{video_suffix}"
+            video_path = directory / name
+            video.save(video_path)
+            if not video_path.is_file() or not video_path.stat().st_size:
+                raise ValueError("The video file is empty")
+            if video_path.stat().st_size > 2 * 1024 * 1024 * 1024:
+                raise ValueError("The video exceeds the local upload limit")
+            if subtitle_suffix:
+                subtitle_path = directory / f"captions{subtitle_suffix}"
+                subtitle.save(subtitle_path)
+                if subtitle_path.stat().st_size > 10 * 1024 * 1024:
+                    raise ValueError("Subtitles must be under 10 MiB")
+            with app.test_client() as client:
+                if subtitle_path:
+                    response = client.post("/api/library/local-video", json={
+                        "video_path": str(video_path), "subtitle_path": str(subtitle_path)})
+                else:
+                    response = client.post("/api/transcription", json={
+                        "video_path": str(video_path), "language": language or None})
+            if response.status_code not in {201, 202}:
+                return jsonify(response.get_json(silent=True) or {"error": "Could not import the local video"}), response.status_code
+            accepted = True
+            result = response.get_json()
+            return jsonify({"state": "ready" if subtitle_path else "transcribing", **result}), response.status_code
+        except (OSError, ValueError):
+            return jsonify({"error": "Could not store or read the upload; check file size and disk space"}), 400
+        finally:
+            if (not accepted and directory.is_dir() and not directory.is_symlink()
+                    and directory.resolve().parent == upload_root):
+                for path in (video_path, subtitle_path):
+                    if path is not None:
+                        try:
+                            path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                try:
+                    directory.rmdir()
+                except OSError:
+                    pass
 
     @app.post("/api/courses")
     def create_course():
