@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, Bookmark, BookOpen, Check, CheckCircle2, ChevronDown, CircleHelp, Clock3, FileText, FolderOpen, Gauge, Layers3, Library, LockKeyhole, Menu, MessageSquare, MoreHorizontal, Play, Plus, Search, ShieldCheck, Sparkles, Trash2, Upload, Video, X } from 'lucide-react';
+import { uploadLecture } from './upload.js';
 import './style.css';
 
 const formatTime = value => {
@@ -22,6 +23,7 @@ function UploadDialog({ onClose, onImported, notify }) {
   const [storage, setStorage] = useState(false);
   const [language, setLanguage] = useState('en');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(null);
   const [error, setError] = useState('');
   const dialogRef = useRef(null);
   useEffect(() => {
@@ -47,13 +49,13 @@ function UploadDialog({ onClose, onImported, notify }) {
     const data = new FormData();
     data.append('video', video); if (subtitle) data.append('subtitle', subtitle);
     data.append('permission', 'yes'); data.append('local_storage', 'yes'); data.append('language', language);
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setProgress(null);
     try {
-      const result = await api('/api/library/upload', { method: 'POST', body: data });
+      const result = await uploadLecture(data, setProgress);
       try { await onImported(result); notify(result.state === 'ready' ? 'Video added to your local library.' : 'Local transcription started.'); }
       catch (_) { notify('Import was accepted, but the library could not refresh. Reload the page before importing again.'); }
       onClose();
-    } catch (err) { setError(err.message); } finally { setBusy(false); }
+    } catch (err) { setError(err.message); } finally { setBusy(false); setProgress(null); }
   };
   return <div className="modal-layer" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
@@ -65,6 +67,7 @@ function UploadDialog({ onClose, onImported, notify }) {
           <label className="check"><input type="checkbox" checked={permission} onChange={e => setPermission(e.target.checked)}/><span>I have permission to process this recording and subtitles under the applicable course and institutional rules.</span></label>
           <label className="check"><input type="checkbox" checked={storage} onChange={e => setStorage(e.target.checked)}/><span>I understand local copies and derived data will be stored on this computer.</span></label>
         </div>
+        {busy && <div className="upload-progress" role="status"><span>{progress === null ? 'Preparing local upload…' : progress < 100 ? `Copying to this computer… ${progress}%` : 'Copy complete. Processing locally; please keep this window open…'}</span>{progress !== null && <progress value={progress} max="100" aria-label="Local upload progress"/>}<small>After copying, indexing may take additional time.</small></div>}
         {error && <div className="error" role="alert">{error}</div>}
         <div className="modal-actions"><button type="button" className="btn quiet" onClick={onClose} disabled={busy}>Cancel</button><button className="btn primary" disabled={!video || !permission || !storage || busy}>{busy ? 'Importing locally…' : 'Import to workspace'} <ArrowRight size={16}/></button></div>
       </form>

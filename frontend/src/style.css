@@ -5,3 +5,5 @@
 :focus-visible{outline:2px solid #d66b47;outline-offset:3px}.ask-form:focus-within{border-color:#d68a70}.dropzone:focus-within{outline:2px solid #d66b47;outline-offset:3px}
 
 .evidence-source{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:#68776c;overflow-wrap:anywhere;margin-bottom:9px}.remove-index{margin-top:12px;display:flex;align-items:center;gap:6px;border:0;background:transparent;padding:5px 0;color:#986653;font-size:10px}.remove-index:hover{text-decoration:underline}
+
+.upload-progress{display:grid;gap:6px;margin-top:14px;padding:11px 12px;background:#f5f7f2;color:#526b57;font-size:11px}.upload-progress progress{width:100%;height:7px;accent-color:#e97b56}.upload-progress small{color:#879389;font-size:10px}
