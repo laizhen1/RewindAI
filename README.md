@@ -108,6 +108,8 @@ To prepare the pinned public Qwen2.5 answer model (about 2.1 GB), install `huggi
 
 On Windows, `Start-RewindAI-Semantic-Answers.cmd` combines the optional semantic retriever and local answer generator using both cached models; both remain experimental, CPU-only and offline during inference. `REWINDAI_SEMANTIC_MODEL` and `REWINDAI_ANSWER_MODEL` override their paths. Startup may be slow while rebuilding the semantic index.
 
+For local answers, questions are limited to 1,000 characters so they are not silently shortened before generation. When a retrieved subtitle exceeds the model's excerpt limit, the evidence card shows both the full subtitle and the portion provided to the model.
+
 `Start-RewindAI-Local-Answers.cmd` looks for the locally cached Qwen2.5 3B Q4_K_M model; `REWINDAI_ANSWER_MODEL` overrides its path. The launcher does not download weights. Earlier exploratory answer tests and limitations are retained in the [local answer evaluation](docs/LOCAL_ANSWER_EXPERIMENT.md).
 
 With Qwen3 retrieval and the local strict answer prompt, an exploratory balanced sample of 50 previously examined public snippets produced an exact-refusal proxy F1 of **0.276**: only 4 of 25 labeled answerable snippets were proxy-positive. This does not assess answer correctness and indicates that the current setup may be overly cautious; see [the method and counts](docs/LOCAL_ANSWER_EXPERIMENT.md#qwen3-retrieval-with-local-answer-generation).

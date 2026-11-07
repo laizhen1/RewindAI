@@ -95,3 +95,24 @@ def test_exact_model_refusal_is_distinct_from_retrieval_abstention(tmp_path):
     assert result['evidence'] and not result['abstained'] and result['exact_model_refusal']
     missing = client.post('/api/ask', json={'question': 'volcanic elephants'}).json
     assert missing['abstained'] and not missing['exact_model_refusal']
+
+
+def test_local_answer_rejects_questions_that_would_be_silently_truncated(tmp_path):
+    class Generator:
+        def generate(self, query, segments):
+            return query
+
+    question = 'a' * 1000
+    evidence = VideoSegment(segment_id='sample', video_id='sample', source_path='sample.mp4',
+                            start_time=1, end_time=3, transcript=question)
+    app = create_app(build_transcript_segments([evidence], generator=Generator()), mode='unknown',
+                     answer_mode='local_experimental', database_path=tmp_path / 'local.db')
+    client = app.test_client()
+    response = client.post('/api/ask', json={'question': 'a' * 1001})
+    assert response.status_code == 400
+    assert 'at most 1000 characters' in response.json['error']
+    response = client.post('/api/ask', json={'question': question})
+    assert response.status_code == 200
+    assert response.json['answer'] == question
+    assert response.json['evidence'][0]['model_excerpt'] == question[:500]
+    assert response.json['evidence'][0]['transcript'] == question

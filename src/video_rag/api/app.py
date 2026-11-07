@@ -468,6 +468,11 @@ def create_app(
         question = payload.get("question")
         if not isinstance(question, str) or not question.strip() or len(question) > 4000:
             return jsonify({"error": "question must contain 1 to 4000 characters"}), 400
+        if answer_mode == "local_experimental" and not evidence_only:
+            from video_rag.adapters.local_answer import MAX_QUESTION_CHARACTERS
+
+            if len(question.strip()) > MAX_QUESTION_CHARACTERS:
+                return jsonify({"error": f"Local answers require a question of at most {MAX_QUESTION_CHARACTERS} characters"}), 400
         search_pipeline = pipeline
         video_id = payload.get("video_id")
         course_id = payload.get("course_id")
@@ -510,7 +515,15 @@ def create_app(
             and " ".join(result.answer.lower().split()).rstrip(".! ")
             == "insufficient evidence in the provided excerpts"
         )
-        for evidence in response["evidence"]:
+        for index, evidence in enumerate(response["evidence"]):
+            if answer_mode == "local_experimental" and not evidence_only and not result.abstained:
+                from video_rag.adapters.local_answer import MAX_EXCERPT_CHARACTERS, MAX_EXCERPTS
+
+                excerpt = evidence.get("transcript", "")
+                if index >= MAX_EXCERPTS:
+                    evidence["model_excerpt"] = None
+                elif len(excerpt) > MAX_EXCERPT_CHARACTERS:
+                    evidence["model_excerpt"] = excerpt[:MAX_EXCERPT_CHARACTERS]
             # Local source paths may contain personal directory names. Video access
             # goes through the indexed ID rather than exposing filesystem paths.
             evidence.pop("source_path", None)
