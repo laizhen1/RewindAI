@@ -1,8 +1,24 @@
+import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
-from video_rag.index_manifest import SIMILARITY, validate_manifest
+from video_rag.index_manifest import SIMILARITY, file_sha256, segment_count, validate_manifest
+
+
+def test_manifest_scans_files_without_loading_them_whole(tmp_path, monkeypatch):
+    data = b'a' * (4 * 1024 * 1024 + 17)
+    binary = tmp_path / 'index.faiss'
+    binary.write_bytes(data)
+    segments = tmp_path / 'segments.jsonl'
+    segments.write_text('{"segment_id":"a"}\n\n{"segment_id":"b"}\n', encoding='utf-8')
+    def reject_whole_file(*args, **kwargs):
+        raise AssertionError('Do not load the whole file')
+    monkeypatch.setattr(Path, 'read_bytes', reject_whole_file)
+    monkeypatch.setattr(Path, 'read_text', reject_whole_file)
+    assert file_sha256(binary) == hashlib.sha256(data).hexdigest()
+    assert segment_count(segments) == 2
 
 
 def base_manifest(segments_path, model="clip-model"):

@@ -2,15 +2,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import UTC
 from pathlib import Path
 from typing import Any
-
 
 SIMILARITY = "cosine via L2-normalized float32 + IndexFlatIP"
 
 
 def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(4 * 1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def segment_count(path: Path) -> int:
+    with path.open(encoding="utf-8") as source:
+        return sum(1 for line in source if line.strip())
 
 
 def index_spec(index_dir: Path, name: str) -> dict[str, Any]:
@@ -40,17 +49,14 @@ def index_spec(index_dir: Path, name: str) -> dict[str, Any]:
 def build_manifest(
     *, segments_path: Path, index_dir: Path, text_model: str, clip_model: str
 ) -> dict[str, Any]:
-    import json as json_module
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    segment_count = sum(
-        1 for line in segments_path.read_text(encoding="utf-8").splitlines() if line.strip()
-    )
+    count = segment_count(segments_path)
     vision_name = "vision_dense_zh" if "chinese-clip" in clip_model.lower() else "vision_dense"
     return {
         "schema_version": 2,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "segment_count": segment_count,
+        "created_at": datetime.now(UTC).isoformat(),
+        "segment_count": count,
         "segments_sha256": file_sha256(segments_path),
         "models": {"text_embedding": text_model, "clip": clip_model},
         "similarity": SIMILARITY,
@@ -66,10 +72,10 @@ def validate_manifest(
 ) -> dict[str, Any]:
     manifest_path = index_dir / "manifest.json"
     if not manifest_path.exists():
-        raise ValueError("index manifest is missing; rebuild or refresh indexes")
+        raise ValueError("index manifest is missing; rebuild indexes from the selected segments")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("schema_version") != 2:
-        raise ValueError("unsupported or legacy index manifest; refresh indexes")
+        raise ValueError("unsupported or legacy index manifest; rebuild indexes from the selected segments")
     expected = {
         "text_embedding": text_model,
         "clip": clip_model,
@@ -81,9 +87,7 @@ def validate_manifest(
     actual_sha = file_sha256(segments_path)
     if manifest.get("segments_sha256") != actual_sha:
         raise ValueError("segments SHA-256 does not match the index manifest")
-    actual_count = sum(
-        1 for line in segments_path.read_text(encoding="utf-8").splitlines() if line.strip()
-    )
+    actual_count = segment_count(segments_path)
     if manifest.get("segment_count") != actual_count:
         raise ValueError("segment count does not match the index manifest")
     if manifest.get("similarity") != SIMILARITY:

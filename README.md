@@ -222,6 +222,8 @@ python scripts/ingest_local.py /path/to/authorized-video.mp4 --language en
 
 The command writes a new `artifacts/ingestions/` directory without copying the source video. Model-hub offline mode is the default; missing models require explicit download permission. It prints a server command. The full workflow has not been independently validated end to end on real models and course recordings.
 
+The legacy `refresh_index_manifest.py` command now only verifies an existing manifest; it cannot bind unverified indexes to new segments or models. If the manifest is missing or mismatched, rebuild the indexes with `scripts/build_indexes.py`. Matching hashes detect subsequent changes but do not independently prove how an index was originally built.
+
 Building an index is not model training: indexing generally does not change model weights. Keep course recordings, transcripts, frames, indexes, questions, notes, feedback and course-derived evaluation results on the local computer. Do not upload them to GitHub, cloud models or third parties. `.gitignore` excludes common media, subtitle and database files plus `artifacts/` and `local_data/`, but it cannot identify every private file; inspect changes before publishing.
 
 ## Architecture
