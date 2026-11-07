@@ -7,12 +7,20 @@ from scripts.diagnose_transcript import (
     metrics_by_question_type,
     operating_metrics,
     overlap,
+    union_coverage,
 )
 
 
 def test_overlap_requires_positive_duration():
     assert overlap({"start_time": 10, "end_time": 20}, 19, 30)
     assert not overlap({"start_time": 10, "end_time": 20}, 20, 30)
+
+
+def test_union_coverage_clips_ranges_and_does_not_count_overlaps_twice():
+    hits = [{"start_time": -5, "end_time": 4}, {"start_time": 2, "end_time": 6},
+            {"start_time": 8, "end_time": 12}, {"start_time": 20, "end_time": 30}]
+    assert union_coverage(hits, 0, 10) == 0.8
+    assert union_coverage([], 0, 10) == 0
 
 
 def test_coverage_feasibility_checks_actual_overlap_and_excludes_negative_questions():
@@ -69,6 +77,7 @@ def test_diagnostic_reports_first_and_any_overlap():
     assert result["first_hit_overlaps"] is False
     assert result["any_hit_overlaps"] is True
     assert result["best_hit_reference_coverage"] == 1.0
+    assert result["returned_union_reference_coverage"] == 1.0
     assert result["query_latency_ms"] >= 0
 
 
@@ -91,6 +100,22 @@ def test_coverage_and_unanswerable_result():
     row = diagnose(Pipeline(), [{"question": "Not in video?", "expected_answerable": False}])[0]
     assert row["correct_abstention"] is True
     assert "any_hit_overlaps" not in row
+
+
+def test_returned_union_is_an_additional_metric_not_a_change_to_f1():
+    class Pipeline:
+        def ask(self, question):
+            class Result:
+                def to_dict(self):
+                    return {"abstained": False, "evidence": [
+                        {"start_time": 0, "end_time": 3}, {"start_time": 3, "end_time": 6}]}
+            return Result()
+
+    results = diagnose(Pipeline(), [{"question": "Example?", "evidence_start_seconds": 0,
+                                    "evidence_end_seconds": 10}])
+    assert metrics(results)["f1"] == 0
+    assert operating_metrics(results)["union_returned_temporal_hits"] == 1
+    assert operating_metrics(results)["union_returned_temporal_hit_rate"] == 1
 
 
 def test_metrics_count_wrong_evidence_as_false_positive_and_false_negative():

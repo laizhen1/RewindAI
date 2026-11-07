@@ -19,7 +19,8 @@ def labeler(tmp_path):
 def test_case_status_distinguishes_time_miss_and_unanswerable_candidate():
     prediction = {"abstained": False, "first_hit_reference_coverage": 0.2, "returned_ranges": [[10, 15]],
                   "question": "private text"}
-    assert case_result({"expected_answerable": True}, prediction) == {"status": "time_mismatch", "returned_ranges": [[10, 15]]}
+    assert case_result({"expected_answerable": True}, prediction) == {
+        "status": "time_mismatch", "returned_ranges": [[10, 15]], "union_reference_coverage": None}
     assert case_result({"expected_answerable": False}, prediction)["status"] == "candidate_on_unanswerable"
 
 
@@ -124,6 +125,7 @@ def test_local_diagnostic_uses_drafts_without_exposing_question_text(tmp_path):
     data = response.get_json()
     assert data["metrics"]["tp"] == 1 and data["metrics"]["f1"] == 1
     assert data["metrics"]["question_count"] == 1 and data["subtitle_last_end_seconds"] == 8
+    assert data["operating"]["union_returned_temporal_hits"] == 1
     assert data["coverage_feasibility"] == {"answerable_questions": 1, "structurally_unattainable": 0,
                                              "reference_coverage_threshold": 0.5}
     assert "cases" not in data
@@ -137,6 +139,8 @@ def test_local_diagnostic_uses_drafts_without_exposing_question_text(tmp_path):
     assert result2["metrics"]["tn"] == 1 and result2["metrics"]["question_count"] == 2
     cases = client.post("/api/evaluate", json={"revision": negative["revision"], "include_cases": True}).get_json()["cases"]
     assert cases[0]["keyword"]["status"] == "time_match" and cases[0]["reference_range"] == [3, 8]
+    assert cases[0]["keyword"]["union_reference_coverage"] == 1
+    assert cases[1]["keyword"]["union_reference_coverage"] is None
     assert cases[0]["keyword"]["returned_ranges"] == [[3, 8]] and cases[0]["semantic"] is None
     assert cases[1]["keyword"]["status"] == "abstained" and cases[1]["reference_range"] is None
     assert client.post("/api/evaluate", json={"revision": negative["revision"], "include_cases": 1}).status_code == 400

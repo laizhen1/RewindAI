@@ -25,6 +25,18 @@ def coverage(hit: dict, start: float, end: float) -> float:
     return max(0.0, min(hit["end_time"], end) - max(hit["start_time"], start)) / (end - start)
 
 
+def union_coverage(hits: list[dict], start: float, end: float) -> float:
+    """Reference interval covered by the union of returned hits; never double count overlap."""
+    intervals = sorted((max(start, hit["start_time"]), min(end, hit["end_time"]))
+                       for hit in hits if overlap(hit, start, end))
+    covered = 0.0
+    previous_end = start
+    for left, right in intervals:
+        covered += max(0.0, right - max(left, previous_end))
+        previous_end = max(previous_end, right)
+    return covered / (end - start)
+
+
 def coverage_feasibility(questions: list[dict], segments: list, min_coverage: float = 0.5) -> dict:
     """Check whether a single indexed segment can meet each reference interval.
 
@@ -86,6 +98,7 @@ def diagnose(pipeline, questions: list[dict]) -> list[dict]:
                 "any_hit_overlaps": any(overlap(hit, start, end) for hit in hits),
                 "first_hit_reference_coverage": coverage(hits[0], start, end) if hits else 0.0,
                 "best_hit_reference_coverage": max((coverage(hit, start, end) for hit in hits), default=0.0),
+                "returned_union_reference_coverage": union_coverage(hits, start, end),
             })
         else:
             row["correct_abstention"] = bool(result["abstained"])
@@ -139,6 +152,9 @@ def operating_metrics(results: list[dict], min_coverage: float = 0.5) -> dict:
     negative = [row for row in results if not row["expected_answerable"]]
     first = sum(not row["abstained"] and row["first_hit_reference_coverage"] >= min_coverage for row in positive)
     any_returned = sum(not row["abstained"] and row["best_hit_reference_coverage"] >= min_coverage for row in positive)
+    union_available = all("returned_union_reference_coverage" in row for row in positive)
+    union_returned = (sum(not row["abstained"] and row["returned_union_reference_coverage"] >= min_coverage
+                          for row in positive) if union_available else None)
     rejected_negative = sum(row["abstained"] for row in negative)
     rejected_positive = sum(row["abstained"] for row in positive)
     return {
@@ -148,6 +164,8 @@ def operating_metrics(results: list[dict], min_coverage: float = 0.5) -> dict:
         "top1_temporal_hit_rate": first / len(positive) if positive else None,
         "any_returned_temporal_hits": any_returned,
         "any_returned_temporal_hit_rate": any_returned / len(positive) if positive else None,
+        "union_returned_temporal_hits": union_returned,
+        "union_returned_temporal_hit_rate": union_returned / len(positive) if positive and union_available else None,
         "answerable_abstentions": rejected_positive,
         "answerable_abstention_rate": rejected_positive / len(positive) if positive else None,
         "unanswerable_questions": len(negative),

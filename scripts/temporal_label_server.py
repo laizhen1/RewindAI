@@ -51,7 +51,8 @@ def case_result(question: dict, row: dict) -> dict:
         status = "time_match"
     else:
         status = "time_mismatch"
-    return {"status": status, "returned_ranges": row["returned_ranges"]}
+    return {"status": status, "returned_ranges": row["returned_ranges"],
+            "union_reference_coverage": row.get("returned_union_reference_coverage")}
 
 
 def create_label_app(video: Path, output: Path, video_id: str, split: str, duration: float,
