@@ -75,6 +75,8 @@ The setup downloads only public [CLIP model files](https://huggingface.co/Xenova
 
 On other platforms, start `scripts/run_transcript.py` with `--visual-model PATH_TO_CLIP_DIRECTORY`; add the `--semantic-model` and `--answer-model` arguments shown above if you also want Qwen retrieval and generated answers. The visual directory must contain `tokenizer.json` and `onnx/model_quantized.onnx`. With the visual model enabled, choose **Find a frame** and enter an English visual description. See [the visual experiment guide](LOCAL_VISUAL_EXPERIMENT.md) for additional details.
 
+The experimental **Text + frames** mode combines transcript and visual candidate ranks using reciprocal rank fusion. It shows which source or sources returned each segment, and feedback is recorded separately for text and frames. This mode does not generate an answer. If visual indexing fails, it labels the returned results as transcript-only. Fusion has not been independently validated as an improvement; verify candidates against the recording.
+
 Visual search samples at most 100 segment midpoints in the selected scope. It can miss relevant moments and return irrelevant frames even when there is no match. Frame previews and timestamps are candidates for manual review, not generated answers or proof of image understanding. The first search and a changed scope can take longer while the local index is built.
 
 ## Privacy and responsibility
