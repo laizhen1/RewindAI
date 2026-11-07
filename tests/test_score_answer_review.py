@@ -60,6 +60,19 @@ def test_question_type_metrics_keep_unlabeled_drafts_separate():
     assert 'by_question_type' not in groups['audio']
 
 
+def test_query_latency_reports_missing_and_nearest_rank_p95():
+    rows = [{**row(True, 'correct', 'supported'), 'latency_ms': value} for value in range(1, 21)]
+    rows.append(row(False, 'abstain'))
+    latency = summarize({'status': 'unreviewed_answer_drafts', 'rows': rows})['query_latency']
+    assert latency == {'count': 20, 'missing': 1, 'median_ms': 10.5, 'p95_ms': 19.0}
+    empty = summarize({'status': 'unreviewed_answer_drafts', 'rows': [row(False, 'abstain')]})['query_latency']
+    assert empty == {'count': 0, 'missing': 1, 'median_ms': None, 'p95_ms': None}
+    for invalid in (-1, float('nan'), True, '3'):
+        with pytest.raises(ValueError, match='latency'):
+            summarize({'status': 'unreviewed_answer_drafts',
+                       'rows': [{**row(False, 'abstain'), 'latency_ms': invalid}]})
+
+
 def test_question_origin_is_counted_without_claiming_independence():
     generated = {**row(True, 'correct', 'supported'), 'annotation_source': 'model_generated_candidate_unverified'}
     result = summarize({'status': 'unreviewed_answer_drafts', 'rows': [generated]})

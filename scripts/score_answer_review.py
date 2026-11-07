@@ -4,8 +4,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
+from statistics import median
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
@@ -26,6 +28,7 @@ def summarize(report: dict, *, include_by_type: bool = True) -> dict:
     answerable_count = unanswerable_count = answerable_abstained = 0
     supported_count = unsupported_count = 0
     type_groups: dict[str, list[dict]] = {}
+    latencies: list[float] = []
     for row in rows:
         if not isinstance(row, dict) or type(row.get('expected_answerable')) is not bool:
             raise ValueError('Every row must have a boolean reference label')
@@ -33,6 +36,11 @@ def summarize(report: dict, *, include_by_type: bool = True) -> dict:
         if not isinstance(kind, str) or kind not in {'audio', 'visual', 'ocr', 'multimodal', 'unknown_route', 'unlabeled'}:
             raise ValueError('Invalid question type')
         type_groups.setdefault(kind, []).append(row)
+        latency = row.get('latency_ms')
+        if latency is not None:
+            if type(latency) not in (int, float) or not math.isfinite(latency) or latency < 0:
+                raise ValueError('Recorded latency must be a finite, nonnegative number')
+            latencies.append(float(latency))
         answerable_count += int(row['expected_answerable'])
         unanswerable_count += int(not row['expected_answerable'])
         origin = row.get('annotation_source', 'not_recorded')
@@ -62,6 +70,10 @@ def summarize(report: dict, *, include_by_type: bool = True) -> dict:
             answerable_abstained += 1
         else:
             tn += 1
+    latencies.sort()
+    latency_summary = {'count': len(latencies), 'missing': len(rows) - len(latencies),
+                       'median_ms': median(latencies) if latencies else None,
+                       'p95_ms': latencies[math.ceil(.95 * len(latencies)) - 1] if latencies else None}
     result = {'question_count': len(rows), 'model_generated_questions': generated,
             'answerable_questions': answerable_count, 'unanswerable_questions': unanswerable_count,
             'answerable_abstentions': answerable_abstained,
@@ -73,6 +85,7 @@ def summarize(report: dict, *, include_by_type: bool = True) -> dict:
             'evidence_support_rate_among_answers': (
                 supported_count / (supported_count + unsupported_count)
                 if supported_count + unsupported_count else None),
+            'query_latency': latency_summary,
             'question_origin_not_recorded': unrecorded, 'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn,
             'precision': tp / (tp + fp) if tp + fp else None,
             'recall': tp / (tp + fn) if tp + fn else None,
