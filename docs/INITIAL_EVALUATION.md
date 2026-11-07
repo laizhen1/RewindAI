@@ -77,7 +77,7 @@ For the ethics video use `data/evaluation/public_sample_questions.pending.json`.
 
 ### Controlled window-boundary diagnostic
 
-To investigate segmentation sensitivity, we repeated the same provisional keyword evaluation using `scripts/compare_caption_inputs.py`. Both caption inputs were assigned to the same 20-second windows starting at zero; each whole caption cue was assigned to the window containing its midpoint. Empty windows were retained on both sides. This is an experimental comparison, not the application's default grouping.
+To investigate segmentation sensitivity, I repeated the same provisional keyword evaluation using `scripts/compare_caption_inputs.py`. Both caption inputs were assigned to the same 20-second windows starting at zero; each whole caption cue was assigned to the window containing its midpoint. Empty windows were retained on both sides. This is an experimental comparison, not the application's default grouping.
 
 | Video | Caption input | TP | FP | FN | TN | Precision | Recall | F1 |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -100,9 +100,9 @@ The optional semantic mode was also run locally with the same quantized MiniLM m
 
 ## Independent TutorialVQA transcript benchmark
 
-We evaluated the existing keyword retrieval baseline on [TutorialVQA](https://github.com/acolas1/TutorialVQAData), an independently created instructional-video question answering dataset by Colas et al. ([LREC 2020 paper](https://aclanthology.org/2020.lrec-1.670/)). The dataset authors license their data under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). The test set was not authored by RewindAI; however, it covers Photoshop screencast tutorials rather than university lectures. It contains some low-quality questions and all items are treated as answerable; results therefore do not assess unanswerable-question rejection.
+I evaluated the existing keyword retrieval baseline on [TutorialVQA](https://github.com/acolas1/TutorialVQAData), an independently created instructional-video question answering dataset by Colas et al. ([LREC 2020 paper](https://aclanthology.org/2020.lrec-1.670/)). The dataset authors license their data under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). The test set was not authored by RewindAI; however, it covers Photoshop screencast tutorials rather than university lectures. It contains some low-quality questions and all items are treated as answerable; results therefore do not assess unanswerable-question rejection.
 
-On the original `test.json` (Git blob `de3b59001325df56c33c6180d62353054a5ebfbe`) and `videos.json` (Git blob `583ce560cf51aba22d78f4385e2bd7403049945d`), all 1,239 questions and 76 referenced videos passed range validation. We indexed each supplied transcript sentence as a separate segment, selected only the question's known source video, and returned at most three sentences using the existing default keyword retriever and reranker. We interpreted the dataset's start and end sentence indices as inclusive. The segment start/end fields in this experiment are **sentence indices, not video seconds**. No source video was downloaded or processed.
+On the original `test.json` (Git blob `de3b59001325df56c33c6180d62353054a5ebfbe`) and `videos.json` (Git blob `583ce560cf51aba22d78f4385e2bd7403049945d`), all 1,239 questions and 76 referenced videos passed range validation. I indexed each supplied transcript sentence as a separate segment, selected only the question's known source video, and returned at most three sentences using the existing default keyword retriever and reranker. I interpreted the dataset's start and end sentence indices as inclusive. The segment start/end fields in this experiment are **sentence indices, not video seconds**. No source video was downloaded or processed.
 
 | Measure | Result |
 | --- | ---: |
@@ -127,7 +127,7 @@ The external data are not bundled in RewindAI. This script does not access the i
 
 ### Adjacent sentence context experiment
 
-We explored whether including neighboring transcript sentences around each returned hit improves reference-span coverage. `scripts/evaluate_tutorialvqa.py --context-sentences N` expands each top-three retrieved sentence by N sentences on each side, clips to the transcript and deduplicates overlaps. It changes only the evaluation output set: the initial ranking, top-1 hit and abstention behavior are unchanged. This experiment does not modify the application.
+I explored whether including neighboring transcript sentences around each returned hit improves reference-span coverage. `scripts/evaluate_tutorialvqa.py --context-sentences N` expands each top-three retrieved sentence by N sentences on each side, clips to the transcript and deduplicates overlaps. It changes only the evaluation output set: the initial ranking, top-1 hit and abstention behavior are unchanged. This experiment does not modify the application.
 
 On the dataset's 1,238-question development split (`dev.json`, Git blob `f9901f4bc5bf3c131ba98c64d89776a75431909e`):
 
@@ -140,7 +140,7 @@ On the dataset's 1,238-question development split (`dev.json`, Git blob `f9901f4
 
 Among these four tested settings, three adjacent sentences gave the highest development F1. Applied to the 1,239-question test split, it produced TP 3,778, FP 8,373 and FN 4,562: precision **0.311**, recall **0.453** and F1 **0.369**, compared with **0.460 / 0.123 / 0.194** without context. More text covers more reference sentences but also introduces more unrelated sentences; it does not improve the initial hit. The test still has 273 abstentions and 554 top-1 overlaps.
 
-This is an exploratory comparison, not a generalization result: we inspected the baseline test result before this experiment, all 76 test videos also appear in the development split, and 12 distinct `(video_id, question)` pairs appear in both splits (exact string comparison). Context size was selected from only the four values 0–3 on development data. The data's answer spans are treated as inclusive; the reference transcripts, not model-transcribed lecture audio, are evaluated. Production uses variable-length timed subtitle chunks rather than individual sentence indices, so these numbers cannot be assumed to carry over. Evaluate on genuinely unseen videos and review relevance before deciding whether to expose extra context in the product.
+This is an exploratory comparison, not a generalization result: I inspected the baseline test result before this experiment, all 76 test videos also appear in the development split, and 12 distinct `(video_id, question)` pairs appear in both splits (exact string comparison). Context size was selected from only the four values 0–3 on development data. The data's answer spans are treated as inclusive; the reference transcripts, not model-transcribed lecture audio, are evaluated. Production uses variable-length timed subtitle chunks rather than individual sentence indices, so these numbers cannot be assumed to carry over. Evaluate on genuinely unseen videos and review relevance before deciding whether to expose extra context in the product.
 
 ```powershell
 python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions PATH_TO_DEV_OR_TEST_JSON --context-sentences 3
@@ -150,7 +150,7 @@ python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions 
 
 The original TutorialVQA development and test files share videos. To avoid overlap between the videos used for choosing the context setting and those used for the next comparison, the evaluator now supports `--video-partition`. It hashes the UTF-8 video ID with SHA-256, interprets the first eight bytes as a big-endian integer, and assigns IDs divisible by five to `heldout`; all others are `development`. This partition is deterministic and does not use question labels.
 
-From the original development file, the development partition contains 936 questions from 58 videos. Among context sizes 0, 1, 2 and 3, micro F1 was respectively 0.216, 0.344, 0.383 and 0.388; we selected 3. The heldout partition of the original test file contains 294 questions from 18 videos, none shared with the development partition. Its results:
+From the original development file, the development partition contains 936 questions from 58 videos. Among context sizes 0, 1, 2 and 3, micro F1 was respectively 0.216, 0.344, 0.383 and 0.388; I selected 3. The heldout partition of the original test file contains 294 questions from 18 videos, none shared with the development partition. Its results:
 
 | Context on each side | TP | FP | FN | Precision | Recall | F1 |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -166,7 +166,7 @@ python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions 
 
 ### Keyword versus local semantic retrieval
 
-We ran the existing experimental CPU semantic mode on the same 294 questions from 18 video-disjoint test-side videos used above, with **no adjacent-sentence expansion**. The model was `Xenova/all-MiniLM-L6-v2`, quantized ONNX revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`. The cosine cutoff remained the previously used, uncalibrated 0.4; it was not tuned on this subset. Each method searched the same supplied transcript for the known source video and returned up to three sentences.
+I ran the existing experimental CPU semantic mode on the same 294 questions from 18 video-disjoint test-side videos used above, with **no adjacent-sentence expansion**. The model was `Xenova/all-MiniLM-L6-v2`, quantized ONNX revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`. The cosine cutoff remained the previously used, uncalibrated 0.4; it was not tuned on this subset. Each method searched the same supplied transcript for the known source video and returned up to three sentences.
 
 | Method | TP | FP | FN | Precision | Recall | F1 | Top-1 in reference | Abstentions |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -183,7 +183,7 @@ Install the optional semantic dependencies and supply the model files as describ
 
 ### Video-level uncertainty diagnostic
 
-To show how much the keyword result can vary with the videos included, we resampled the 18 test-side videos with replacement 2,000 times, keeping all questions belonging to each sampled video together. With seed 42, the 2.5th–97.5th percentile ranges were precision **0.312–0.478**, recall **0.075–0.131**, and F1 **0.122–0.204**; the original point estimates were 0.394, 0.095, and 0.153. Each replicate aggregates sentence TP/FP/FN before computing metrics.
+To show how much the keyword result can vary with the videos included, I resampled the 18 test-side videos with replacement 2,000 times, keeping all questions belonging to each sampled video together. With seed 42, the 2.5th–97.5th percentile ranges were precision **0.312–0.478**, recall **0.075–0.131**, and F1 **0.122–0.204**; the original point estimates were 0.394, 0.095, and 0.153. Each replicate aggregates sentence TP/FP/FN before computing metrics.
 
 These are exploratory bootstrap ranges for this small, non-random sample of Photoshop tutorials; they are not guaranteed population confidence intervals, do not correct label errors or previous test-set exposure, and do not assess differences between models. All earlier restrictions on sentence-index measurements apply. The fixed seed and number of replicates make the calculation reproducible:
 
@@ -194,7 +194,7 @@ python scripts/evaluate_tutorialvqa.py --videos PATH_TO_VIDEOS_JSON --questions 
 
 ### Paired comparison of the two retrievers
 
-We repeated the keyword and semantic comparison on the same 294 questions from the same 18 videos, preserving the 0.4 semantic threshold and no context expansion. The point estimates and sentence counts exactly matched the earlier run. To examine variability in the **difference**, `scripts/compare_tutorialvqa.py` resampled the 18 videos as paired units 2,000 times (seed 42); all questions for a sampled video and both systems' results were kept together. Each resample aggregates sentence TP, FP and FN before computing each metric. The difference is semantic minus keyword:
+I repeated the keyword and semantic comparison on the same 294 questions from the same 18 videos, preserving the 0.4 semantic threshold and no context expansion. The point estimates and sentence counts exactly matched the earlier run. To examine variability in the **difference**, `scripts/compare_tutorialvqa.py` resampled the 18 videos as paired units 2,000 times (seed 42); all questions for a sampled video and both systems' results were kept together. Each resample aggregates sentence TP, FP and FN before computing each metric. The difference is semantic minus keyword:
 
 | Sentence overlap metric | Difference | Exploratory 2.5th–97.5th percentile range |
 | --- | ---: | ---: |
@@ -252,11 +252,11 @@ The output must be a new JSON file under `artifacts/` or `local_data/`; existing
 
 ## YTCommentQA: independent snippet-level retrieval proxy
 
-We evaluated the keyword transcript pipeline against independently collected [YTCommentQA](https://github.com/lgresearch/YTCommentQA) labels from Yang et al., [AAAI 2024](https://ojs.aaai.org/index.php/AAAI/article/view/29906). The repository describes naturally occurring instructional-video questions, caption evidence IDs, and labels for answerability from visual, script, combined, or neither; it lists the dataset repository under the MIT license. Video and transcript rights may differ. We obtained the public `dataset.json` locally; no videos, audio or Canvas data were downloaded or uploaded. The source file had Git blob SHA-1 `5298bd108374c10bde5357048bcccccc8ffbc596` and SHA-256 `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc368`.
+I evaluated the keyword transcript pipeline against independently collected [YTCommentQA](https://github.com/lgresearch/YTCommentQA) labels from Yang et al., [AAAI 2024](https://ojs.aaai.org/index.php/AAAI/article/view/29906). The repository describes naturally occurring instructional-video questions, caption evidence IDs, and labels for answerability from visual, script, combined, or neither; it lists the dataset repository under the MIT license. Video and transcript rights may differ. I obtained the public `dataset.json` locally; no videos, audio or Canvas data were downloaded or uploaded. The source file had Git blob SHA-1 `5298bd108374c10bde5357048bcccccc8ffbc596` and SHA-256 `b6cd61581c2e5e2e15b0ed8ee0bd6e6d45abdd5ba7af5558cf1d5f9bb0dcc368`.
 
-This is an **exploratory proxy**, not a question-answering or video-wide answerability benchmark. Each question is given only the dataset's annotated caption snippet, with each caption sentence indexed as a separate segment. We predict positive whenever keyword retrieval returns any segment, and negative when it returns none. We compare this heuristic against questions labeled script-answerable (including those also answerable visually) versus questions labeled unanswerable in the annotation context. We exclude visual-only and combined-required questions because they cannot be treated as negative for the same task. The authors annotated snippets around reply timestamps; a snippet-level unanswerable label does not establish that an entire video has no answer. A returned keyword match does not establish that the snippet supports an answer. The app normally groups subtitle cues differently, and the original videos and source audio were not inspected.
+This is an **exploratory proxy**, not a question-answering or video-wide answerability benchmark. Each question is given only the dataset's annotated caption snippet, with each caption sentence indexed as a separate segment. I predict positive whenever keyword retrieval returns any segment, and negative when it returns none. I compare this heuristic against questions labeled script-answerable (including those also answerable visually) versus questions labeled unanswerable in the annotation context. I exclude visual-only and combined-required questions because they cannot be treated as negative for the same task. The authors annotated snippets around reply timestamps; a snippet-level unanswerable label does not establish that an entire video has no answer. A returned keyword match does not establish that the snippet supports an answer. The app normally groups subtitle cues differently, and the original videos and source audio were not inspected.
 
-For a deterministic sample, compute SHA-256 of each video ID and include it when the first eight bytes as a big-endian integer are divisible by five. This keeps questions from the same video together; it is our sampling rule, not an official test split. Of 446 selected records, 145 visual-only/combined-only records were excluded, 17 had invalid evidence-caption time/text values, and **284 questions from 239 videos** remained. No setting was tuned on this sample during this run.
+For a deterministic sample, compute SHA-256 of each video ID and include it when the first eight bytes as a big-endian integer are divisible by five. This keeps questions from the same video together; it is my sampling rule, not an official test split. Of 446 selected records, 145 visual-only/combined-only records were excluded, 17 had invalid evidence-caption time/text values, and **284 questions from 239 videos** remained. No setting was tuned on this sample during this run.
 
 | Snippet-level proxy count | Value |
 | --- | ---: |
@@ -278,7 +278,7 @@ python scripts/evaluate_ytcommentqa.py --dataset PATH_TO_LOCAL_DATASET_JSON --sa
 
 ### Paired semantic versus keyword proxy on the same snippets
 
-We repeated the same fixed sample and exclusions using local CPU `Xenova/all-MiniLM-L6-v2` quantized ONNX revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`. The semantic path used the pre-existing, uncalibrated cosine cutoff of 0.4; no cutoff was selected on this sample. Both systems saw the same annotated caption snippets, one sentence per indexed segment, and both used the presence of any returned candidate as a positive proxy.
+I repeated the same fixed sample and exclusions using local CPU `Xenova/all-MiniLM-L6-v2` quantized ONNX revision `08a308f628bc9d6774b7922f319eb1b65afa1a82`. The semantic path used the pre-existing, uncalibrated cosine cutoff of 0.4; no cutoff was selected on this sample. Both systems saw the same annotated caption snippets, one sentence per indexed segment, and both used the presence of any returned candidate as a positive proxy.
 
 | Method | TP | FP | FN | TN | Precision | Recall | F1 | Unanswerable snippets returning candidates |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -302,7 +302,7 @@ On 5 November 2026, the paired local comparison was rerun on the nine provisiona
 
 ### Searching the provided transcript for annotated time windows
 
-To move closer to the actual retrieval task, `scripts/evaluate_ytcommentqa_full_transcript.py` searches all caption sentences supplied for each question's video, rather than supplying only the annotated snippet. It evaluates questions labeled script-answerable (including those also visually answerable); other modality labels and snippet-level unanswerable labels are excluded. No source video or audio is used. The reference window is the time span from the earliest to latest caption in the dataset's annotated evidence range. We count a hit when a returned sentence has **any positive-duration overlap** with that window. The top-three score is a question-level overlap rate, not precision or answer F1; the data do not establish every other relevant interval.
+To move closer to the actual retrieval task, `scripts/evaluate_ytcommentqa_full_transcript.py` searches all caption sentences supplied for each question's video, rather than supplying only the annotated snippet. It evaluates questions labeled script-answerable (including those also visually answerable); other modality labels and snippet-level unanswerable labels are excluded. No source video or audio is used. The reference window is the time span from the earliest to latest caption in the dataset's annotated evidence range. I count a hit when a returned sentence has **any positive-duration overlap** with that window. The top-three score is a question-level overlap rate, not precision or answer F1; the data do not establish every other relevant interval.
 
 On the same deterministic 20% video-ID sample, the strict run excluded any question with an invalid caption anywhere in its supplied transcript: 446 selected records included 218 other-label exclusions and 77 invalid transcripts, leaving **151 questions from 126 videos**. Both methods used identical questions, source captions and exclusions; the semantic ONNX model and uncalibrated 0.4 threshold were the same as above. A simple reference baseline selects the first three available captions in time order.
 
@@ -326,7 +326,7 @@ The local dataset and model files must already exist. The script prints aggregat
 
 ### Reference-window coverage in the strict transcript run
 
-The earlier overlap rule counts even a very short intersection. We repeated the same strict 151-question run and additionally clipped each returned segment to its annotated reference window, merged overlapping clips to avoid double-counting, and measured the fraction of that window covered by up to three returned segments. No-candidate cases contribute zero coverage.
+The earlier overlap rule counts even a very short intersection. I repeated the same strict 151-question run and additionally clipped each returned segment to its annotated reference window, merged overlapping clips to avoid double-counting, and measured the fraction of that window covered by up to three returned segments. No-candidate cases contribute zero coverage.
 
 | Method | At least half of reference window covered | Mean reference coverage | Returned segments overlapping window |
 | --- | ---: | ---: | ---: |
@@ -357,7 +357,7 @@ python scripts/evaluate_ytcommentqa_full_transcript.py --dataset PATH_TO_LOCAL_D
 
 ### Duration-weighted reference-window diagnostic
 
-For the same strict 151-question workspace-grouping run, we also compare the union of up to three returned intervals against the annotated reference window for each question. Intersections, returned durations and reference durations are summed **across questions**, then divided: window-time precision = intersection / returned duration, window-time recall = intersection / reference duration, and window-time F1 = twice the intersection divided by the sum of returned and reference duration. Overlapping returned segments are merged before counting; an abstention contributes zero returned time and its entire reference window to the denominator. Longer annotated windows have more weight than shorter ones.
+For the same strict 151-question workspace-grouping run, I also compare the union of up to three returned intervals against the annotated reference window for each question. Intersections, returned durations and reference durations are summed **across questions**, then divided: window-time precision = intersection / returned duration, window-time recall = intersection / reference duration, and window-time F1 = twice the intersection divided by the sum of returned and reference duration. Overlapping returned segments are merged before counting; an abstention contributes zero returned time and its entire reference window to the denominator. Longer annotated windows have more weight than shorter ones.
 
 | Method | Matched / returned seconds | Matched / reference seconds | Window-time precision | Window-time recall | Window-time F1 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -368,7 +368,7 @@ These are **reference-window time-overlap measures**, not answer accuracy or fac
 
 ### Fixed-setting comparison on the other video partition
 
-On 5 November 2026 we applied the same workspace grouping, strict caption validation and fixed 0.4 semantic threshold to the separate `other` video-hash partition. It contains videos distinct from the earlier `sample` partition, but some questions in it were previously used in the answerability proxy experiment; this is not a pristine final test. Of 1,886 selected records, 959 had other answerability labels and 329 had invalid transcripts; the remaining **598 script-answerable questions from 537 videos** were evaluated using their supplied full transcripts. The public dataset fingerprint and MiniLM revision are those documented above.
+On 5 November 2026 I applied the same workspace grouping, strict caption validation and fixed 0.4 semantic threshold to the separate `other` video-hash partition. It contains videos distinct from the earlier `sample` partition, but some questions in it were previously used in the answerability proxy experiment; this is not a pristine final test. Of 1,886 selected records, 959 had other answerability labels and 329 had invalid transcripts; the remaining **598 script-answerable questions from 537 videos** were evaluated using their supplied full transcripts. The public dataset fingerprint and MiniLM revision are those documented above.
 
 | Method | Top-three overlap | At least half of reference window | Window-time precision | Window-time recall | Window-time F1 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -385,7 +385,7 @@ The evaluator now fingerprints the dataset and semantic model files before and a
 
 ### Synthetic subtitle word-deletion sensitivity
 
-On 5 November 2026, we revisited the 151 script-answerable questions from 126 videos in the previously explored `sample` partition. After workspace grouping, we deterministically removed words selected by a SHA-256 rule from each segment while preserving timestamps; across the per-question transcript inputs, 17,239 of 175,128 whitespace tokens were removed (9.84%). Repeated videos are counted once per question. Questions, reference windows, segmentation, models and the 0.4 semantic threshold stayed fixed. The same strict transcript exclusions described above apply.
+On 5 November 2026, I revisited the 151 script-answerable questions from 126 videos in the previously explored `sample` partition. After workspace grouping, I deterministically removed words selected by a SHA-256 rule from each segment while preserving timestamps; across the per-question transcript inputs, 17,239 of 175,128 whitespace tokens were removed (9.84%). Repeated videos are counted once per question. Questions, reference windows, segmentation, models and the 0.4 semantic threshold stayed fixed. The same strict transcript exclusions described above apply.
 
 | Retrieval | Clean top-three overlap | Deleted-word top-three overlap | Clean only | Deleted-word only |
 | --- | ---: | ---: | ---: | ---: |
@@ -403,7 +403,7 @@ The evaluator writes only a new local aggregate file under `artifacts/` or `loca
 
 ### Qwen3 single-model snippet proxy
 
-On 6 November 2026 we evaluated Qwen3-Embedding-0.6B-Q8_0 on the previously explored deterministic `sample` partition of [YTCommentQA](https://github.com/lgresearch/YTCommentQA), using the supplied annotated caption snippet for each question and an uncalibrated 0.4 cosine cutoff. No university lecture, video or audio was used. Of 446 selected records, 145 were excluded as visual-only or combined-required and 17 had invalid evidence captions, leaving 284 questions from 239 videos.
+On 6 November 2026 I evaluated Qwen3-Embedding-0.6B-Q8_0 on the previously explored deterministic `sample` partition of [YTCommentQA](https://github.com/lgresearch/YTCommentQA), using the supplied annotated caption snippet for each question and an uncalibrated 0.4 cosine cutoff. No university lecture, video or audio was used. Of 446 selected records, 145 were excluded as visual-only or combined-required and 17 had invalid evidence captions, leaving 284 questions from 239 videos.
 
 The proxy labels a question as answerable whenever any caption candidate passes the retrieval threshold. The measured counts were TP 205, FP 37, FN 18 and TN 24: **precision 0.847, recall 0.919, F1 0.882**. Candidates were returned for **37 of 61 snippets labeled unanswerable**. This is not answer correctness, evidence sufficiency, full-video rejection, or a course-video score. The dataset supplies the annotated evidence snippet, the threshold is uncalibrated, and the partition has been explored previously; it is not a held-out final result.
 
@@ -418,7 +418,7 @@ The command reads local files and prints aggregate results; it does not download
 
 ### Qwen3 single-model full-transcript temporal pilot
 
-On 6 November 2026 we ran Qwen3-Embedding-0.6B-Q8_0 over the provided full captions for 30 script-answerable YTCommentQA questions, one per each of 30 videos. This uses the workspace's subtitle grouping and the fixed, uncalibrated 0.4 threshold. The 30 were selected independently of model outputs: after the existing deterministic video partition and strict full-caption validation, question IDs were ordered by SHA-256 and the first 30 of 151 eligible questions selected. The source sample was explored previously; this is a small pilot, not a final held-out test.
+On 6 November 2026 I ran Qwen3-Embedding-0.6B-Q8_0 over the provided full captions for 30 script-answerable YTCommentQA questions, one per each of 30 videos. This uses the workspace's subtitle grouping and the fixed, uncalibrated 0.4 threshold. The 30 were selected independently of model outputs: after the existing deterministic video partition and strict full-caption validation, question IDs were ordered by SHA-256 and the first 30 of 151 eligible questions selected. The source sample was explored previously; this is a small pilot, not a final held-out test.
 
 The top returned segment overlapped the annotated reference window on **16/30** questions; at least one of the top three overlapped on **24/30**. Top-three segments together covered at least half of the reference window on **16/30**. Overlap requires only positive-duration intersection. Two questions returned no candidates.
 

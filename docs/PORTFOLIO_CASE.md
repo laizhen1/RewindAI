@@ -2,33 +2,33 @@
 
 ## Problem / 问题
 
-Students often need to revisit one explanation buried in a long recording. A transcript search can locate words, but students still need the original timestamp and context to verify an AI-generated answer. This is a project hypothesis, not a finding from completed user research.
+I started from a learning problem: students may need to revisit one explanation buried in a long recording. Transcript search can locate words, but verifying an AI-generated answer also requires the original timestamp and context. This is my project hypothesis, not a finding from completed user research.
 
 学生复习时可能需要从长录像中找到一段解释。字幕搜索能定位文字，但判断 AI 回答是否可靠仍需要回看原视频和上下文。这是项目假设，并非已经完成的用户研究结论。
 
 ## Product / 产品
 
-RewindAI is a local video-learning workspace: import an authorized recording with timed subtitles, search or ask a question, inspect candidate excerpts and timestamps, revisit the source, then save moments and notes for review. Local review status and feedback support the study workflow. An experimental visual route ranks sampled frames and can fuse those rankings with subtitle candidates; it does not generate a visually grounded answer.
+I built RewindAI as a local video-learning workspace: users import an authorized recording with timed subtitles, search or ask a question, inspect candidate excerpts and timestamps, revisit the source, then save moments and notes for review. Local review status and feedback support the study workflow. An experimental visual route ranks sampled frames and can fuse those rankings with subtitle candidates; it does not generate a visually grounded answer.
 
-RewindAI 是本地视频学习工作台：导入有权使用的视频与带时间戳的字幕，搜索或提问，查看候选片段并跳回原视频，再收藏片段和记录笔记。复习状态和反馈保存在本机。实验性画面检索可与字幕候选进行排名融合，但尚不能根据画面生成有视觉依据的回答。
+我开发了 RewindAI 本地视频学习工作台：用户导入有权使用的视频与带时间戳的字幕，搜索或提问，查看候选片段并跳回原视频，再收藏片段和记录笔记。复习状态和反馈保存在本机。实验性画面检索可与字幕候选进行排名融合，但尚不能根据画面生成有视觉依据的回答。
 
 ## Design decisions / 设计取舍
 
 - **Evidence before confidence.** The workspace shows source timestamps, neighboring subtitle context and optional midpoint frames. A retrieved candidate is not proof of factual support.
-- **Local-first processing.** The optional subtitle, MiniLM, CLIP and GGUF answer paths use local files and CPU inference. Private lectures, indexes, questions and results stay local. Indexing does not train model weights.
+- **Local-first processing.** The subtitle, Qwen3-Embedding, CLIP and GGUF answer paths use local files and CPU inference. Private lectures, indexes, questions and results stay local. Indexing does not train model weights.
 - **Explicit uncertainty.** Transcript search can abstain at its configured threshold. The experimental visual route has no validated rejection threshold and can return candidates even for absent content.
 - **Evaluation before claims.** Compare fixed configurations on the same questions, preserve video-level splits and review answers against source recordings. The provided review tooling helps collect judgments but cannot establish their independence.
 
 - **优先展示依据。** 展示时间戳、相邻字幕和可选的片段中点画面；检索到的候选不等于事实已经得到证实。
-- **本地优先。** 可选的字幕处理、MiniLM、CLIP 和 GGUF 回答均使用本地文件和 CPU；私人录像、索引、题目和结果留在本机。建立索引不等于训练模型权重。
+- **本地优先。** 字幕处理、Qwen3-Embedding、CLIP 和 GGUF 回答均使用本地文件和 CPU；私人录像、索引、题目和结果留在本机。建立索引不等于训练模型权重。
 - **明确不确定性。** 字幕检索可以依据配置阈值不返回结果；实验性画面检索没有经过验证的拒答阈值，即使不存在匹配内容也可能返回候选。
 - **先评估再写成绩。** 在同一批问题上比较固定配置，按视频划分数据，并对照录像核对回答。工具可以收集人工判断，但不能证明评审独立。
 
 ## Evidence so far / 已有证据
 
-On 598 script-answerable questions from 537 public instructional videos in an explored video-disjoint partition, experimental semantic retrieval had **0.264 reference-window time-overlap F1**, versus **0.223** for keyword search. These measures are based on returned time versus annotated caption windows—not factual answer F1. The dataset had 329 invalid transcripts excluded, no full-video negative questions, and no video/audio review in this experiment. See [evaluation details](INITIAL_EVALUATION.md). No human-reviewed course-answer F1 or user-study result is claimed yet.
+I evaluated Qwen3 retrieval on 151 eligible questions over provided full transcripts from a previously explored public-video partition. The top three candidates overlapped the annotated time window for **108/151 questions**; micro time-overlap precision, recall and F1 were **0.248, 0.389 and 0.303**. These are temporal measures rather than answer correctness. The run excluded 77 invalid transcripts and did not independently review video or audio. See [evaluation details](INITIAL_EVALUATION.md). I do not claim that this represents course-answer accuracy or a completed user study.
 
-在已探索过、与开发视频分开的公开视频分区中，598 个可用语音可答问题来自 537 个教学视频；语义检索的**参考时间窗口重叠 F1 为 0.264**，关键词检索为 **0.223**。该指标比较返回时间与标注字幕时间，不是回答正确率。实验排除了 329 条字幕无效记录，没有全视频无答案题，也没有观看视频或听音频；详见[评估记录](INITIAL_EVALUATION.md)。目前不宣称已经获得人工核验的课程问答 F1 或用户试用结果。
+我使用先前探索过的公开视频分区，评估 Qwen3 对 151 道有效问题的完整字幕检索。前 3 个候选中，**108/151** 道题与参考时间范围重合；时间重合微平均 Precision、Recall、F1 分别为 **0.248、0.389、0.303**。这些是时间定位指标，不是回答正确率。实验排除了 77 条无效字幕，且未独立核验视频或音频；详见[评估记录](INITIAL_EVALUATION.md)。我不会将其作为课程回答准确率或已完成用户研究的证明。
 
 ## Two-minute demonstration storyboard / 两分钟演示提纲
 

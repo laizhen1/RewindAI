@@ -4,19 +4,19 @@
 
 **Find it. Verify it. Learn it.**
 
-RewindAI is a local learning workspace for finding and reviewing moments in lecture videos. Search video transcripts, inspect timestamped evidence, return to the source, and save useful clips with notes.
+I built RewindAI as a local AI learning workspace for finding and reviewing knowledge in lecture videos. I use Qwen3-Embedding for semantic retrieval, timestamped evidence for source verification, and a study workflow for saving clips and notes.
 
 > **Project status:** Under development and evaluation. The CPU demo uses preset text and simplified retrieval; it does not demonstrate real video understanding. The full multimodal pipeline requires separate model setup and independent evaluation. The workspace is intended for local use and should not be deployed directly to the public internet.
 
 ## Features
 
-- Organize indexed videos into courses; rename or delete courses without deleting videos or notes.
-- Search videos or a course and inspect timestamped evidence. Subtitle mode can display neighboring transcript segments and, with PyAV installed, a midpoint frame for manual review.
-- Save clips, edit review notes, mark moments reviewed or pending, and filter saved clips by status, video name or note. Provide separate feedback on answers and evidence. Notes, review status and feedback stay in the local database; filtering happens in the browser. Export all saved notes, timestamps and review states to a local text file.
+- I organize indexed videos into courses, with renaming and deletion that preserve videos and notes.
+- I support video- and course-scoped search with timestamped evidence, neighboring transcript segments and optional midpoint frames for manual verification.
+- I provide persistent clip bookmarks, review notes, review states and separate answer and evidence feedback. Saved notes and timestamps can be exported locally.
 
-- Add local videos with SRT/VTT subtitles, or transcribe an authorized video locally with a cached Whisper model. The interface displays processing and failure states.
-- Search lecture transcripts with local Qwen3-Embedding semantic retrieval, and explore experimental visual search using English descriptions.
-- Explore the full pipeline's speech, keyframe, hybrid retrieval, reranking and evaluation components; the complete model workflow still needs independent end-to-end validation.
+- I support importing authorized videos with SRT/VTT subtitles or transcribing them locally with a cached Whisper model, with visible processing and failure states.
+- I use local Qwen3-Embedding for semantic retrieval and provide experimental visual search for English descriptions.
+- I maintain components for speech, keyframes, hybrid retrieval, reranking and evaluation; the complete multimodal workflow still requires independent end-to-end validation.
 
 A five-task [usability study plan](docs/USER_STUDY.md) can be run with shareable media; it is not a report of completed research.
 The [product case and demo storyboard](docs/PORTFOLIO_CASE.md) explain the user workflow, measured evidence and remaining validation.
@@ -96,7 +96,7 @@ Windows users can also run `Start-RewindAI-Transcribe.cmd`. An unchanged saved v
 
 ### Experimental local AI answers
 
-The optional answer mode uses a locally installed `llama-cpp-python` and an existing GGUF model to answer from retrieved transcript excerpts on CPU. It makes no network request for inference or model download. Answers can be wrong, fabricated, or affected by instructions in the subtitles; numbered excerpts match the order supplied to the model, but a model citation may still be wrong. The excerpts and timestamps are candidates, not proof. A search miss does not show that the whole video lacks an answer. If the model returns the exact requested refusal phrase, the interface distinguishes that response from a search with no candidates; other refusal wording is not detected. Check the source video. This is text-only, not visual understanding, and it has not been evaluated on human-reviewed lectures.
+The optional answer mode uses a locally installed `llama-cpp-python` and an existing GGUF model to answer from retrieved transcript excerpts on CPU. It makes no network request for inference or model download. Answers can be wrong, fabricated, or affected by instructions in the subtitles; numbered excerpts match the order supplied to the model, but a model citation may still be wrong. The excerpts and timestamps are candidates, not proof. A search miss does not show that the whole video lacks an answer. If the model returns the exact requested refusal phrase, the interface distinguishes that response from a search with no candidates; other refusal wording is not detected. Check the source video. This is text-only, not visual understanding, and no independently reviewed lecture test has been completed.
 
 Install a CPU wheel using the [llama-cpp-python instructions](https://github.com/abetlen/llama-cpp-python#installation), prepare a GGUF model locally, and start:
 
