@@ -1,4 +1,6 @@
+import io
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,7 +15,8 @@ def workspace(tmp_path):
     subtitle = tmp_path / 'original.srt'
     subtitle.write_text('1\n00:00:01,000 --> 00:00:03,000\nOriginal words\n', encoding='utf-8')
     db = tmp_path / 'library.sqlite3'
-    client = create_app(build_transcript_segments([]), mode='transcript', database_path=db).test_client()
+    client = create_app(build_transcript_segments([]), mode='transcript', database_path=db,
+                        upload_dir=tmp_path / 'uploads').test_client()
     result = client.post('/api/library/local-video', json={'video_path': str(video), 'subtitle_path': str(subtitle)})
     assert result.status_code == 201
     video_id = result.json['video_id']
@@ -88,3 +91,46 @@ def test_private_workspace_responses_are_not_cached(workspace):
     for path in ('/', '/api/library', '/api/bookmarks', '/api/feedback', f'/api/videos/{video_id}'):
         assert client.get(path).headers['Cache-Control'] == 'no-store'
     assert client.post('/api/ask', json={'question': 'original words'}).headers['Cache-Control'] == 'no-store'
+
+
+def test_uploaded_corrections_preserve_media_and_matching_bookmark(workspace, tmp_path):
+    client, video, original, db, video_id = workspace
+    route = f'/api/library/videos/{video_id}/subtitle-upload'
+    content = b'1\n00:00:01,000 --> 00:00:03,000\nUpdated synthetic words\n'
+    response = client.post(route, data={'permission': 'yes', 'subtitle': (io.BytesIO(content), 'new.srt')})
+    assert response.status_code == 200
+    assert client.post('/api/ask', json={'question': 'updated synthetic words'}).json['evidence']
+    assert client.get('/api/bookmarks').json['bookmarks'][0]['available']
+    assert video.is_file() and original.read_text(encoding='utf-8').endswith('Original words\n')
+    assert list((tmp_path / 'uploads').iterdir()) == []
+    reopened = create_app(build_transcript_segments([]), mode='transcript', database_path=db).test_client()
+    assert reopened.post('/api/ask', json={'question': 'updated synthetic words'}).json['evidence']
+
+
+def test_uploaded_corrections_reject_invalid_requests_without_changing_index(workspace, tmp_path):
+    client, _video, _original, _db, video_id = workspace
+    route = f'/api/library/videos/{video_id}/subtitle-upload'
+    assert client.post(route, data={'permission': 'no', 'subtitle': (io.BytesIO(b'x'), 'new.srt')}).status_code == 400
+    assert client.post(route, data={'permission': 'yes', 'subtitle': (io.BytesIO(b'x'), 'new.txt')}).status_code == 400
+    assert client.post(route, data={'permission': 'yes', 'subtitle': (io.BytesIO(b'bad'), 'new.srt')}).status_code == 400
+    assert client.post(route, data={'permission': 'yes', 'subtitle': (io.BytesIO(b'x' * (10 * 1024 * 1024 + 1)),
+                                                   'new.srt')}).status_code == 400
+    assert client.post(route, data={'permission': 'yes', 'subtitle': (io.BytesIO(b'x'), 'new.srt')},
+                       headers={'Origin': 'https://example.org'}).status_code == 403
+    assert client.post('/api/ask', json={'question': 'original words'}).json['evidence']
+    assert list((tmp_path / 'uploads').iterdir()) == []
+
+
+def test_replacement_temp_name_collision_does_not_delete_existing_files(workspace, tmp_path, monkeypatch):
+    from video_rag.api import app as app_module
+
+    client, _video, _original, _db, video_id = workspace
+    existing = tmp_path / 'uploads' / 'already-there'
+    existing.mkdir(parents=True)
+    prior = existing / 'replacement.srt'
+    prior.write_text('keep existing content', encoding='utf-8')
+    monkeypatch.setattr(app_module.uuid, 'uuid4', lambda: SimpleNamespace(hex='already-there'))
+    response = client.post(f'/api/library/videos/{video_id}/subtitle-upload',
+                           data={'permission': 'yes', 'subtitle': (io.BytesIO(b'new'), 'new.srt')})
+    assert response.status_code == 400
+    assert prior.read_text(encoding='utf-8') == 'keep existing content'

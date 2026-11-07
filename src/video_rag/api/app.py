@@ -112,7 +112,9 @@ def create_app(
             host = None
         if host not in {"localhost", "127.0.0.1", "::1"}:
             return jsonify({"error": "local access only"}), 403
-        if request.path != "/api/library/upload" and request.content_length is not None and request.content_length > 64 * 1024:
+        subtitle_upload = request.method == "POST" and request.path.startswith("/api/library/videos/") and request.path.endswith("/subtitle-upload")
+        size_limit = 10 * 1024 * 1024 + 64 * 1024 if subtitle_upload else 64 * 1024
+        if request.path != "/api/library/upload" and request.content_length is not None and request.content_length > size_limit:
             return jsonify({"error": "Request too large"}), 413
         origin = request.headers.get("Origin")
         if origin:
@@ -289,6 +291,42 @@ def create_app(
                 return jsonify({"error": str(exc)}), 400
             except (sqlite3.Error, RuntimeError):
                 return jsonify({"error": "Could not update subtitles; existing index remains available"}), 500
+
+    @app.post("/api/library/videos/<video_id>/subtitle-upload")
+    def upload_replacement_subtitles(video_id: str):
+        """Use a local temporary upload to replace a saved video's timed subtitles."""
+        if mode != "transcript":
+            return jsonify({"error": "Only available in subtitle mode"}), 409
+        if request.content_length is None:
+            return jsonify({"error": "Upload size is required"}), 411
+        if request.form.get("permission") != "yes":
+            return jsonify({"error": "Confirm permission before updating subtitles"}), 400
+        subtitle = request.files.get("subtitle")
+        suffix = Path(subtitle.filename).suffix.lower() if subtitle and subtitle.filename else ""
+        if suffix not in {".srt", ".vtt"}:
+            return jsonify({"error": "Choose an SRT or VTT subtitle file"}), 400
+        root = Path(upload_dir).expanduser().resolve()
+        directory = root / uuid.uuid4().hex
+        path = directory / f"replacement{suffix}"
+        created = False
+        try:
+            directory.mkdir(parents=True, exist_ok=False)
+            created = True
+            subtitle.save(path)
+            if not path.is_file() or not 0 < path.stat().st_size <= 10 * 1024 * 1024:
+                return jsonify({"error": "Subtitles must be nonempty and no larger than 10 MiB"}), 400
+            with app.test_client() as client:
+                response = client.put(f"/api/library/videos/{video_id}/subtitles", json={"subtitle_path": str(path)})
+            return jsonify(response.get_json(silent=True) or {"error": "Could not update subtitles"}), response.status_code
+        except OSError:
+            return jsonify({"error": "Could not read the uploaded subtitles"}), 400
+        finally:
+            if created and directory.is_dir() and not directory.is_symlink() and directory.resolve().parent == root:
+                try:
+                    path.unlink(missing_ok=True)
+                    directory.rmdir()
+                except OSError:
+                    pass
 
     def import_generated_subtitles(video: Path, subtitle: Path) -> bool:
         # Reuse the same validation, locking and atomic index replacement as manual import.

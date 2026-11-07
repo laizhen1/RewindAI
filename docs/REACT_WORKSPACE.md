@@ -56,9 +56,11 @@ The import dialog shows the browser-to-local-server copy progress when available
 
 To remove a lecture from the searchable library, select it and choose **Remove from library**. This removes its index entry, not its video or subtitle files; saved moments and notes are retained but may become unavailable until compatible material is re-imported. The confirmation explains this before removal.
 
+If you correct a transcript, select the lecture and choose **Update subtitles** to provide a timed SRT/VTT file. The local server rebuilds the index from it; the original media and subtitles are not changed. Bookmarks with exactly matching time ranges retain their links, while other notes remain saved but may need new bookmarks. The server removes its own temporary upload after processing when possible; the browser or operating system may retain temporary copies. A copy of the subtitle content is stored in the local index.
+
 Rate a response or transcript excerpt and optionally add a note in the feedback dialog. The question, rating, selected evidence identifier and note are stored in the local database; the response itself is not saved as part of this feedback. Use `/classic` to review or delete saved feedback.
 
-If the React assets have not been built, `/` serves the original workspace. Rebuild after frontend changes. The React workspace does not yet expose every advanced function of the original interface; use `/classic` for subtitle replacement, feedback history and other established tools.
+If the React assets have not been built, `/` serves the original workspace. Rebuild after frontend changes. The React workspace does not yet expose every advanced function of the original interface; use `/classic` for feedback history and other established tools.
 
 ### Experimental frame search
 
