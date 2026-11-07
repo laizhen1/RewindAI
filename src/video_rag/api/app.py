@@ -402,9 +402,11 @@ def create_app(
         upload_root = Path(upload_dir).expanduser().resolve()
         directory = upload_root / uuid.uuid4().hex
         accepted = False
+        created = False
         video_path = subtitle_path = None
         try:
             directory.mkdir(parents=True, exist_ok=False)
+            created = True
             name = secure_filename(video.filename) or f"lecture{video_suffix}"
             if Path(name).suffix.lower() != video_suffix:
                 name = f"lecture{video_suffix}"
@@ -434,7 +436,7 @@ def create_app(
         except (OSError, ValueError):
             return jsonify({"error": "Could not store or read the upload; check file size and disk space"}), 400
         finally:
-            if (not accepted and directory.is_dir() and not directory.is_symlink()
+            if (created and not accepted and directory.is_dir() and not directory.is_symlink()
                     and directory.resolve().parent == upload_root):
                 for path in (video_path, subtitle_path):
                     if path is not None:

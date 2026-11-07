@@ -1,4 +1,5 @@
 import io
+from types import SimpleNamespace
 
 from video_rag.api import create_app
 from video_rag.transcript_baseline import build_transcript_segments
@@ -65,3 +66,16 @@ def test_upload_without_subtitles_starts_local_transcription(tmp_path, monkeypat
     response = c.post('/api/library/upload', data=data)
     assert response.status_code == 202 and response.json['state'] == 'transcribing'
     assert len(list((tmp_path / 'uploads').glob('*/*.mp4'))) == 1
+
+
+def test_failed_upload_never_removes_preexisting_directory(tmp_path, monkeypatch):
+    from video_rag.api import app as app_module
+
+    c = client(tmp_path)
+    existing = tmp_path / 'uploads' / 'already-there'
+    existing.mkdir(parents=True)
+    monkeypatch.setattr(app_module.uuid, 'uuid4', lambda: SimpleNamespace(hex='already-there'))
+    response = c.post('/api/library/upload', data=payload())
+    assert response.status_code == 400
+    assert existing.is_dir()
+    assert list(existing.iterdir()) == []
