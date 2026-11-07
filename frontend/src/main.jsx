@@ -116,7 +116,7 @@ function SubtitleDialog({ video, onClose, onUpdated, notify }) {
   </div>;
 }
 
-function FeedbackDialog({ feedback, onClose, notify }) {
+function FeedbackDialog({ feedback, onClose, onSaved, notify }) {
   const [comment, setComment] = useState(''), [saving, setSaving] = useState(false), [error, setError] = useState('');
   const dialogRef = useRef(null);
   useEffect(() => {
@@ -141,7 +141,7 @@ function FeedbackDialog({ feedback, onClose, notify }) {
     setSaving(true); setError('');
     try {
       await api('/api/feedback', json('POST', { ...feedback, comment }));
-      notify('Feedback saved locally.'); onClose();
+      onSaved(); notify('Feedback saved locally.'); onClose();
     } catch (err) { setError(err.message); }
     finally { setSaving(false); }
   }
@@ -153,6 +153,27 @@ function FeedbackDialog({ feedback, onClose, notify }) {
   </div>;
 }
 
+function FeedbackHistory({ revision, notify }) {
+  const [open, setOpen] = useState(false), [items, setItems] = useState(null), [error, setError] = useState('');
+  const [deleting, setDeleting] = useState(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    let active = true;
+    setError(''); setItems(null);
+    api('/api/feedback').then(data => { if (active) setItems(data.feedback || []); })
+      .catch(err => { if (active) setError(err.message); });
+    return () => { active = false; };
+  }, [open, revision]);
+  async function remove(item) {
+    if (deleting !== null || !window.confirm('Delete this locally saved feedback?')) return;
+    setDeleting(item.id);
+    try { await api(`/api/feedback/${item.id}`, { method: 'DELETE' }); setItems(previous => previous.filter(row => row.id !== item.id)); notify('Feedback deleted locally.'); }
+    catch (err) { notify(err.message); }
+    finally { setDeleting(null); }
+  }
+  return <section className="panel feedback-history"><div className="panel-head"><div><div className="eyebrow">REFLECT / 06</div><h2>Feedback history</h2></div><MessageSquare size={17}/></div><p className="panel-desc">Your recent ratings and notes, stored locally.</p><button className="history-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? 'Hide feedback' : 'View feedback'} <ChevronDown size={14}/></button>{open && <div className="feedback-list">{error ? <div className="error" role="alert">{error}</div> : items === null ? <p>Loading feedback…</p> : items.length === 0 ? <p>No feedback saved yet.</p> : items.map(item => <article className="feedback-record" key={item.id}><div className="saved-meta"><span>{item.target_type === 'visual' ? 'FRAME' : item.target_type === 'transcript' ? 'TRANSCRIPT' : item.target_type === 'answer' ? 'RESPONSE' : 'EVIDENCE'} · {item.rating === 'helpful' ? 'USEFUL' : 'NOT USEFUL'}</span><button type="button" disabled={deleting !== null} onClick={() => remove(item)} aria-label="Delete feedback"><Trash2 size={13}/></button></div><strong>{item.question}</strong>{item.comment && <p>{item.comment}</p>}</article>)}{items?.length === 100 && <small>Showing the 100 most recent entries.</small>}</div>}<div className="panel-footer"><span>RECENT LOCAL FEEDBACK</span><span><LockKeyhole size={11}/> LOCAL</span></div></section>;
+}
+
 function App() {
   const [health, setHealth] = useState(null), [library, setLibrary] = useState({ videos: [], courses: [] });
   const [selectedId, setSelectedId] = useState(null), [bookmarks, setBookmarks] = useState([]);
@@ -161,6 +182,7 @@ function App() {
   const [toast, setToast] = useState(''), [transcription, setTranscription] = useState(null), [courseName, setCourseName] = useState('');
   const [noteDrafts, setNoteDrafts] = useState({}), [savingNotes, setSavingNotes] = useState({}), [menuOpen, setMenuOpen] = useState(false), [removingVideo, setRemovingVideo] = useState(false);
   const [feedbackDraft, setFeedbackDraft] = useState(null);
+  const [feedbackRevision, setFeedbackRevision] = useState(0);
   const [subtitleTarget, setSubtitleTarget] = useState(null);
   const playerRef = useRef(null), pendingTime = useRef(null), toastTimer = useRef(null);
   const selected = library.videos.find(v => v.id === selectedId) || null;
@@ -247,9 +269,9 @@ function App() {
       </section>
       <aside className="right-column"><section className="panel library-panel" id="library"><div className="panel-head"><div><div className="eyebrow">YOUR CONTENT / 04</div><h2>My library</h2></div><button className="icon-button boxed" onClick={() => setUploadOpen(true)} aria-label="Add lecture" disabled={health?.mode !== 'transcript'}><Plus size={18}/></button></div><p className="panel-desc">Your lectures, ready when you are.</p><div className="library-list">{library.videos.length ? library.videos.map((video, i) => <button key={video.id} className={`lecture-row ${selectedId === video.id ? 'selected' : ''}`} onClick={() => { setSelectedId(video.id); setResult(null); }}><span className="lecture-thumbnail"><Video size={18}/><i>{String(i + 1).padStart(2, '0')}</i></span><span className="lecture-info"><strong title={video.title}>{video.title}</strong><small>{video.available ? `${video.segment_count} ${video.segment_count === 1 ? "segment" : "segments"}` : 'Source unavailable'} · index ends {formatTime(video.duration)}</small></span><ArrowUpRight size={15}/></button>) : <div className="library-empty"><FolderOpen size={22}/><strong>No lectures yet</strong><span>Import a video to start building your library.</span><button onClick={() => setUploadOpen(true)} disabled={health?.mode !== 'transcript'}>Add a lecture <ArrowRight size={13}/></button></div>}</div>{selected && <label className="assign-course">COURSE <select value={selected.course_id ?? ''} onChange={e => assignCourse(e.target.value)}><option value="">Unassigned</option>{library.courses.map(course => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>}{selected && health?.mode === "transcript" && <button className="update-subtitles" disabled={busy || busyTranscribing || removingVideo} onClick={() => setSubtitleTarget(selected)}><FileText size={13}/> Update subtitles</button>}{selected && health?.mode === "transcript" && <button className="remove-index" onClick={removeFromLibrary} disabled={removingVideo || busy || busyTranscribing}><Trash2 size={13}/> {removingVideo ? "Removing from index…" : "Remove from library"}</button>}<div className="panel-footer"><span>{library.videos.length} {library.videos.length === 1 ? 'LECTURE' : 'LECTURES'} INDEXED</span><span>LOCAL LIBRARY</span></div></section>
         <section className="panel saved-panel" id="saved"><div className="panel-head"><div><div className="eyebrow">PICK UP LATER / 05</div><h2>Saved moments</h2></div><span className="count-pill">{String(bookmarks.length).padStart(2, '0')}</span></div><p className="panel-desc">The ideas worth coming back to.</p>{bookmarks.length ? <div className="saved-list">{bookmarks.map(item => <article className="saved-item" key={item.id}><div className="saved-meta"><button onClick={() => seek(item)}><Play size={11} fill="currentColor"/> {formatTime(item.start_time)}</button><span>{item.reviewed ? 'REVIEWED' : 'TO REVIEW'}</span></div><strong>{library.videos.find(v => v.id === item.video_id)?.title || 'Unavailable video'}</strong><textarea maxLength={4000} aria-label="Review note" placeholder="Add a study note…" value={noteDrafts[item.id] ?? item.note ?? ''} onChange={e => setNoteDrafts(previous => ({ ...previous, [item.id]: e.target.value }))}/><div className="saved-actions"><button onClick={() => updateBookmark(item, 'note')} disabled={noteDrafts[item.id] === undefined || savingNotes[item.id]}>Save note</button><button disabled={savingNotes[item.id]} onClick={() => updateBookmark(item, 'review')}>{item.reviewed ? 'Mark pending' : 'Mark reviewed'}</button><button disabled={savingNotes[item.id]} onClick={() => updateBookmark(item, 'delete')} aria-label="Remove saved moment"><Trash2 size={14}/></button></div></article>)}</div> : <div className="saved-empty"><Bookmark size={21}/><strong>Save a moment</strong><span>Bookmarks from your search will appear here.</span></div>}<div className="panel-footer"><span>YOUR PERSONAL REVIEW LIST</span><span><LockKeyhole size={11}/> LOCAL</span></div></section>
-        <div className="insight-card"><div className="insight-mark"><Sparkles size={17}/></div><div className="eyebrow">THE REWIND PRINCIPLE</div><p>Good answers start with <em>good evidence.</em></p><span>Every result links back to its source.</span><ArrowUpRight className="insight-arrow" size={16}/></div>
+        <FeedbackHistory revision={feedbackRevision} notify={notify}/><div className="insight-card"><div className="insight-mark"><Sparkles size={17}/></div><div className="eyebrow">THE REWIND PRINCIPLE</div><p>Good answers start with <em>good evidence.</em></p><span>Every result links back to its source.</span><ArrowUpRight className="insight-arrow" size={16}/></div>
       </aside></div><footer className="footer"><span>REWIND<span className="orange">AI</span> <i>—</i> A MORE THOUGHTFUL WAY TO LEARN</span><span>LOCAL WORKSPACE <i>·</i> BUILT FOR FOCUS</span></footer></main></div>
-    {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onImported={async () => { await load(); }} notify={notify}/>}{subtitleTarget && <SubtitleDialog video={subtitleTarget} onClose={() => setSubtitleTarget(null)} onUpdated={async () => { setResult(null); await load(); }} notify={notify}/>}{feedbackDraft && <FeedbackDialog feedback={feedbackDraft} onClose={() => setFeedbackDraft(null)} notify={notify}/>}{toast && <div className="toast" role="status">{toast}</div>}
+    {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onImported={async () => { await load(); }} notify={notify}/>}{subtitleTarget && <SubtitleDialog video={subtitleTarget} onClose={() => setSubtitleTarget(null)} onUpdated={async () => { setResult(null); await load(); }} notify={notify}/>}{feedbackDraft && <FeedbackDialog feedback={feedbackDraft} onClose={() => setFeedbackDraft(null)} onSaved={() => setFeedbackRevision(value => value + 1)} notify={notify}/>}{toast && <div className="toast" role="status">{toast}</div>}
   </div>;
 }
 
