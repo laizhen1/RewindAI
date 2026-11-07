@@ -7,7 +7,7 @@ const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '../src/video_rag/api/templates/answer_review.html'), 'utf8');
 const script = html.split('<script>')[1].split('</script>')[0];
 
-async function harness() {
+async function harness(answer = 'Synthetic') {
   const elements = {};
   const getElementById = id => elements[id] ??= {
     value: '', checked: false, disabled: false, textContent: '',
@@ -19,7 +19,7 @@ async function harness() {
     window: {addEventListener: (name, fn) => { if (name === 'beforeunload') beforeUnload = fn; }},
     confirm: () => true,
     fetch: (url, options) => {
-      if (url === '/api/review') return Promise.resolve({ok: true, json: async () => ({rows: [{question: 'Synthetic', answer: 'Synthetic', expected_answerable: true, evidence: []}]})});
+      if (url === '/api/review') return Promise.resolve({ok: true, json: async () => ({rows: [{question: 'Synthetic', answer, expected_answerable: true, evidence: []}]})});
       return new Promise(resolve => { pending = {url, options, resolve}; });
     },
   };
@@ -32,6 +32,12 @@ async function harness() {
 }
 
 (async () => {
+  {
+    const h = await harness('Insufficient evidence in the provided excerpts.');
+    assert.match(h.elements.answer.textContent, /choose Abstained and Not applicable/);
+    assert.equal(h.elements.verdict.value, '');
+    assert.equal(h.elements.support.value, '');
+  }
   {
     const h = await harness();
     h.change('verdict', 'correct'); h.change('support', 'supported');

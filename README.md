@@ -15,7 +15,7 @@ RewindAI is a local learning workspace for finding and reviewing moments in lect
 - Save clips, edit review notes, mark moments reviewed or pending, and filter saved clips by status, video name or note. Provide separate feedback on answers and evidence. Notes, review status and feedback stay in the local database; filtering happens in the browser. Export all saved notes, timestamps and review states to a local text file.
 
 - Add local videos with SRT/VTT subtitles, or transcribe an authorized video locally with a cached Whisper model. The interface displays processing and failure states.
-- Use optional local Qwen3 semantic search and experimental visual search; visual queries use English descriptions.
+- Search lecture transcripts with local Qwen3-Embedding semantic retrieval, and explore experimental visual search using English descriptions.
 - Explore the full pipeline's speech, keyframe, hybrid retrieval, reranking and evaluation components; the complete model workflow still needs independent end-to-end validation.
 
 A five-task [usability study plan](docs/USER_STUDY.md) can be run with shareable media; it is not a report of completed research.
@@ -106,7 +106,7 @@ python scripts/run_transcript.py --answer-model /path/to/model.gguf
 
 To prepare the pinned public Qwen2.5 answer model (about 2.1 GB), install `huggingface-hub` and explicitly run `python scripts/setup_answer_model.py`. Windows users can run `Download-Qwen-Answer.cmd` after installing dependencies. The model checksum is verified; `--check-only` verifies the local cache without network access. Review the [model license](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) separately. This setup downloads only public weights and does not upload course material.
 
-On Windows, `Start-RewindAI-Semantic-Answers.cmd` combines the optional semantic retriever and local answer generator using both cached models; both remain experimental, CPU-only and offline during inference. `REWINDAI_SEMANTIC_MODEL` and `REWINDAI_ANSWER_MODEL` override their paths. Startup may be slow while rebuilding the semantic index.
+On Windows, `Start-RewindAI-Semantic-Answers.cmd` combines Qwen3 semantic retrieval and local answer generation using both cached models; both remain experimental, CPU-only and offline during inference. `REWINDAI_SEMANTIC_MODEL` and `REWINDAI_ANSWER_MODEL` override their paths. Startup may be slow while rebuilding the semantic index.
 
 For local answers, questions are limited to 1,000 characters so they are not silently shortened before generation. When a retrieved subtitle exceeds the model's excerpt limit, the evidence card shows both the full subtitle and the portion provided to the model. Character limits do not guarantee that every input fits the model's token context; the workspace reports context overflow or a cut-off answer instead of presenting an incomplete answer as complete.
 
