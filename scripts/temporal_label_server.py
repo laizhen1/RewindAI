@@ -26,6 +26,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 from scripts.compare_time_retrieval import compare
 from scripts.diagnose_transcript import (
     comparison_by_question_type,
+    coverage_feasibility,
     diagnose,
     metrics,
     operating_metrics,
@@ -297,7 +298,9 @@ def create_label_app(video: Path, output: Path, video_id: str, split: str, durat
             if (fingerprint(video) != binding["video_sha256"] or fingerprint(subtitles) != subtitle_hash
                     or tuple(fingerprint(path) for path in model_files) != model_hashes or read_rows()[1] != revision):
                 return jsonify({"error": "An input changed during evaluation; retry after checking it"}), 409
+            feasibility = coverage_feasibility(questions, segments)
             report = {"warning": "Draft time-overlap diagnostic only; not answer accuracy or a verified test.",
+                      "coverage_feasibility": feasibility,
                       "split": split, **keyword_result, "semantic": semantic_result, "paired": pairs,
                       "retrieval_mode": "semantic" if semantic_only else "paired" if semantic_result else "keyword",
                       "semantic_threshold": 0.4 if semantic_result is not None or semantic_only else None,

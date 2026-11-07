@@ -25,6 +25,32 @@ def coverage(hit: dict, start: float, end: float) -> float:
     return max(0.0, min(hit["end_time"], end) - max(hit["start_time"], start)) / (end - start)
 
 
+def coverage_feasibility(questions: list[dict], segments: list, min_coverage: float = 0.5) -> dict:
+    """Check whether a single indexed segment can meet each reference interval.
+
+    Segments must belong to the same video as the questions. This checks only
+    interval geometry, not whether a segment contains relevant information.
+    """
+    if not 0 < min_coverage <= 1:
+        raise ValueError("min_coverage must be in (0, 1]")
+    ranges = [{"start_time": s.start_time, "end_time": s.end_time} for s in segments]
+    answerable = unattainable = 0
+    for item in questions:
+        expected = item.get("expected_answerable", True)
+        if not isinstance(expected, bool):
+            raise TypeError("expected_answerable must be boolean")
+        if not expected:
+            continue
+        start, end = float(item["evidence_start_seconds"]), float(item["evidence_end_seconds"])
+        if not math.isfinite(start) or not math.isfinite(end) or start < 0 or end <= start:
+            raise ValueError("Invalid question or reference evidence range")
+        answerable += 1
+        if not any(coverage(segment, start, end) >= min_coverage for segment in ranges):
+            unattainable += 1
+    return {"answerable_questions": answerable, "structurally_unattainable": unattainable,
+            "reference_coverage_threshold": min_coverage}
+
+
 def diagnose(pipeline, questions: list[dict]) -> list[dict]:
     results = []
     for item in questions:

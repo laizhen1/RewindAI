@@ -124,6 +124,8 @@ def test_local_diagnostic_uses_drafts_without_exposing_question_text(tmp_path):
     data = response.get_json()
     assert data["metrics"]["tp"] == 1 and data["metrics"]["f1"] == 1
     assert data["metrics"]["question_count"] == 1 and data["subtitle_last_end_seconds"] == 8
+    assert data["coverage_feasibility"] == {"answerable_questions": 1, "structurally_unattainable": 0,
+                                             "reference_coverage_threshold": 0.5}
     assert "cases" not in data
     assert not (tmp_path / "private" / "reports").exists()
     assert "private answer" not in response.get_data(as_text=True)
@@ -151,6 +153,23 @@ def test_local_diagnostic_uses_drafts_without_exposing_question_text(tmp_path):
                                 allowed_roots=(tmp_path / "private",), subtitles=subs).test_client()
     assert not reserved.get("/api/entries").get_json()["evaluation_available"]
     assert reserved.post("/api/evaluate", json={}).status_code == 409
+
+
+def test_local_diagnostic_warns_when_reference_cannot_be_covered(tmp_path):
+    video = tmp_path / "sample.mp4"
+    video.write_bytes(b"video")
+    subs = tmp_path / "sample.srt"
+    subs.write_text("1\n00:00:03,000 --> 00:00:08,000\nAttention mechanism.\n", encoding="utf-8")
+    client = create_label_app(video, tmp_path / "private" / "draft.csv", "sample", "development", 100,
+                              allowed_roots=(tmp_path / "private",), subtitles=subs).test_client()
+    revision = client.get("/api/entries").get_json()["revision"]
+    saved = client.post("/api/entries", json={"revision": revision, "question": "attention",
+                        "question_type": "audio", "answerable": True, "answer": "private answer",
+                        "start": 0, "end": 50}).get_json()
+    response = client.post("/api/evaluate", json={"revision": saved["revision"]})
+    assert response.status_code == 200
+    assert response.get_json()["coverage_feasibility"]["structurally_unattainable"] == 1
+    assert "private answer" not in response.get_data(as_text=True)
 
 
 def test_local_diagnostic_rejects_subtitle_mutation(tmp_path, monkeypatch):

@@ -1,5 +1,6 @@
 from scripts.diagnose_transcript import (
     coverage,
+    coverage_feasibility,
     diagnose,
     latency_summary,
     metrics,
@@ -12,6 +13,24 @@ from scripts.diagnose_transcript import (
 def test_overlap_requires_positive_duration():
     assert overlap({"start_time": 10, "end_time": 20}, 19, 30)
     assert not overlap({"start_time": 10, "end_time": 20}, 20, 30)
+
+
+def test_coverage_feasibility_checks_actual_overlap_and_excludes_negative_questions():
+    from types import SimpleNamespace
+
+    questions = [
+        {"evidence_start_seconds": 0, "evidence_end_seconds": 10},
+        {"evidence_start_seconds": 0, "evidence_end_seconds": 100},
+        {"evidence_start_seconds": 200, "evidence_end_seconds": 210},
+        {"expected_answerable": False},
+    ]
+    segments = [SimpleNamespace(start_time=0, end_time=5),
+                SimpleNamespace(start_time=100, end_time=150)]
+    assert coverage_feasibility(questions, segments) == {
+        "answerable_questions": 3, "structurally_unattainable": 2,
+        "reference_coverage_threshold": 0.5,
+    }
+    assert coverage_feasibility(questions, [])['structurally_unattainable'] == 3
 
 
 def test_diagnostic_reports_first_and_any_overlap():
