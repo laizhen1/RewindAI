@@ -47,6 +47,8 @@ Windows 用户也可运行 `Start-RewindAI-Semantic-Answers.cmd`，组合本地�
 
 本地回答模式将问题限制为 1,000 字符以内，避免模型静默忽略问题后半部分。检索字幕超过模型片段长度时，证据卡片会同时显示完整字幕和模型实际收到的部分。字符数限制不能保证所有输入都在模型的 token 上下文范围内；如果上下文超限或回答被截断，工作台会提示，而不会把不完整的回答当作完整结果。
 
+本地回答生成失败时，工作台会按相同范围重新检索，并在提示原因的同时展示仍可用的字幕候选，不会声称已经生成回答。如果检索本身也失败，则显示错误。
+
 Windows 用户可运行 `Start-RewindAI-Local-Answers.cmd`，使用本地缓存的 Qwen2.5 3B Q4_K_M 模型；也可设置 `REWINDAI_ANSWER_MODEL` 指向其他本地模型。启动脚本不会下载权重。此前的探索性回答测试与限制保留在[本地回答评估](docs/LOCAL_ANSWER_EXPERIMENT.md)。
 
 使用 Qwen3 检索和本地严格回答提示词，在此前已探索的 50 个公开字幕片段上，固定拒答语句代理指标 F1 为 **0.276**；25 个标为可回答的片段仅 4 个被该规则判为已作答。这不评估答案正确性，提示当前配置可能过于保守；详见[方法与计数](docs/LOCAL_ANSWER_EXPERIMENT.md#qwen3-retrieval-with-local-answer-generation)。

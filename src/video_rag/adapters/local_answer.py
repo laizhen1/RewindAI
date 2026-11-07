@@ -12,6 +12,10 @@ MAX_EXCERPTS = 3
 MAX_EXCERPT_CHARACTERS = 500
 
 
+class LocalAnswerGenerationError(RuntimeError):
+    """Answer generation failed after retrieval; evidence may still be available."""
+
+
 class LocalAnswerGenerator:
     """Use an existing GGUF file; this adapter never downloads weights or calls a service."""
 
@@ -65,12 +69,12 @@ class LocalAnswerGenerator:
                 answer = choice["message"]["content"].strip()
             except ValueError as exc:
                 if "exceed context window" in str(exc):
-                    raise RuntimeError("The question and excerpts exceed the model's context; shorten the question or search a narrower scope. / 问题和字幕片段超出模型上下文，请缩短问题或缩小搜索范围。") from exc
-                raise RuntimeError("Local answer generation failed") from exc
+                    raise LocalAnswerGenerationError("The question and excerpts exceed the model's context; shorten the question or search a narrower scope. / 问题和字幕片段超出模型上下文，请缩短问题或缩小搜索范围。") from exc
+                raise LocalAnswerGenerationError("Local answer generation failed / 本地回答生成失败。") from exc
             except Exception as exc:
-                raise RuntimeError("Local answer generation failed") from exc
+                raise LocalAnswerGenerationError("Local answer generation failed / 本地回答生成失败。") from exc
         if choice.get("finish_reason") == "length":
-            raise RuntimeError("The local answer was cut off; shorten the question or search a narrower scope. / 本地回答被截断，请缩短问题或缩小搜索范围。")
+            raise LocalAnswerGenerationError("The local answer was cut off; shorten the question or search a narrower scope. / 本地回答被截断，请缩短问题或缩小搜索范围。")
         if not answer:
-            raise RuntimeError("Local answer generator returned an empty response")
+            raise LocalAnswerGenerationError("Local answer generator returned an empty response / 本地模型未返回回答。")
         return answer

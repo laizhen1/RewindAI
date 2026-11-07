@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
+from video_rag.adapters.local_answer import LocalAnswerGenerationError
 from video_rag.api.library import LibraryStore
 from video_rag.api.visual_sampling import sample_visual_segments
 from video_rag.pipeline import VideoRAGPipeline
@@ -495,28 +496,37 @@ def create_app(
         scope = course_videos if course_videos is not None else ({video_id} if video_id is not None else None)
         if invalid_sources(scope):
             return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
-        try:
-            options = {"generate_answer": False} if evidence_only else {}
+        def run_search(*, generate_answer: bool):
             if course_videos is not None:
-                result = search_pipeline.ask(question, video_ids=course_videos, **options)
-            elif video_id is not None:
-                result = search_pipeline.ask(question, video_id=video_id, **options)
-            else:
-                result = search_pipeline.ask(question, **options)
+                return search_pipeline.ask(question, video_ids=course_videos, generate_answer=generate_answer)
+            if video_id is not None:
+                return search_pipeline.ask(question, video_id=video_id, generate_answer=generate_answer)
+            return search_pipeline.ask(question, generate_answer=generate_answer)
+
+        generation_error = None
+        try:
+            result = run_search(generate_answer=not evidence_only)
+        except LocalAnswerGenerationError as exc:
+            generation_error = str(exc)
+            try:
+                result = run_search(generate_answer=False)
+            except RuntimeError as retrieval_error:
+                return jsonify({"error": str(retrieval_error)}), 503
         except RuntimeError as exc:
             return jsonify({"error": str(exc)}), 503
         if pipeline is not search_pipeline or invalid_sources(scope):
             return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
         response = result.to_dict()
+        response["generation_error"] = generation_error
         # Only the prompt's exact refusal is recognized; other refusals and
         # unsupported answers cannot be identified by this check.
         response["exact_model_refusal"] = bool(
-            answer_mode == "local_experimental" and not evidence_only and not result.abstained
+            answer_mode == "local_experimental" and not evidence_only and not generation_error and not result.abstained
             and " ".join(result.answer.lower().split()).rstrip(".! ")
             == "insufficient evidence in the provided excerpts"
         )
         for index, evidence in enumerate(response["evidence"]):
-            if answer_mode == "local_experimental" and not evidence_only and not result.abstained:
+            if answer_mode == "local_experimental" and not evidence_only and not generation_error and not result.abstained:
                 from video_rag.adapters.local_answer import MAX_EXCERPT_CHARACTERS, MAX_EXCERPTS
 
                 excerpt = evidence.get("transcript", "")

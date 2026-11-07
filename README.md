@@ -110,6 +110,8 @@ On Windows, `Start-RewindAI-Semantic-Answers.cmd` combines the optional semantic
 
 For local answers, questions are limited to 1,000 characters so they are not silently shortened before generation. When a retrieved subtitle exceeds the model's excerpt limit, the evidence card shows both the full subtitle and the portion provided to the model. Character limits do not guarantee that every input fits the model's token context; the workspace reports context overflow or a cut-off answer instead of presenting an incomplete answer as complete.
 
+If local answer generation fails, the workspace reruns the same scoped retrieval and displays any remaining subtitle candidates with the failure message; no answer is claimed. Retrieval itself can also fail, in which case an error is shown instead.
+
 `Start-RewindAI-Local-Answers.cmd` looks for the locally cached Qwen2.5 3B Q4_K_M model; `REWINDAI_ANSWER_MODEL` overrides its path. The launcher does not download weights. Earlier exploratory answer tests and limitations are retained in the [local answer evaluation](docs/LOCAL_ANSWER_EXPERIMENT.md).
 
 With Qwen3 retrieval and the local strict answer prompt, an exploratory balanced sample of 50 previously examined public snippets produced an exact-refusal proxy F1 of **0.276**: only 4 of 25 labeled answerable snippets were proxy-positive. This does not assess answer correctness and indicates that the current setup may be overly cautious; see [the method and counts](docs/LOCAL_ANSWER_EXPERIMENT.md#qwen3-retrieval-with-local-answer-generation).

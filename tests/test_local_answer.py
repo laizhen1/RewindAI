@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from video_rag.adapters.local_answer import LocalAnswerGenerator
+from video_rag.adapters.local_answer import LocalAnswerGenerationError, LocalAnswerGenerator
 from video_rag.api import create_app
 from video_rag.schemas import VideoSegment
 from video_rag.transcript_baseline import build_transcript_segments
@@ -140,3 +140,21 @@ def test_local_answer_rejects_questions_that_would_be_silently_truncated(tmp_pat
     assert response.json['answer'] == question
     assert response.json['evidence'][0]['model_excerpt'] == question[:500]
     assert response.json['evidence'][0]['transcript'] == question
+
+
+def test_failed_generation_keeps_retrieved_evidence_and_explains_failure(tmp_path):
+    class FailingGenerator:
+        def generate(self, query, segments):
+            raise LocalAnswerGenerationError('Synthetic generation failure')
+
+    evidence = VideoSegment(segment_id='sample', video_id='sample', source_path='sample.mp4',
+                            start_time=1, end_time=3, transcript='Binary search halves the sorted range.')
+    app = create_app(build_transcript_segments([evidence], generator=FailingGenerator()), mode='unknown',
+                     answer_mode='local_experimental', database_path=tmp_path / 'local.db')
+    response = app.test_client().post('/api/ask', json={'question': 'binary search'})
+    assert response.status_code == 200
+    assert response.json['generation_error'] == 'Synthetic generation failure'
+    assert response.json['answer'] == ''
+    assert response.json['evidence'][0]['segment_id'] == 'sample'
+    assert not response.json['exact_model_refusal']
+    assert 'model_excerpt' not in response.json['evidence'][0]
