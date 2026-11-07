@@ -83,7 +83,7 @@
 
 新版 React 工作台整合本地视频资料库、Qwen3 语义检索、时间戳证据与复习笔记。安装前端依赖、构建界面并准备预训练模型的步骤见 [React 工作台与隐私指南](docs/REACT_WORKSPACE.md)。Windows 用户完成准备后，可运行 `Start-RewindAI-React.cmd`，然后打开 `http://127.0.0.1:5000/`。
 
-导入时请选择有权处理的视频，可同时提供 SRT/VTT 字幕，并确认使用权限和本机存储。没有字幕时，系统使用已缓存的 Whisper base 在本机转录。Qwen3 用于建立检索索引，导入视频不会训练模型。视频副本和衍生数据的存储、清理及限制见指南；原工作台的高级功能可通过 `/classic` 使用。
+导入时请选择有权处理的视频，可同时提供 SRT/VTT 字幕，并确认使用权限和本机存储。没有字幕时，系统使用已缓存的 Whisper base 在本机转录。Qwen3 用于建立检索索引，导入视频不会训练模型。视频副本和衍生数据的存储、清理及限制见指南；如需实验性画面检索，请按[安装指南](docs/REACT_WORKSPACE.md#experimental-frame-search)准备 CLIP 模型并启动 `Start-RewindAI-Multimodal.cmd`。原工作台的高级功能可通过 `/classic` 使用。
 
 ## 实验性本地 AI 回答
 

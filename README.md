@@ -87,7 +87,7 @@ Search covers all indexed videos by default and can be scoped to the selected vi
 
 The React interface connects the local video library, Qwen3 semantic retrieval, timestamped evidence and saved study notes. To prepare the frontend and the pre-trained models, follow the [React workspace setup and privacy guide](docs/REACT_WORKSPACE.md). On Windows, after setup, start `Start-RewindAI-React.cmd` and open `http://127.0.0.1:5000/`.
 
-The import dialog accepts an authorized local video and optional timed subtitles. It requires confirmation of permission and local storage before importing. Without subtitles, a cached Whisper base model performs local transcription. Qwen3 builds the retrieval index; importing a video does not train the model. The full privacy and deletion details are in the guide. Some advanced functions remain available in the original interface at `/classic`.
+The import dialog accepts an authorized local video and optional timed subtitles. It requires confirmation of permission and local storage before importing. Without subtitles, a cached Whisper base model performs local transcription. Qwen3 builds the retrieval index; importing a video does not train the model. The full privacy and deletion details are in the guide. For experimental frame search, prepare the optional CLIP model and use `Start-RewindAI-Multimodal.cmd` as explained in the [setup guide](docs/REACT_WORKSPACE.md#experimental-frame-search). Some advanced functions remain available in the original interface at `/classic`.
 
 ## Lightweight CPU demo
 

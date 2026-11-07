@@ -62,7 +62,16 @@ If the React assets have not been built, `/` serves the original workspace. Rebu
 
 ### Experimental frame search
 
-Frame search requires an additional local CLIP model and is not enabled by the standard React launcher. Install the optional `semantic` dependencies and prepare the public model as described in [the visual experiment guide](LOCAL_VISUAL_EXPERIMENT.md). Start `scripts/run_transcript.py` with `--visual-model PATH_TO_CLIP_DIRECTORY`; add the `--semantic-model` and `--answer-model` arguments shown above if you also want Qwen retrieval and generated answers. The directory must contain `tokenizer.json` and `onnx/model_quantized.onnx`. With the visual model enabled, choose **Find a frame** and enter an English visual description.
+Frame search requires an additional public CLIP model and is not enabled by the standard React launcher. After completing the main setup, run:
+
+```powershell
+python -m pip install -e ".[semantic]"
+python scripts/setup_visual_model.py
+```
+
+The setup downloads only public [CLIP model files](https://huggingface.co/Xenova/clip-vit-base-patch32) at a fixed upstream revision. `python scripts/setup_visual_model.py --check-only` checks for cached files without network access; it checks file presence, not an independent checksum. On Windows, start `Start-RewindAI-Multimodal.cmd` to combine local Qwen retrieval, answers and experimental frame search. The launcher uses CPU and does not download models. You can override paths with `REWINDAI_SEMANTIC_MODEL`, `REWINDAI_ANSWER_MODEL`, and `REWINDAI_VISUAL_MODEL_DIR`.
+
+On other platforms, start `scripts/run_transcript.py` with `--visual-model PATH_TO_CLIP_DIRECTORY`; add the `--semantic-model` and `--answer-model` arguments shown above if you also want Qwen retrieval and generated answers. The visual directory must contain `tokenizer.json` and `onnx/model_quantized.onnx`. With the visual model enabled, choose **Find a frame** and enter an English visual description. See [the visual experiment guide](LOCAL_VISUAL_EXPERIMENT.md) for additional details.
 
 Visual search samples at most 100 segment midpoints in the selected scope. It can miss relevant moments and return irrelevant frames even when there is no match. Frame previews and timestamps are candidates for manual review, not generated answers or proof of image understanding. The first search and a changed scope can take longer while the local index is built.
 
