@@ -75,6 +75,43 @@ function UploadDialog({ onClose, onImported, notify }) {
   </div>;
 }
 
+function FeedbackDialog({ feedback, onClose, notify }) {
+  const [comment, setComment] = useState(''), [saving, setSaving] = useState(false), [error, setError] = useState('');
+  const dialogRef = useRef(null);
+  useEffect(() => {
+    const previous = document.activeElement;
+    const dialog = dialogRef.current;
+    dialog?.querySelector('textarea')?.focus();
+    const onKeyDown = event => {
+      if (event.key === 'Escape' && !saving) { event.preventDefault(); onClose(); }
+      if (event.key !== 'Tab' || !dialog) return;
+      const controls = [...dialog.querySelectorAll('button:not(:disabled), textarea:not(:disabled)')];
+      if (!controls.length) return;
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => { document.removeEventListener('keydown', onKeyDown); previous?.focus?.(); };
+  }, [saving, onClose]);
+  async function submit(event) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true); setError('');
+    try {
+      await api('/api/feedback', json('POST', { ...feedback, comment }));
+      notify('Feedback saved locally.'); onClose();
+    } catch (err) { setError(err.message); }
+    finally { setSaving(false); }
+  }
+  return <div className="modal-layer" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+    <section ref={dialogRef} className="modal feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+      <div className="modal-heading"><div><div className="eyebrow">LOCAL FEEDBACK</div><h2 id="feedback-title">Share your feedback</h2><p>{feedback.target_type === 'answer' ? 'Response' : 'Transcript evidence'} · {feedback.rating === 'helpful' ? 'Useful' : 'Not useful'}</p></div><button className="icon-button" onClick={onClose} disabled={saving} aria-label="Close"><X size={19}/></button></div>
+      <form onSubmit={submit}><label className="feedback-label">Add a note <span>Optional</span><textarea maxLength={4000} value={comment} onChange={event => setComment(event.target.value)} placeholder="Add a brief note…"/></label><p className="feedback-privacy"><LockKeyhole size={13}/> Your question, rating and note are stored locally.</p>{error && <div className="error" role="alert">{error}</div>}<div className="modal-actions"><button type="button" className="btn quiet" disabled={saving} onClick={onClose}>Cancel</button><button className="btn primary" disabled={saving}>{saving ? 'Saving…' : 'Save feedback'} <ArrowRight size={16}/></button></div></form>
+    </section>
+  </div>;
+}
+
 function App() {
   const [health, setHealth] = useState(null), [library, setLibrary] = useState({ videos: [], courses: [] });
   const [selectedId, setSelectedId] = useState(null), [bookmarks, setBookmarks] = useState([]);
@@ -82,6 +119,7 @@ function App() {
   const [lastQuestion, setLastQuestion] = useState(''), [busy, setBusy] = useState(false), [uploadOpen, setUploadOpen] = useState(false);
   const [toast, setToast] = useState(''), [transcription, setTranscription] = useState(null), [courseName, setCourseName] = useState('');
   const [noteDrafts, setNoteDrafts] = useState({}), [savingNotes, setSavingNotes] = useState({}), [menuOpen, setMenuOpen] = useState(false), [removingVideo, setRemovingVideo] = useState(false);
+  const [feedbackDraft, setFeedbackDraft] = useState(null);
   const playerRef = useRef(null), pendingTime = useRef(null), toastTimer = useRef(null);
   const selected = library.videos.find(v => v.id === selectedId) || null;
   const notify = message => { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 4500); };
@@ -122,7 +160,7 @@ function App() {
     try { setResult(await api('/api/ask', json('POST', body))); } catch (err) { notify(err.message); } finally { setBusy(false); }
   }
   async function saveEvidence(item) { try { await api('/api/bookmarks', json('POST', { video_id: item.video_id, segment_id: item.segment_id, note: '' })); setBookmarks((await api('/api/bookmarks')).bookmarks); notify('Moment saved for review.'); } catch (err) { notify(err.message); } }
-  async function feedback(item, rating) { try { await api('/api/feedback', json('POST', { question: lastQuestion, segment_id: item?.segment_id || null, rating, comment: '', target_type: item ? 'transcript' : 'answer' })); notify('Feedback saved locally.'); } catch (err) { notify(err.message); } }
+  function feedback(item, rating) { setFeedbackDraft({ question: lastQuestion, segment_id: item?.segment_id || null, rating, target_type: item ? 'transcript' : 'answer' }); }
   async function createCourse(event) { event.preventDefault(); if (!courseName.trim()) return; try { await api('/api/courses', json('POST', { name: courseName.trim() })); setCourseName(''); await load(); notify('Course created.'); } catch (err) { notify(err.message); } }
   async function assignCourse(value) { if (!selected) return; try { await api(`/api/videos/${encodeURIComponent(selected.id)}/course`, json('PUT', { course_id: value ? Number(value) : null })); await load(); } catch (err) { notify(err.message); } }
   async function removeFromLibrary() {
@@ -168,7 +206,7 @@ function App() {
         <section className="panel saved-panel" id="saved"><div className="panel-head"><div><div className="eyebrow">PICK UP LATER / 05</div><h2>Saved moments</h2></div><span className="count-pill">{String(bookmarks.length).padStart(2, '0')}</span></div><p className="panel-desc">The ideas worth coming back to.</p>{bookmarks.length ? <div className="saved-list">{bookmarks.map(item => <article className="saved-item" key={item.id}><div className="saved-meta"><button onClick={() => seek(item)}><Play size={11} fill="currentColor"/> {formatTime(item.start_time)}</button><span>{item.reviewed ? 'REVIEWED' : 'TO REVIEW'}</span></div><strong>{library.videos.find(v => v.id === item.video_id)?.title || 'Unavailable video'}</strong><textarea maxLength={4000} aria-label="Review note" placeholder="Add a study note…" value={noteDrafts[item.id] ?? item.note ?? ''} onChange={e => setNoteDrafts(previous => ({ ...previous, [item.id]: e.target.value }))}/><div className="saved-actions"><button onClick={() => updateBookmark(item, 'note')} disabled={noteDrafts[item.id] === undefined || savingNotes[item.id]}>Save note</button><button disabled={savingNotes[item.id]} onClick={() => updateBookmark(item, 'review')}>{item.reviewed ? 'Mark pending' : 'Mark reviewed'}</button><button disabled={savingNotes[item.id]} onClick={() => updateBookmark(item, 'delete')} aria-label="Remove saved moment"><Trash2 size={14}/></button></div></article>)}</div> : <div className="saved-empty"><Bookmark size={21}/><strong>Save a moment</strong><span>Bookmarks from your search will appear here.</span></div>}<div className="panel-footer"><span>YOUR PERSONAL REVIEW LIST</span><span><LockKeyhole size={11}/> LOCAL</span></div></section>
         <div className="insight-card"><div className="insight-mark"><Sparkles size={17}/></div><div className="eyebrow">THE REWIND PRINCIPLE</div><p>Good answers start with <em>good evidence.</em></p><span>Every result links back to its source.</span><ArrowUpRight className="insight-arrow" size={16}/></div>
       </aside></div><footer className="footer"><span>REWIND<span className="orange">AI</span> <i>—</i> A MORE THOUGHTFUL WAY TO LEARN</span><span>LOCAL WORKSPACE <i>·</i> BUILT FOR FOCUS</span></footer></main></div>
-    {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onImported={async () => { await load(); }} notify={notify}/>}{toast && <div className="toast" role="status">{toast}</div>}
+    {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} onImported={async () => { await load(); }} notify={notify}/>}{feedbackDraft && <FeedbackDialog feedback={feedbackDraft} onClose={() => setFeedbackDraft(null)} notify={notify}/>}{toast && <div className="toast" role="status">{toast}</div>}
   </div>;
 }
 

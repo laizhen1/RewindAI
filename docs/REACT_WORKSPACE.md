@@ -56,6 +56,8 @@ The import dialog shows the browser-to-local-server copy progress when available
 
 To remove a lecture from the searchable library, select it and choose **Remove from library**. This removes its index entry, not its video or subtitle files; saved moments and notes are retained but may become unavailable until compatible material is re-imported. The confirmation explains this before removal.
 
+Rate a response or transcript excerpt and optionally add a note in the feedback dialog. The question, rating, selected evidence identifier and note are stored in the local database; the response itself is not saved as part of this feedback. Use `/classic` to review or delete saved feedback.
+
 If the React assets have not been built, `/` serves the original workspace. Rebuild after frontend changes. The React workspace does not yet expose every advanced function of the original interface; use `/classic` for visual search, subtitle replacement, feedback history and other established tools.
 
 ## Privacy and responsibility
