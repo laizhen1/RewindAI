@@ -19,6 +19,15 @@ def test_review_does_not_score_or_expose_source_path():
     assert result[0]['retrieval_abstained'] is False
 
 
+def test_review_preserves_question_type_without_inventing_one():
+    result = prepare_review(StubPipeline(), {'questions': [{'question': 'Why?', 'question_type': 'audio'},
+                                                            {'question': 'How?'}]})
+    assert result[0]['question_type'] == 'audio'
+    assert 'question_type' not in result[1]
+    with pytest.raises(ValueError, match='question type'):
+        prepare_review(StubPipeline(), {'questions': [{'question': 'Why?', 'question_type': 'invalid'}]})
+
+
 def test_rejects_test_split_and_invalid_questions():
     with pytest.raises(ValueError, match='reserved'):
         prepare_review(StubPipeline(), {'split': 'test', 'questions': [{'question': 'Why?'}]})

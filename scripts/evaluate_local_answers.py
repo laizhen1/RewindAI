@@ -30,6 +30,10 @@ def prepare_review(pipeline, data: dict, *, allow_frozen_test: bool = False, mod
         answerable = item.get('expected_answerable', True)
         if type(answerable) is not bool:
             raise ValueError('expected_answerable must be a boolean')
+        question_type = item.get('question_type')
+        if question_type is not None and (not isinstance(question_type, str) or
+                                          question_type not in {'audio', 'visual', 'ocr', 'multimodal', 'unknown_route'}):
+            raise ValueError('Invalid question type')
         started = perf_counter()
         answer = pipeline.ask(item['question'])
         model_input = (model_input_builder(item['question'].strip(), [hit.segment for hit in answer.evidence])
@@ -52,6 +56,8 @@ def prepare_review(pipeline, data: dict, *, allow_frozen_test: bool = False, mod
         }
         if model_input is not None:
             row['model_question'] = model_input['question']
+        if question_type is not None:
+            row['question_type'] = question_type
         rows.append(row)
     return rows
 

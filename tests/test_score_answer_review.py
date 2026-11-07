@@ -47,6 +47,19 @@ def test_supported_evidence_does_not_imply_a_correct_answer():
     assert result['f1'] == 0
 
 
+def test_question_type_metrics_keep_unlabeled_drafts_separate():
+    result = summarize({'status': 'unreviewed_answer_drafts', 'rows': [
+        {**row(True, 'correct', 'supported'), 'question_type': 'audio'},
+        {**row(True, 'abstain'), 'question_type': 'visual'},
+        row(False, 'abstain'),
+    ]})
+    groups = result['by_question_type']
+    assert groups['audio']['f1'] == 1 and groups['audio']['question_count'] == 1
+    assert groups['visual']['f1'] == 0 and groups['visual']['answerable_abstentions'] == 1
+    assert groups['unlabeled']['f1'] is None and groups['unlabeled']['question_count'] == 1
+    assert 'by_question_type' not in groups['audio']
+
+
 def test_question_origin_is_counted_without_claiming_independence():
     generated = {**row(True, 'correct', 'supported'), 'annotation_source': 'model_generated_candidate_unverified'}
     result = summarize({'status': 'unreviewed_answer_drafts', 'rows': [generated]})

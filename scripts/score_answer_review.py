@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / 'src'))
 from video_rag.evaluation.private_output import private_output
 
 
-def summarize(report: dict) -> dict:
+def summarize(report: dict, *, include_by_type: bool = True) -> dict:
     """Apply question-level micro metrics to declared human answer judgments."""
     if not isinstance(report, dict) or report.get('status') != 'unreviewed_answer_drafts':
         raise ValueError('Expected an answer review draft')
@@ -25,9 +25,14 @@ def summarize(report: dict) -> dict:
     generated = unrecorded = 0
     answerable_count = unanswerable_count = answerable_abstained = 0
     supported_count = unsupported_count = 0
+    type_groups: dict[str, list[dict]] = {}
     for row in rows:
         if not isinstance(row, dict) or type(row.get('expected_answerable')) is not bool:
             raise ValueError('Every row must have a boolean reference label')
+        kind = row.get('question_type', 'unlabeled')
+        if not isinstance(kind, str) or kind not in {'audio', 'visual', 'ocr', 'multimodal', 'unknown_route', 'unlabeled'}:
+            raise ValueError('Invalid question type')
+        type_groups.setdefault(kind, []).append(row)
         answerable_count += int(row['expected_answerable'])
         unanswerable_count += int(not row['expected_answerable'])
         origin = row.get('annotation_source', 'not_recorded')
@@ -57,7 +62,7 @@ def summarize(report: dict) -> dict:
             answerable_abstained += 1
         else:
             tn += 1
-    return {'question_count': len(rows), 'model_generated_questions': generated,
+    result = {'question_count': len(rows), 'model_generated_questions': generated,
             'answerable_questions': answerable_count, 'unanswerable_questions': unanswerable_count,
             'answerable_abstentions': answerable_abstained,
             'answerable_abstention_rate': answerable_abstained / answerable_count if answerable_count else None,
@@ -72,6 +77,12 @@ def summarize(report: dict) -> dict:
             'precision': tp / (tp + fp) if tp + fp else None,
             'recall': tp / (tp + fn) if tp + fn else None,
             'f1': 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None}
+    if include_by_type:
+        result['by_question_type'] = {
+            kind: summarize({**report, 'rows': group}, include_by_type=False)
+            for kind, group in sorted(type_groups.items())
+        }
+    return result
 
 
 def main() -> int:
