@@ -10,13 +10,13 @@ I built RewindAI as a local AI learning workspace for finding and reviewing know
 
 ## Features
 
-- I organize indexed videos into courses, with renaming and deletion that preserve videos and notes.
-- I support video- and course-scoped search with timestamped evidence, neighboring transcript segments and optional midpoint frames for manual verification.
-- I provide persistent clip bookmarks, review notes, review states and separate answer and evidence feedback. Saved notes and timestamps can be exported locally.
+- **Course management:** Organize indexed videos into courses while preserving videos and notes when a course is deleted.
+- **Evidence-based search:** Search by video or course and inspect timestamped excerpts, neighboring subtitles and optional midpoint frames.
+- **Study workflow:** Save clips, review notes and review states; provide separate feedback on answers and evidence; export saved notes locally.
 
-- I support importing authorized videos with SRT/VTT subtitles or transcribing them locally with a cached Whisper model, with visible processing and failure states.
-- I use local Qwen3-Embedding for semantic retrieval and provide experimental visual search for English descriptions.
-- I maintain components for speech, keyframes, hybrid retrieval, reranking and evaluation; the complete multimodal workflow still requires independent end-to-end validation.
+- **Local video ingestion:** Import authorized videos with SRT/VTT subtitles or transcribe them locally with a cached Whisper model.
+- **Semantic and visual retrieval:** Use local Qwen3-Embedding for semantic search and experimental visual search for English descriptions.
+- **Multimodal components:** Explore speech, keyframe, hybrid retrieval, reranking and evaluation components. The complete workflow still requires independent end-to-end validation.
 
 A five-task [usability study plan](docs/USER_STUDY.md) can be run with shareable media; it is not a report of completed research.
 The [product case and demo storyboard](docs/PORTFOLIO_CASE.md) explain the user workflow, measured evidence and remaining validation.
