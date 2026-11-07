@@ -3,7 +3,11 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.evaluate_ytcommentqa import partition
-from scripts.evaluate_ytcommentqa_local_answers import score, select_cases
+from scripts.evaluate_ytcommentqa_local_answers import (
+    BalancedExperimentGenerator,
+    score,
+    select_cases,
+)
 
 
 def test_balanced_selection_is_stable_and_filters_invalid():
@@ -81,3 +85,14 @@ def test_answer_experiment_progress_exposes_only_counts(monkeypatch):
     cases = [('a', True, {'question': 'private draft text'}), ('b', False, {'question': 'other'})]
     score(cases, object(), lambda segments, generator: Pipeline(), progress=counts.append)
     assert counts == [1, 2]
+
+
+def test_balanced_experiment_does_not_score_truncated_answers():
+    from threading import Lock
+
+    generator = object.__new__(BalancedExperimentGenerator)
+    generator._lock = Lock()
+    generator._model = SimpleNamespace(create_chat_completion=lambda **kwargs: {
+        'choices': [{'message': {'content': 'unfinished'}, 'finish_reason': 'length'}]})
+    with pytest.raises(RuntimeError, match='truncated'):
+        generator.generate('question', [SimpleNamespace(transcript='synthetic evidence')])

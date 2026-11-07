@@ -37,6 +37,14 @@ async function harness(answer = 'Synthetic') {
     assert.match(h.elements.answer.textContent, /choose Abstained and Not applicable/);
     assert.equal(h.elements.verdict.value, '');
     assert.equal(h.elements.support.value, '');
+    h.elements.prefillRefusals.onclick();
+    assert.equal(h.elements.verdict.value, 'abstain');
+    assert.equal(h.elements.support.value, 'not_applicable');
+    assert.equal(h.elements.confirmed.checked, false);
+    assert.equal(h.isDirty(), true);
+    h.change('verdict', 'incorrect');
+    h.elements.prefillRefusals.onclick();
+    assert.equal(h.elements.verdict.value, 'incorrect');
   }
   {
     const h = await harness();
