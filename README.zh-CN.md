@@ -132,6 +132,8 @@ python scripts/run_transcript.py --video lecture1.mp4 --video lecture2.mp4 --sub
 python scripts/setup_qwen_embedding.py
 ```
 
+同一未修改的模型也可从 [RewindAI GitHub Release](https://github.com/laizhen1/RewindAI/releases/tag/qwen3-embedding-0.6b-q8) 下载，其中包含 Apache-2.0 许可证和 SHA-256 校验值。
+
 Windows 用户安装依赖后也可双击 `Download-Qwen3-Embedding.cmd`。该步骤只获取公开模型，不上传课程资料；`python scripts/setup_qwen_embedding.py --check-only` 可离线检查缓存。`llama-cpp-python` 的安装可能需要 CPU wheel 或 C++ 编译环境，详见[安装说明](https://github.com/abetlen/llama-cpp-python#installation)。如果已手动下载模型，也可直接指定文件：
 
 ```powershell

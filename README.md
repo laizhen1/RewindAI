@@ -132,6 +132,8 @@ Install `python -m pip install -e ".[qwen-semantic]" huggingface-hub`. Then expl
 python scripts/setup_qwen_embedding.py
 ```
 
+The same unmodified model is also available in the [RewindAI GitHub release](https://github.com/laizhen1/RewindAI/releases/tag/qwen3-embedding-0.6b-q8), together with its Apache-2.0 license and SHA-256 checksum.
+
 On Windows you can instead run `Download-Qwen3-Embedding.cmd` after installing dependencies. The setup requests only the public model file; course materials stay local. Use `python scripts/setup_qwen_embedding.py --check-only` to verify the cached model offline. Installing `llama-cpp-python` may require a suitable CPU wheel or a C++ build environment; see its [installation instructions](https://github.com/abetlen/llama-cpp-python#installation). For a manually downloaded model, point the application to the local file:
 
 ```powershell

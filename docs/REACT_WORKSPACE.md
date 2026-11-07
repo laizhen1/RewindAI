@@ -31,6 +31,8 @@ python scripts/setup_answer_model.py
 python scripts/setup_whisper_model.py
 ```
 
+The same unmodified Qwen3 model is available in the [GitHub release](https://github.com/laizhen1/RewindAI/releases/tag/qwen3-embedding-0.6b-q8), alongside its Apache-2.0 license and SHA-256 checksum. The setup command above downloads the pinned upstream file directly.
+
 Qwen3-Embedding provides semantic retrieval; the Qwen2.5 model generates text answers; Whisper base transcribes videos that do not have SRT/VTT subtitles. The Qwen3 and answer setup scripts check pinned model hashes. The Whisper setup uses the public upstream `main` revision and checks that required files are present; it is not a pinned checksum verification. Each setup script supports `--check-only` for an offline cache check. Model licenses are separate: see the [Qwen3-Embedding model card](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF), [Qwen2.5 model card](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) and [faster-whisper model card](https://huggingface.co/Systran/faster-whisper-base).
 
 Qwen3 is already pre-trained. Importing a video transcribes or reads its captions and builds a local retrieval index; it **does not train or fine-tune model weights**. Fine-tuning is not part of this workflow. The 639 MB Qwen3 weights are obtained from the upstream model repository rather than stored in regular Git history, which has a 100 MiB per-file limit.
