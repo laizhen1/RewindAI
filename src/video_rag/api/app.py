@@ -39,6 +39,7 @@ def create_app(
     if mode not in {"demo", "full", "transcript", "unknown"}:
         raise ValueError("mode must be demo, full, transcript or unknown")
     unavailable_videos: dict[str, str] = {}
+    restored_versions: dict[str, tuple[int, int]] = {}
     visual_index = None
     visual_key = None
     if mode == "transcript":
@@ -62,6 +63,7 @@ def create_app(
                     raise ValueError("Stored segments are inconsistent")
                 restored.extend(segments)
                 loaded_ids.add(record["video_id"])
+                restored_versions[record["video_id"]] = (record["video_size"], record["video_mtime_ns"])
             except (OSError, ValueError, TypeError, KeyError):
                 unavailable_videos[record["video_id"]] = Path(record["video_path"]).name
         if len(restored) > len(pipeline.segments()):
@@ -84,7 +86,9 @@ def create_app(
     if mode == "transcript":
         for segment in pipeline.segments():
             if segment.video_id not in source_versions:
-                source_versions[segment.video_id] = source_version(segment.source_path)
+                source_versions[segment.video_id] = (restored_versions[segment.video_id]
+                                                     if segment.video_id in restored_versions
+                                                     else source_version(segment.source_path))
 
     def source_available(video_id: str) -> bool:
         source = pipeline.video_path(video_id)
@@ -233,6 +237,13 @@ def create_app(
                 if any(segment.video_id == added[0].video_id for segment in current):
                     return jsonify({"error": "Video is already loaded"}), 409
                 replacement = transcript_builder([*current, *added])
+                try:
+                    final_stat = video_path.stat()
+                except OSError:
+                    return jsonify({"error": "Video changed while importing; try again"}), 409
+                if (not video_path.is_file() or
+                        (final_stat.st_size, final_stat.st_mtime_ns) != (current_stat.st_size, current_stat.st_mtime_ns)):
+                    return jsonify({"error": "Video changed while importing; try again"}), 409
                 store.remember_video(added[0].video_id, str(video_path), current_stat.st_size,
                                      current_stat.st_mtime_ns, json.dumps([segment.to_dict() for segment in added]))
                 pipeline = replacement

@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from types import SimpleNamespace
 
 from video_rag.api import create_app
@@ -49,6 +50,21 @@ def test_failed_upload_cleans_only_its_new_copy(tmp_path):
     assert c.get('/api/library').json['videos'] == []
     data = payload(subtitle=(io.BytesIO(b'bad'), 'captions.txt'))
     assert c.post('/api/library/upload', data=data).status_code == 400
+
+
+def test_changed_upload_is_rejected_and_cleaned_after_indexing(tmp_path):
+    def builder(segments):
+        Path(segments[0].source_path).write_bytes(b'video changed while indexing')
+        return build_transcript_segments(segments)
+
+    app = create_app(build_transcript_segments([]), mode='transcript', transcript_builder=builder,
+                     database_path=tmp_path / 'library.sqlite3', upload_dir=tmp_path / 'uploads')
+    c = app.test_client()
+    response = c.post('/api/library/upload', data=payload())
+    assert response.status_code == 409
+    assert 'changed while importing' in response.json['error']
+    assert list((tmp_path / 'uploads').iterdir()) == []
+    assert c.get('/api/library').json['videos'] == []
 
 
 def test_upload_without_subtitles_starts_local_transcription(tmp_path, monkeypatch):

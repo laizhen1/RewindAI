@@ -35,6 +35,30 @@ def test_save_flag_requires_one_video(monkeypatch):
         run_transcript.main()
 
 
+def test_startup_refuses_video_changed_during_index_build(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    video = tmp_path / 'lesson.mp4'
+    video.write_bytes(b'original video')
+    subtitles = tmp_path / 'lesson.srt'
+    subtitles.write_text('1\n00:00:01,000 --> 00:00:04,000\nExample.\n', encoding='utf-8')
+    build = run_transcript.build_transcript_library
+
+    def change_during_build(sources):
+        pipeline = build(sources)
+        video.write_bytes(b'changed while indexing')
+        return pipeline
+
+    served = []
+    monkeypatch.setattr(run_transcript, 'build_transcript_library', change_during_build)
+    monkeypatch.setattr(Flask, 'run', lambda self, **kwargs: served.append(True))
+    monkeypatch.setattr(sys, 'argv', ['run_transcript.py', '--video', str(video), '--subtitles', str(subtitles)])
+    with pytest.raises(SystemExit) as error:
+        run_transcript.main()
+    assert error.value.code == 2
+    assert 'changed or disappeared' in capsys.readouterr().err
+    assert served == []
+
+
 def test_changed_video_rejects_new_bookmark_but_preserves_existing_note(tmp_path):
     video = tmp_path / "lesson.mp4"
     video.write_bytes(b"original")

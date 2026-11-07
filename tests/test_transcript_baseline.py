@@ -110,6 +110,23 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
         self.assertFalse(reopened.post("/api/ask", json={"question": "attention"}).get_json()["abstained"])
 
+    def test_restore_detects_video_change_during_index_rebuild(self):
+        db = self.base / "restore-race.sqlite3"
+        client = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        video_id = client.post("/api/library/local-video", json={"video_path": str(self.video)}).get_json()["video_id"]
+
+        def builder(segments):
+            self.video.write_bytes(b"changed while the saved index is rebuilding")
+            return build_transcript_segments(segments)
+
+        reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript",
+                              transcript_builder=builder).test_client()
+        video = reopened.get("/api/library").get_json()["videos"][0]
+        self.assertEqual(video["id"], video_id)
+        self.assertFalse(video["available"])
+        self.assertEqual(reopened.post("/api/ask", json={"question": "attention"}).status_code, 409)
+        self.assertEqual(reopened.get(f"/api/videos/{video_id}").status_code, 409)
+
     def test_import_errors_identify_video_and_keep_existing_index(self):
         def builder(segments):
             if len({segment.video_id for segment in segments}) > 1:
@@ -130,6 +147,42 @@ class TranscriptBaselineTests(unittest.TestCase):
         self.assertEqual(len(client.get("/api/library").get_json()["videos"]), 1)
         reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
         self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
+
+    def test_import_does_not_commit_if_video_changes_during_index_build(self):
+        other = self.base / "next.mp4"
+        other.write_bytes(b"next video")
+        other.with_suffix(".srt").write_text("1\n00:00:01,000 --> 00:00:03,000\nexample\n", encoding="utf-8")
+
+        def builder(segments):
+            if len({segment.video_id for segment in segments}) > 1:
+                other.write_bytes(b"changed video during indexing")
+            return build_transcript_segments(segments)
+
+        db = self.base / "changed-during-import.sqlite3"
+        client = create_app(build_transcript_segments([]), database_path=db, mode="transcript",
+                            transcript_builder=builder).test_client()
+        self.assertEqual(client.post("/api/library/local-video", json={"video_path": str(self.video)}).status_code, 201)
+        response = client.post("/api/library/local-video", json={"video_path": str(other)})
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("changed while importing", response.get_json()["error"])
+        self.assertEqual(len(client.get("/api/library").get_json()["videos"]), 1)
+        self.assertFalse(client.post("/api/ask", json={"question": "attention"}).get_json()["abstained"])
+        reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        self.assertEqual(len(reopened.get("/api/library").get_json()["videos"]), 1)
+
+    def test_import_does_not_commit_if_video_disappears_during_index_build(self):
+        def builder(segments):
+            self.video.unlink()
+            return build_transcript_segments(segments)
+
+        db = self.base / "disappeared-during-import.sqlite3"
+        client = create_app(build_transcript_segments([]), database_path=db, mode="transcript",
+                            transcript_builder=builder).test_client()
+        response = client.post("/api/library/local-video", json={"video_path": str(self.video)})
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(client.get("/api/library").get_json()["videos"], [])
+        reopened = create_app(build_transcript_segments([]), database_path=db, mode="transcript").test_client()
+        self.assertEqual(reopened.get("/api/library").get_json()["videos"], [])
 
     def test_changed_video_is_not_used_for_search_playback_or_frames(self):
         other = self.base / "other.mp4"

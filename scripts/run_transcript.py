@@ -46,6 +46,11 @@ def main() -> None:
             parser.error("Provide one --subtitles for each --video, or omit all for sidecars")
         subtitles = args.subtitles or [find_subtitles(video) for video in args.video]
         sources = list(zip(args.video, subtitles, strict=True))
+        source_versions = {}
+        for video, _ in sources:
+            path = video.expanduser().resolve()
+            stat = path.stat()
+            source_versions[path] = (stat.st_size, stat.st_mtime_ns)
         pipeline = build_transcript_library(sources) if sources else build_transcript_segments([])
         generator = None
         builder = None
@@ -79,6 +84,13 @@ def main() -> None:
         app = create_app(pipeline, mode="transcript", transcript_builder=builder,
                          retrieval_type=retrieval_type, visual_builder=visual_builder,
                          answer_mode="local_experimental" if generator else "extractive")
+        for video, version in source_versions.items():
+            try:
+                stat = video.stat()
+            except OSError:
+                parser.error("A startup video changed or disappeared while building the index; retry with the correct file")
+            if not video.is_file() or (stat.st_size, stat.st_mtime_ns) != version:
+                parser.error("A startup video changed or disappeared while building the index; retry with the correct file")
         if args.save_startup_video:
             video, subtitle = sources[0]
             response = app.test_client().post("/api/library/local-video", json={

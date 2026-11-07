@@ -83,6 +83,11 @@ On first launch after upgrading, existing bookmarks gain a local review-state fi
 
 Subtitle and experimental visual searches recheck the source after processing; a detected change discards the results. Frame previews are similarly rechecked. These lightweight checks cannot detect changes that preserve both file size and modification time, or changes after the final check.
 
+Video import also rechecks the source after building its index. If a change is detected, the new import is rejected and the existing library stays available; restore the correct video and retry.
+
+When rebuilding a saved library at startup, the workspace keeps the file state recorded at import. If the video changes during the rebuild, it is marked unavailable instead of treating the replacement as the original.
+When videos are passed explicitly at startup, the server also refuses to start if a source changes while its index is built.
+
 Search covers all indexed videos by default and can be scoped to the selected video or its course. Scoped search scans the index and may be slow for large collections. The demo does not include real media. Full multimodal mode requires preprocessing and indexes. The server accepts loopback Host values and same-origin browser requests, but has no accounts, multi-user isolation or production authentication; remote use requires an SSH tunnel to the local service.
 
 ## React workspace
