@@ -33,6 +33,25 @@ def test_coverage_feasibility_checks_actual_overlap_and_excludes_negative_questi
     assert coverage_feasibility(questions, [])['structurally_unattainable'] == 3
 
 
+def test_diagnostic_cli_reports_unattainable_coverage(tmp_path, monkeypatch, capsys):
+    import json
+    import sys
+
+    from scripts import diagnose_transcript as module
+
+    video, subtitles, questions = tmp_path / 'video.mp4', tmp_path / 'video.srt', tmp_path / 'questions.json'
+    video.write_bytes(b'video')
+    subtitles.write_text('1\n00:00:03,000 --> 00:00:08,000\nAttention mechanism.\n', encoding='utf-8')
+    questions.write_text(json.dumps({'questions': [{'question': 'attention', 'evidence_start_seconds': 0,
+                                                   'evidence_end_seconds': 50}]}), encoding='utf-8')
+    monkeypatch.setattr(sys, 'argv', ['diagnose', '--video', str(video), '--subtitles', str(subtitles),
+                                     '--questions', str(questions)])
+    assert module.main() == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report['coverage_feasibility']['structurally_unattainable'] == 1
+    assert report['metrics']['reference_coverage_threshold'] == 0.5
+
+
 def test_diagnostic_reports_first_and_any_overlap():
     class Result:
         def to_dict(self):

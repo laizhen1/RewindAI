@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.diagnose_transcript import (
     comparison_by_question_type,
+    coverage_feasibility,
     diagnose,
     latency_summary,
     metrics,
@@ -76,6 +77,7 @@ def main():
         data = json.loads(args.questions.read_text(encoding="utf-8-sig"))
         source_binding = verify_sources(data, args.video, args.subtitles)
         segments = segments_from_subtitles(args.video, args.subtitles)
+        feasibility = coverage_feasibility(data["questions"], segments, args.min_coverage)
         encoder = OnnxSentenceEncoder(args.model_dir)
         keyword = build_transcript_segments(segments)
         semantic = build_semantic_pipeline(segments, encoder, args.semantic_threshold)
@@ -89,6 +91,7 @@ def main():
                              "Reports and hashes may contain sensitive course information; keep them local.",
                   "created_at_utc": datetime.now(UTC).isoformat(),
                   "label_status": data.get("status", "not provided"), "source_binding": source_binding,
+                  "coverage_feasibility": feasibility,
                   "semantic_threshold": args.semantic_threshold, "min_coverage": args.min_coverage,
                   "aggregate_only": args.aggregate_only, "input_sha256": input_hashes, "comparison": result}
         if args.output:

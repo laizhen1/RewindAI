@@ -54,6 +54,7 @@ def test_comparison_breaks_down_types_and_keeps_missing_denominators():
 def test_local_aggregate_report_omits_questions_and_refuses_overwrite(tmp_path, monkeypatch):
     import json
     import sys
+    from types import SimpleNamespace
 
     from scripts import compare_time_retrieval as module
     from video_rag.retrieval import onnx_semantic
@@ -61,14 +62,16 @@ def test_local_aggregate_report_omits_questions_and_refuses_overwrite(tmp_path, 
     video, subtitles, questions = root / "video.mp4", root / "video.srt", root / "questions.json"
     video.write_bytes(b"video")
     subtitles.write_bytes(b"subtitle")
-    questions.write_text(json.dumps({"questions": [{"question": "PRIVATE QUESTION"}]}), encoding="utf-8")
+    questions.write_text(json.dumps({"questions": [{"question": "PRIVATE QUESTION",
+                                                    "evidence_start_seconds": 0,
+                                                    "evidence_end_seconds": 20}]}), encoding="utf-8")
     model = root / "model"
     (model / "onnx").mkdir(parents=True)
     (model / "onnx" / "model_quantized.onnx").write_bytes(b"model")
     (model / "tokenizer.json").write_bytes(b"tokenizer")
     output = root / "artifacts" / "report.json"
     monkeypatch.setattr(module, "ROOT", root)
-    monkeypatch.setattr(module, "segments_from_subtitles", lambda *args: ["segment"])
+    monkeypatch.setattr(module, "segments_from_subtitles", lambda *args: [SimpleNamespace(start_time=0, end_time=5)])
     monkeypatch.setattr(module, "build_transcript_segments", lambda segments: object())
     monkeypatch.setattr(onnx_semantic, "OnnxSentenceEncoder", lambda path: object())
     monkeypatch.setattr(onnx_semantic, "build_semantic_pipeline", lambda *args: object())
@@ -79,6 +82,7 @@ def test_local_aggregate_report_omits_questions_and_refuses_overwrite(tmp_path, 
     assert module.main() == 0
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["aggregate_only"] and "results" not in report["comparison"]
+    assert report["coverage_feasibility"]["structurally_unattainable"] == 1
     assert "PRIVATE QUESTION" not in output.read_text(encoding="utf-8")
     assert len(report["input_sha256"]) == 5
     with pytest.raises(SystemExit) as error:
