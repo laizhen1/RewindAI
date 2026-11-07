@@ -59,6 +59,16 @@ Open `http://127.0.0.1:5097/` on the same computer. Play the reference and candi
 
 **Suggest exact refusals** can prefill unanswered judgments only for the fixed insufficient-evidence response. It does not overwrite existing judgments, recognize other refusal wording or verify the reference; the reviewer must check each suggestion before declaring review.
 
+### Experimental local AI-judge agreement
+
+I provide a research-only command to compare a local text-only judge against completed development or validation judgments. It receives the recorded model question, answer and exact excerpts, but cannot inspect the video. It requires complete, consistent human judgments and an explicit review declaration; test-split data are rejected. Model and input fingerprints are checked before and after inference, and the output is written to a new file in an ignored local directory.
+
+```powershell
+python scripts/evaluate_local_judge.py --review PATH_TO_LOCAL_REVIEW_JSON --model PATH_TO_LOCAL_GGUF --output artifacts/local_answer_review/judge-agreement.json --confirm-reviewed
+```
+
+The report shows agreement on valid judge labels, agreement including invalid outputs, and exclusions for missing model input. It contains row numbers, judgments and fingerprints, so it must remain private when course material is used. Agreement with a reviewer is not factual accuracy, independent verification or a replacement for human review. The judge can be wrong, can misinterpret the transcript, and cannot verify the recording. This command is diagnostic only; it does not train a model or alter review judgments.
+
 ## Human review and question-level metrics
 
 After creating a review draft, a person must check every reference and generated answer against the recording, including whether the cited evidence supports every claim. Alternatively, in the local JSON, set `human_answer_verdict` to `correct`, `incorrect` or `abstain`, and `human_evidence_verdict` to `supported`, `unsupported` or `not_applicable`. Use `correct` only for an answerable question when both the answer and evidence are supported. If the answer adds an unsupported claim, mark it incorrect even if it contains a caveat. Use `abstain` only if the answer makes no unsupported answer claim, and pair it with `not_applicable`. The `retrieval_abstained` field only describes retrieval and must not automatically determine the judgment.
