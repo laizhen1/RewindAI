@@ -64,12 +64,12 @@ def evaluate(videos: list[dict], questions: list[dict], context_sentences: int =
             total[index] += count
         abstained += int(answer.abstained)
         top1_overlap += int(bool(predicted) and predicted[0] in reference)
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
+    precision = tp / (tp + fp) if tp + fp else None
+    recall = tp / (tp + fn) if tp + fn else None
+    f1 = 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None
     result = {"question_count": len(questions), "video_count": len(pipelines), "context_sentences": context_sentences,
               "tp": tp, "fp": fp, "fn": fn,
-              "precision": precision, "recall": recall, "f1": 2 * precision * recall / (precision + recall)
-              if precision + recall else 0.0, "top1_overlap_count": top1_overlap,
+              "precision": precision, "recall": recall, "f1": f1, "top1_overlap_count": top1_overlap,
               "top1_overlap_rate": top1_overlap / len(questions), "abstained": abstained}
     if bootstrap_samples:
         if len(per_video) < 2:
@@ -80,16 +80,20 @@ def evaluate(videos: list[dict], questions: list[dict], context_sentences: int =
         for _ in range(bootstrap_samples):
             sampled = [rng.choice(units) for _ in units]
             a, b, c = (sum(unit[i] for unit in sampled) for i in range(3))
-            p = a / (a + b) if a + b else 0.0
-            r = a / (a + c) if a + c else 0.0
-            distributions["precision"].append(p)
-            distributions["recall"].append(r)
-            distributions["f1"].append(2 * p * r / (p + r) if p + r else 0.0)
+            values = {"precision": a / (a + b) if a + b else None,
+                      "recall": a / (a + c) if a + c else None,
+                      "f1": 2 * a / (2 * a + b + c) if 2 * a + b + c else None}
+            for key, value in values.items():
+                if value is not None:
+                    distributions[key].append(value)
         intervals = {}
         for key, values in distributions.items():
             values.sort()
-            intervals[key] = [values[int((len(values) - 1) * 0.025)], values[int((len(values) - 1) * 0.975)]]
-        result["video_bootstrap"] = {"samples": bootstrap_samples, "seed": seed, "percentile_95": intervals}
+            intervals[key] = ([values[int((len(values) - 1) * 0.025)], values[int((len(values) - 1) * 0.975)]]
+                              if values else None)
+        result["video_bootstrap"] = {"samples": bootstrap_samples, "seed": seed, "percentile_95": intervals,
+                                     "defined_samples": {key: len(values) for key, values in distributions.items()},
+                                     "warning": "Intervals exclude samples where the metric is undefined."}
     return result
 
 

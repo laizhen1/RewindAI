@@ -117,6 +117,8 @@ On the original `test.json` (Git blob `de3b59001325df56c33c6180d62353054a5ebfbe`
 
 Counts are aggregated over question–sentence pairs; precision is TP/(TP+FP), recall is TP/(TP+FN), and F1 is their harmonic mean. Reference spans often include multiple sentences while the system returns at most three, limiting achievable recall; this experiment is not directly comparable to full answer-span prediction results in the paper. A sentence within a reference span is treated as relevant without independent semantic review, and source transcript quality and the inclusive-index interpretation may affect scores. These numbers are **not** video-timestamp precision/recall, answer accuracy, speech-recognition performance, or a measure of the full multimodal system. Test data were not used to choose or tune the retrieval settings for this run.
 
+The evaluator now reports undefined precision as `null` when there are no predicted sentences; F1 remains zero when there are missed reference sentences but no predictions. Bootstrap intervals exclude undefined metric samples and report their defined-sample counts, so those intervals are conditional on a defined metric. Historical intervals below used an earlier convention that counted undefined precision as zero; they have not been recomputed under the revised convention. The point estimates in this section have nonzero denominators.
+
 To reproduce, obtain `videos.json` and `test.json` directly from the linked TutorialVQA repository, observe its noncommercial data licence and citation requirements, then run locally:
 
 ```powershell

@@ -21,10 +21,10 @@ from video_rag.retrieval.onnx_semantic import OnnxSentenceEncoder, build_semanti
 
 def metrics(counts):
     tp, fp, fn = counts
-    precision = tp / (tp + fp) if tp + fp else 0.0
-    recall = tp / (tp + fn) if tp + fn else 0.0
+    precision = tp / (tp + fp) if tp + fp else None
+    recall = tp / (tp + fn) if tp + fn else None
     return {"precision": precision, "recall": recall,
-            "f1": 2 * precision * recall / (precision + recall) if precision + recall else 0.0}
+            "f1": 2 * tp / (2 * tp + fp + fn) if 2 * tp + fp + fn else None}
 
 
 def paired_bootstrap(units, samples=2000, seed=42):
@@ -38,20 +38,23 @@ def paired_bootstrap(units, samples=2000, seed=42):
         return [sum(unit[method][i] for unit in chosen) for i in range(3)]
     def difference(chosen):
         a, b = metrics(summed(chosen, 0)), metrics(summed(chosen, 1))
-        return {key: b[key] - a[key] for key in a}
+        return {key: b[key] - a[key] if a[key] is not None and b[key] is not None else None for key in a}
     point = difference(units)
     rng = random.Random(seed)
     values = {key: [] for key in point}
     for _ in range(samples):
         delta = difference([rng.choice(units) for _ in units])
-        for key in values:
-            values[key].append(delta[key])
+        for key, distribution in values.items():
+            if delta[key] is not None:
+                distribution.append(delta[key])
     intervals = {}
     for key, dist in values.items():
         dist.sort()
-        intervals[key] = [dist[int((samples - 1) * .025)], dist[int((samples - 1) * .975)]]
+        intervals[key] = ([dist[int((len(dist) - 1) * .025)], dist[int((len(dist) - 1) * .975)]]
+                          if dist else None)
     return {"samples": samples, "seed": seed, "semantic_minus_keyword": point,
-            "percentile_95": intervals}
+            "percentile_95": intervals, "defined_samples": {key: len(dist) for key, dist in values.items()},
+            "warning": "Intervals exclude samples where either system's metric is undefined."}
 
 
 def compare(videos, questions, semantic_builder, samples=2000, seed=42):

@@ -59,3 +59,24 @@ def test_video_bootstrap_is_reproducible_and_requires_multiple_videos():
     assert a["video_bootstrap"]["percentile_95"]["recall"] == [0.0, 1.0]
     with pytest.raises(ValueError):
         evaluate(videos, questions[:1], bootstrap_samples=10)
+
+
+def test_no_predictions_has_undefined_precision_and_zero_f1():
+    videos = [{"video_id": "1", "transcript": ["apple"]}, {"video_id": "2", "transcript": ["orange"]}]
+    questions = [{"video_id": "1", "question": "missing", "answer_start": 0, "answer_end": 0},
+                 {"video_id": "2", "question": "missing", "answer_start": 0, "answer_end": 0}]
+    result = evaluate(videos, questions, bootstrap_samples=20, seed=7)
+    assert result["precision"] is None and result["recall"] == result["f1"] == 0
+    assert result["video_bootstrap"]["percentile_95"]["precision"] is None
+    assert result["video_bootstrap"]["defined_samples"]["precision"] == 0
+    assert result["video_bootstrap"]["defined_samples"]["f1"] == 20
+
+
+def test_bootstrap_excludes_undefined_precision_samples():
+    videos = [{"video_id": "1", "transcript": ["apple"]}, {"video_id": "2", "transcript": ["orange"]}]
+    questions = [{"video_id": "1", "question": "apple", "answer_start": 0, "answer_end": 0},
+                 {"video_id": "2", "question": "missing", "answer_start": 0, "answer_end": 0}]
+    result = evaluate(videos, questions, bootstrap_samples=100, seed=7)
+    bootstrap = result["video_bootstrap"]
+    assert 0 < bootstrap["defined_samples"]["precision"] < 100
+    assert bootstrap["percentile_95"]["precision"] == [1.0, 1.0]
