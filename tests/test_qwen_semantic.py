@@ -32,9 +32,30 @@ def test_qwen_queries_use_instruction_documents_do_not(tmp_path, monkeypatch):
     assert calls[1][0] == ['document']
     assert calls[2][0] == [f'Instruct: {QUERY_INSTRUCTION}\nQuery:question']
     assert calls[1][1] == {'normalize': True, 'truncate': True}
+    assert calls[2][1] == {'normalize': True, 'truncate': False}
     assert docs.shape == (1, 1024) and query.shape == (1024,)
     assert np.linalg.norm(query) == pytest.approx(1)
     assert semantic_model_files(model) == {'semantic_model': model.resolve()}
+
+
+def test_qwen_long_query_is_rejected_instead_of_truncated(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            pass
+
+        def embed(self, texts, **kwargs):
+            calls.append(kwargs)
+            raise ValueError('Requested tokens (513) exceed batch size of 512')
+
+    monkeypatch.setitem(sys.modules, 'llama_cpp', types.SimpleNamespace(Llama=FakeLlama))
+    monkeypatch.setitem(sys.modules, 'llama_cpp.llama_cpp', types.SimpleNamespace(LLAMA_POOLING_TYPE_LAST=7))
+    model = tmp_path / 'model.gguf'; model.touch()
+    encoder = Qwen3EmbeddingEncoder(model)
+    with pytest.raises(RuntimeError, match='shorten'):
+        encoder.encode_query('long question')
+    assert calls == [{'normalize': True, 'truncate': False}]
 
 
 def test_qwen_rejects_invalid_embedding_output():

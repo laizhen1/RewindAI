@@ -31,11 +31,16 @@ class Qwen3EmbeddingEncoder:
         self._last_query: tuple[str, np.ndarray] | None = None
         self._document_cache: OrderedDict[str, np.ndarray] = OrderedDict()
 
-    def _embed(self, texts: list[str]) -> np.ndarray:
+    def _embed(self, texts: list[str], *, truncate: bool = True) -> np.ndarray:
         if not texts or any(not isinstance(text, str) or not text.strip() for text in texts):
             raise ValueError('Provide at least one nonempty text')
         with self._lock:
-            vectors = np.asarray(self._model.embed(texts, normalize=True, truncate=True), dtype=np.float32)
+            try:
+                vectors = np.asarray(self._model.embed(texts, normalize=True, truncate=truncate), dtype=np.float32)
+            except ValueError as exc:
+                if not truncate and "exceed batch size" in str(exc):
+                    raise RuntimeError('The question exceeds the Qwen3 retrieval token limit; shorten it. / 问题超出 Qwen3 检索长度，请缩短问题。') from exc
+                raise
         if vectors.ndim != 2 or vectors.shape[0] != len(texts) or vectors.shape[1] != 1024:
             raise ValueError('Qwen3 embedding model returned an unexpected shape')
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
@@ -76,6 +81,6 @@ class Qwen3EmbeddingEncoder:
         with self._query_lock:
             if self._last_query is not None and self._last_query[0] == query:
                 return self._last_query[1].copy()
-            vector = self._embed([f'Instruct: {QUERY_INSTRUCTION}\nQuery:{query}'])[0]
+            vector = self._embed([f'Instruct: {QUERY_INSTRUCTION}\nQuery:{query}'], truncate=False)[0]
             self._last_query = (query, vector.copy())
             return vector.copy()
