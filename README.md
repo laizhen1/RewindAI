@@ -23,6 +23,7 @@ I built RewindAI as a local AI learning workspace for finding and reviewing know
    cd RewindAI
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
+   python -m pip install --only-binary=:all: "llama-cpp-python>=0.3.36,<0.4" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
    python -m pip install -e ".[asr,qwen-semantic]" huggingface-hub
    cd frontend
    npm ci
@@ -30,7 +31,7 @@ I built RewindAI as a local AI learning workspace for finding and reviewing know
    cd ..
    ```
 
-   If PowerShell blocks activation, use the virtual environment's Python directly (`.\.venv\Scripts\python.exe`) for each Python command. Installing `llama-cpp-python` may require a compatible CPU wheel or a C++ build environment; see the [installation guide](https://github.com/abetlen/llama-cpp-python#installation).
+   If `python` is not found, install Python from [python.org](https://www.python.org/downloads/) and enable its PATH option, then reopen PowerShell. If PowerShell blocks activation, use the virtual environment's Python directly (`.\.venv\Scripts\python.exe`) for each Python command. The first pip command requests an official prebuilt CPU wheel and fails rather than silently compiling if none matches your platform. If no wheel is available, follow the upstream [installation guide](https://github.com/abetlen/llama-cpp-python#installation) to use a supported wheel or C++ compiler.
 
 2. Download the public pre-trained models explicitly. The third command is only needed to transcribe videos without timed subtitles:
 

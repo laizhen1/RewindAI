@@ -23,6 +23,7 @@
    cd RewindAI
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1
+   python -m pip install --only-binary=:all: "llama-cpp-python>=0.3.36,<0.4" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
    python -m pip install -e ".[asr,qwen-semantic]" huggingface-hub
    cd frontend
    npm ci
@@ -30,7 +31,7 @@
    cd ..
    ```
 
-   如果 PowerShell 禁止激活脚本，可将后续 `python` 替换为 `.\.venv\Scripts\python.exe`。`llama-cpp-python` 可能需要兼容的 CPU 版本或 C++ 编译环境，参见[安装说明](https://github.com/abetlen/llama-cpp-python#installation)。
+   如果找不到 `python`，请从 [python.org](https://www.python.org/downloads/) 安装 Python 并启用 PATH 选项，然后重新打开 PowerShell。如果 PowerShell 禁止激活脚本，可将后续 `python` 替换为 `.\.venv\Scripts\python.exe`。第一条 pip 命令获取官方预编译 CPU wheel；如果平台没有兼容版本，命令会报错而不会自动编译。此时请参考上游[安装说明](https://github.com/abetlen/llama-cpp-python#installation)选择兼容版本或配置 C++ 编译环境。
 
 2. 下载公开预训练模型；第三条仅在需要为无时间戳字幕的视频自动转录时需要：
 

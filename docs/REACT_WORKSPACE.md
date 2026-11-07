@@ -9,10 +9,11 @@ Use Python 3.11 or later and a current Node.js LTS release. From the repository 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --only-binary=:all: "llama-cpp-python>=0.3.36,<0.4" --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 python -m pip install -e ".[dev,asr,qwen-semantic]" huggingface-hub
 ```
 
-The `llama-cpp-python` dependency may require a compatible CPU wheel or a C++ build environment. Then install the locked frontend dependencies and build the React assets:
+The first command requests an upstream prebuilt CPU wheel and refuses to compile if no compatible binary is available. If it fails, consult the upstream [installation instructions](https://github.com/abetlen/llama-cpp-python#installation) for supported binaries or a C++ compiler. If `python` is not found, install Python and add it to PATH before reopening the terminal. Then install the locked frontend dependencies and build the React assets:
 
 ```powershell
 cd frontend
