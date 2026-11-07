@@ -8,9 +8,16 @@
 
 > **项目状态**：本项目处于开发和验证阶段。CPU 演示使用预设文本与简化检索，不代表真实视频识别或模型效果；完整多模态流程需独立安装模型、准备视频并完成评测。仅适合本地使用，不要直接部署到公网。
 
-![RewindAI 工作台截图，展示合成示例视频、检索结果和收藏笔记](docs/images/rewindai-workspace.jpg)
+![RewindAI 桌面工作台横向截图，展示合成示例视频](docs/images/rewindai-workspace-landscape.png)
 
 *截图使用合成演示内容，仓库不包含课程录像。*
+
+<details>
+<summary>查看窄屏工作台截图</summary>
+
+![RewindAI 工作台截图，展示合成示例视频、检索结果和收藏笔记](docs/images/rewindai-workspace.jpg)
+
+</details>
 
 ## Windows 快速开始
 

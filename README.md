@@ -8,9 +8,16 @@ I built RewindAI as a local AI learning workspace for finding and reviewing know
 
 > **Project status:** Under development and evaluation. The CPU demo uses preset text and simplified retrieval; it does not demonstrate real video understanding. The full multimodal pipeline requires separate model setup and independent evaluation. The workspace is intended for local use and should not be deployed directly to the public internet.
 
-![RewindAI workspace showing a synthetic lecture, search result and saved note](docs/images/rewindai-workspace.jpg)
+![RewindAI desktop workspace with a synthetic demo lecture](docs/images/rewindai-workspace-landscape.png)
 
-*Workspace preview using synthetic demonstration content. No lecture recordings are included.*
+*Workspace previews use synthetic demonstration content. No lecture recordings are included.*
+
+<details>
+<summary>View the narrow-screen workspace</summary>
+
+![RewindAI workspace with a synthetic lecture, search result and saved note](docs/images/rewindai-workspace.jpg)
+
+</details>
 
 ## Get started: Windows
 

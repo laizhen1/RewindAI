@@ -58,7 +58,13 @@ To remove a lecture from the searchable library, select it and choose **Remove f
 
 Rate a response or transcript excerpt and optionally add a note in the feedback dialog. The question, rating, selected evidence identifier and note are stored in the local database; the response itself is not saved as part of this feedback. Use `/classic` to review or delete saved feedback.
 
-If the React assets have not been built, `/` serves the original workspace. Rebuild after frontend changes. The React workspace does not yet expose every advanced function of the original interface; use `/classic` for visual search, subtitle replacement, feedback history and other established tools.
+If the React assets have not been built, `/` serves the original workspace. Rebuild after frontend changes. The React workspace does not yet expose every advanced function of the original interface; use `/classic` for subtitle replacement, feedback history and other established tools.
+
+### Experimental frame search
+
+Frame search requires an additional local CLIP model and is not enabled by the standard React launcher. Install the optional `semantic` dependencies and prepare the public model as described in [the visual experiment guide](LOCAL_VISUAL_EXPERIMENT.md). Start `scripts/run_transcript.py` with `--visual-model PATH_TO_CLIP_DIRECTORY`; add the `--semantic-model` and `--answer-model` arguments shown above if you also want Qwen retrieval and generated answers. The directory must contain `tokenizer.json` and `onnx/model_quantized.onnx`. With the visual model enabled, choose **Find a frame** and enter an English visual description.
+
+Visual search samples at most 100 segment midpoints in the selected scope. It can miss relevant moments and return irrelevant frames even when there is no match. Frame previews and timestamps are candidates for manual review, not generated answers or proof of image understanding. The first search and a changed scope can take longer while the local index is built.
 
 ## Privacy and responsibility
 
