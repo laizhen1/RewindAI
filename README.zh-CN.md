@@ -8,6 +8,46 @@
 
 > **项目状态**：本项目处于开发和验证阶段。CPU 演示使用预设文本与简化检索，不代表真实视频识别或模型效果；完整多模态流程需独立安装模型、准备视频并完成评测。仅适合本地使用，不要直接部署到公网。
 
+![RewindAI 工作台截图，展示合成示例视频、检索结果和收藏笔记](docs/images/rewindai-workspace.jpg)
+
+*截图使用合成演示内容，仓库不包含课程录像。*
+
+## Windows 快速开始
+
+需要 Windows 10/11、Python 3.11 或更高版本、Node.js/npm、Git、初次安装时的网络连接以及数 GB 可用空间。两个主要模型合计约 2.7 GB，依赖、可选转录模型和用户视频还需要额外空间。默认启动方式使用 CPU，加载和生成回答可能需要一些时间。
+
+1. 在 PowerShell 中运行：
+
+   ```powershell
+   git clone https://github.com/laizhen1/RewindAI.git
+   cd RewindAI
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install -e ".[asr,qwen-semantic]" huggingface-hub
+   cd frontend
+   npm ci
+   npm run build
+   cd ..
+   ```
+
+   如果 PowerShell 禁止激活脚本，可将后续 `python` 替换为 `.\.venv\Scripts\python.exe`。`llama-cpp-python` 可能需要兼容的 CPU 版本或 C++ 编译环境，参见[安装说明](https://github.com/abetlen/llama-cpp-python#installation)。
+
+2. 下载公开预训练模型；第三条仅在需要为无时间戳字幕的视频自动转录时需要：
+
+   ```powershell
+   python scripts/setup_qwen_embedding.py
+   python scripts/setup_answer_model.py
+   python scripts/setup_whisper_model.py
+   ```
+
+   下载的是公开模型，不是课程录像。Qwen3 负责检索，Qwen2.5 负责生成回答；导入视频只建立索引，不会训练模型。
+
+3. 在项目文件夹运行 `Start-RewindAI-React.cmd`，保持窗口打开，然后访问 **http://127.0.0.1:5000/**。点击 **Add lecture**，选择有权使用的视频和可选 SRT/VTT 字幕，确认使用权限与本机存储。等待索引或转录完成后即可提问，并点击时间戳回看。
+
+   如果显示旧界面，请在 `frontend` 重新运行 `npm run build` 并重启。如果提示缺少模型，请重新运行对应下载命令；添加 `--check-only` 可离线检查缓存。如果 5000 端口被占用，请关闭占用该端口的服务，或参考[完整指南](docs/REACT_WORKSPACE.md)手动启动。
+
+浏览器仅将文件发送给本机 RewindAI 服务。视频副本和衍生数据保存在本机，移除资料库条目不会删除这些文件。请确认课程所有者与学校允许处理录像；其他平台和隐私细节见[完整指南](docs/REACT_WORKSPACE.md)。
+
 ## 当前功能
 
 - **课程管理：**组织课程与视频；删除课程时，视频和笔记会保留。

@@ -8,6 +8,46 @@ I built RewindAI as a local AI learning workspace for finding and reviewing know
 
 > **Project status:** Under development and evaluation. The CPU demo uses preset text and simplified retrieval; it does not demonstrate real video understanding. The full multimodal pipeline requires separate model setup and independent evaluation. The workspace is intended for local use and should not be deployed directly to the public internet.
 
+![RewindAI workspace showing a synthetic lecture, search result and saved note](docs/images/rewindai-workspace.jpg)
+
+*Workspace preview using synthetic demonstration content. No lecture recordings are included.*
+
+## Get started: Windows
+
+**You need:** Windows 10/11, Python 3.11 or newer, Node.js with npm, Git, internet for initial installation, and several GB of free disk space. The two main model files total approximately 2.7 GB; dependencies, the optional transcription model, and your own videos require additional space. The documented launcher uses CPU and can take time to load and answer.
+
+1. Open PowerShell in the folder where you want the project and run:
+
+   ```powershell
+   git clone https://github.com/laizhen1/RewindAI.git
+   cd RewindAI
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install -e ".[asr,qwen-semantic]" huggingface-hub
+   cd frontend
+   npm ci
+   npm run build
+   cd ..
+   ```
+
+   If PowerShell blocks activation, use the virtual environment's Python directly (`.\.venv\Scripts\python.exe`) for each Python command. Installing `llama-cpp-python` may require a compatible CPU wheel or a C++ build environment; see the [installation guide](https://github.com/abetlen/llama-cpp-python#installation).
+
+2. Download the public pre-trained models explicitly. The third command is only needed to transcribe videos without timed subtitles:
+
+   ```powershell
+   python scripts/setup_qwen_embedding.py
+   python scripts/setup_answer_model.py
+   python scripts/setup_whisper_model.py
+   ```
+
+   These commands download model files, not your lectures. Qwen3 finds relevant text; Qwen2.5 generates answers. Importing a video builds an index and does not train either model.
+
+3. Run `Start-RewindAI-React.cmd` from the project folder and keep its window open. Visit **http://127.0.0.1:5000/** on the same computer. Click **Add lecture**, select a video and optionally an SRT/VTT subtitle file, and confirm that you have permission and understand local storage. Wait for indexing or transcription to finish, then ask a question and click a timestamp to check the video.
+
+   If the page shows the classic interface, rerun `npm run build` in `frontend` and restart the launcher. If a model is reported missing, rerun its setup command; add `--check-only` to check the cache without downloading. If port 5000 is already in use, stop the other service or follow the manual startup instructions in the [full setup guide](docs/REACT_WORKSPACE.md).
+
+The browser uploads files only to the local RewindAI server. Video copies and derived files remain on your computer, and removing a library entry does not erase them. Use recordings only when their owner and institution permit processing; see the [privacy and setup guide](docs/REACT_WORKSPACE.md) for details and other platforms.
+
 ## Features
 
 - **Course management:** Organize indexed videos into courses while preserving videos and notes when a course is deleted.
@@ -41,7 +81,7 @@ The React interface connects the local video library, Qwen3 semantic retrieval, 
 
 The import dialog accepts an authorized local video and optional timed subtitles. It requires confirmation of permission and local storage before importing. Without subtitles, a cached Whisper base model performs local transcription. Qwen3 builds the retrieval index; importing a video does not train the model. The full privacy and deletion details are in the guide. Some advanced functions remain available in the original interface at `/classic`.
 
-## Quick start
+## Lightweight CPU demo
 
 The CPU demo needs no large model download. From the project root:
 

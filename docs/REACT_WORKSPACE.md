@@ -41,7 +41,17 @@ Qwen3 is already pre-trained. Importing a video transcribes or reads its caption
 
 On Windows, double-click `Start-RewindAI-React.cmd` and open [http://127.0.0.1:5000/](http://127.0.0.1:5000/). Keep the command window open. The launcher requires the built frontend and the local Qwen3 and answer-model files. On other platforms, run `scripts/run_transcript.py` with the `--semantic-model` and `--answer-model` paths described in the main README.
 
-Select **Add lecture**, choose a video and optionally an SRT/VTT file, read the privacy notice, and confirm both permission and local storage. With subtitles the app builds the index directly; otherwise it starts a CPU transcription job using the cached Whisper base model. The video limit is 2 GiB and the subtitle limit is 10 MiB. Processing can take time and transcripts can contain errors. Ask a question, review the returned excerpts, and use the timestamp to return to the recording. Save useful moments and notes locally.
+For manual startup on any platform, use the model paths printed by the two setup commands. For example, after activating the virtual environment:
+
+```bash
+python scripts/run_transcript.py --semantic-model /path/to/Qwen3-Embedding-0.6B-Q8_0.gguf --answer-model /path/to/qwen2.5-3b-instruct-q4_k_m.gguf --port 5001
+```
+
+Replace both paths with your own and open `http://127.0.0.1:5001/`. Choose an unused port. On Windows, quote paths containing spaces. The GUI launcher uses port 5000; do not run two instances on the same port. If `HF_HOME`, `HF_HUB_CACHE` or `HUGGINGFACE_HUB_CACHE` is set, Whisper may use that cache instead of the project cache; make sure its base model is available there before transcription.
+
+Select **Add lecture**, choose a video and optionally an SRT/VTT file, read the privacy notice, and confirm both permission and local storage. With subtitles the app builds the index directly; otherwise it starts a CPU transcription job using the cached Whisper base model. The video limit is 2 GiB and the subtitle limit is 10 MiB. Processing can take time and transcripts can contain errors. Ask a question, review the returned excerpts and their lecture names, and use the timestamp to return to the recording. Search results are candidates, not a guarantee that the answer is supported. Save useful moments and notes locally.
+
+To remove a lecture from the searchable library, select it and choose **Remove from library**. This removes its index entry, not its video or subtitle files; saved moments and notes are retained but may become unavailable until compatible material is re-imported. The confirmation explains this before removal.
 
 If the React assets have not been built, `/` serves the original workspace. Rebuild after frontend changes. The React workspace does not yet expose every advanced function of the original interface; use `/classic` for visual search, subtitle replacement, feedback history and other established tools.
 
