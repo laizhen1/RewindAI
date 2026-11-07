@@ -68,6 +68,33 @@ async function harness(answer = 'Synthetic') {
   }
   {
     const h = await harness();
+    const reuse = h.elements.reuseJudgments.onclick();
+    h.change('verdict', 'incorrect');
+    h.reply({judgments: [{answer: 'correct', evidence: 'supported'}]}); await reuse;
+    assert.match(h.elements.result.textContent, /nothing was replaced/);
+    assert.equal(h.elements.verdict.value, 'incorrect');
+    assert.equal(h.isDirty(), true);
+  }
+  {
+    const h = await harness();
+    h.change('verdict', 'incorrect');
+    const reuse = h.elements.reuseJudgments.onclick();
+    h.reply({judgments: [{answer: 'correct', evidence: 'supported'}]}); await reuse;
+    assert.equal(h.elements.verdict.value, 'incorrect');
+    assert.equal(h.elements.support.value, '');
+  }
+  {
+    const h = await harness();
+    const reuse = h.elements.reuseJudgments.onclick();
+    h.reply({judgments: [{answer: 'correct', evidence: 'supported'}]}); await reuse;
+    assert.match(h.elements.result.textContent, /Suggested 1 unchanged judgments/);
+    assert.equal(h.elements.verdict.value, 'correct');
+    assert.equal(h.elements.support.value, 'supported');
+    assert.equal(h.elements.confirmed.checked, false);
+    assert.equal(h.isDirty(), true);
+  }
+  {
+    const h = await harness();
     h.change('verdict', 'correct'); h.change('support', 'supported');
     h.elements.confirmed.checked = true;
     const save = h.elements.save.onclick();

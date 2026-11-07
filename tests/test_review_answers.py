@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from scripts.review_answers import create_review_app
+from scripts.review_answers import create_review_app, reusable_judgments
 from scripts.score_answer_review import summarize
 
 
@@ -68,6 +68,47 @@ def test_failed_generation_allows_progress_but_cannot_be_scored(review_app):
     response = client.post('/api/save', json={'confirm_human_review': True, 'judgments': judgments})
     assert response.status_code == 400 and 'Generation failed' in response.json['error']
     assert not list(review.parent.glob('reviewed-*.json'))
+
+
+def test_reuse_suggests_only_identical_bound_outputs_and_never_changes_files(review_app):
+    _client, video, review = review_app
+    current = json.loads(review.read_text(encoding='utf-8'))
+    current['input_sha256'].update(subtitles='a' * 64, model='b' * 64, annotations='c' * 64,
+                                   annotation_binding='d' * 64)
+    current['generation_config'] = {'prompt_version': 'v1'}
+    for index, item in enumerate(current['rows']):
+        item.update(question_id=f'q{index}', retrieval_abstained=False, model_question=item['question'],
+                    evidence=[{'text': 'synthetic', 'model_excerpt': 'synthetic'}], latency_ms=5)
+    previous = json.loads(json.dumps(current))
+    previous['human_review_state'] = 'in_progress_not_verified'
+    previous['rows'][0].update(human_answer_verdict='correct', human_evidence_verdict='supported', latency_ms=99)
+    previous['rows'][1].update(human_answer_verdict='incorrect', human_evidence_verdict='unsupported')
+    current['rows'][1]['answer'] = 'changed answer'
+    expected = {'q0': {'answer': 'correct', 'evidence': 'supported'}}
+    assert reusable_judgments(current, previous) == expected
+    for key in ('generation_config', 'retrieval_config', 'input_sha256', 'split'):
+        changed = json.loads(json.dumps(previous)); changed[key] = None
+        assert reusable_judgments(current, changed) == {}
+    missing = json.loads(json.dumps(current)); del missing['rows'][0]['model_question']
+    assert reusable_judgments(missing, previous) == {}
+    changed_evidence = json.loads(json.dumps(current)); changed_evidence['rows'][0]['evidence'][0]['model_excerpt'] = 'different'
+    assert reusable_judgments(changed_evidence, previous) == {}
+    failed = json.loads(json.dumps(current)); failed['rows'][0]['generation_error'] = 'failed'
+    assert reusable_judgments(failed, previous) == {}
+    duplicate = json.loads(json.dumps(current)); duplicate['rows'][1]['question_id'] = 'q0'
+    assert reusable_judgments(duplicate, previous) == {}
+    final_test = json.loads(json.dumps(current)); final_test['split'] = 'test'
+    prior_test = json.loads(json.dumps(previous)); prior_test['split'] = 'test'
+    assert reusable_judgments(final_test, prior_test) == {}
+    review.write_text(json.dumps(current), encoding='utf-8')
+    progress = review.parent / 'progress-synthetic.json'
+    progress.write_text(json.dumps(previous), encoding='utf-8')
+    before = (review.read_bytes(), progress.read_bytes())
+    client = create_review_app(video, review, allowed_roots=(review.parent,)).test_client()
+    response = client.get('/api/progress/reusable')
+    assert response.status_code == 200
+    assert response.json['judgments'] == [expected['q0'], None]
+    assert (review.read_bytes(), progress.read_bytes()) == before
 
 
 def test_rejects_changed_sources_and_wrong_video(review_app, tmp_path):

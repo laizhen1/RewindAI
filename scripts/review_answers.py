@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -18,6 +19,67 @@ from flask import Flask, jsonify, render_template, request, send_file
 from scripts.score_answer_review import summarize
 from video_rag.evaluation.private_output import PRIVATE_ROOTS, private_output
 from video_rag.evaluation.provenance import fingerprint
+
+
+def reusable_judgments(current: dict, previous: dict) -> dict[str, dict]:
+    """Suggest completed decisions only for identical outputs and bound inputs."""
+    if (not isinstance(current, dict) or not isinstance(previous, dict)
+            or current.get('split') not in {'development', 'validation'}
+            or previous.get('human_review_state') not in {'in_progress_not_verified', 'complete_not_independently_verified'}):
+        return {}
+    keys = ('status', 'split', 'binding', 'input_sha256', 'generation_config', 'retrieval_config')
+    if any(current.get(key) != previous.get(key) for key in keys):
+        return {}
+    hashes = current.get('input_sha256')
+    if (not isinstance(hashes, dict) or not {'video', 'subtitles', 'model'} <= hashes.keys()
+            or not ({'annotations', 'annotation_binding'} <= hashes.keys() or 'questions' in hashes)
+            or any(not isinstance(value, str) or not re.fullmatch(r'[0-9a-f]{64}', value)
+                   for value in hashes.values())):
+        return {}
+    if not isinstance(current.get('generation_config'), dict) or not isinstance(current.get('retrieval_config'), dict):
+        return {}
+    new_rows, old_rows = current.get('rows'), previous.get('rows')
+    if not isinstance(new_rows, list) or not isinstance(old_rows, list):
+        return {}
+    def keyed(rows):
+        if any(not isinstance(row, dict) or not isinstance(row.get('question_id'), str)
+               or not row['question_id'] for row in rows):
+            return None
+        values = {row['question_id']: row for row in rows}
+        return values if len(values) == len(rows) else None
+    new, old = keyed(new_rows), keyed(old_rows)
+    if new is None or old is None or set(new) != set(old):
+        return {}
+    def immutable(row):
+        return {key: value for key, value in row.items()
+                if key not in {'human_answer_verdict', 'human_evidence_verdict', 'latency_ms'}}
+    matches = {}
+    for question_id, row in new.items():
+        prior = old[question_id]
+        if row.get('generation_error') is not None or prior.get('generation_error') is not None:
+            continue
+        evidence = row.get('evidence')
+        if type(row.get('retrieval_abstained')) is not bool or not isinstance(evidence, list):
+            continue
+        if row['retrieval_abstained']:
+            if evidence:
+                continue
+        elif (not isinstance(row.get('model_question'), str) or not evidence
+              or any(not isinstance(item, dict) or 'model_excerpt' not in item
+                     or (item['model_excerpt'] is not None and not isinstance(item['model_excerpt'], str))
+                     for item in evidence)
+              or not any(isinstance(item['model_excerpt'], str) for item in evidence)):
+            continue
+        if immutable(row) != immutable(prior):
+            continue
+        decision = {'answer': prior.get('human_answer_verdict'), 'evidence': prior.get('human_evidence_verdict')}
+        candidate = {**row, 'human_answer_verdict': decision['answer'], 'human_evidence_verdict': decision['evidence']}
+        try:
+            summarize({**current, 'rows': [candidate]}, include_by_type=False)
+        except (ValueError, TypeError):
+            continue
+        matches[question_id] = decision
+    return matches
 
 
 def create_review_app(video: Path, review: Path, *, allowed_roots=PRIVATE_ROOTS,
@@ -139,6 +201,33 @@ def create_review_app(video: Path, review: Path, *, allowed_roots=PRIVATE_ROOTS,
             except (OSError, UnicodeError, ValueError, TypeError, KeyError):
                 continue
         return jsonify(error='No matching saved progress found'), 404
+
+    @app.get('/api/progress/reusable')
+    def reusable_progress():
+        if not unchanged():
+            return jsonify(error='Video or review changed; restart'), 409
+        if report.get('split') not in {'development', 'validation'}:
+            return jsonify(error='Judgment reuse is only available for development and validation'), 409
+        candidates = []
+        for pattern in ('progress-*.json', 'reviewed-*.json'):
+            for path in review.parent.glob(pattern):
+                try:
+                    path = private_output(path, roots=allowed_roots)
+                    if path.is_file() and path.stat().st_size <= 20 * 1024 * 1024:
+                        candidates.append((path.stat().st_mtime_ns, path))
+                except (OSError, ValueError):
+                    continue
+        matches = {}
+        for _, path in sorted(candidates, reverse=True)[:100]:
+            try:
+                previous = json.loads(path.read_text(encoding='utf-8-sig'))
+                for question_id, decision in reusable_judgments(report, previous).items():
+                    matches.setdefault(question_id, decision)
+            except (OSError, UnicodeError, ValueError, TypeError):
+                continue
+        if not unchanged():
+            return jsonify(error='Video or review changed; restart'), 409
+        return jsonify(judgments=[matches.get(row.get('question_id')) for row in rows])
 
     @app.post('/api/progress')
     def save_progress():
