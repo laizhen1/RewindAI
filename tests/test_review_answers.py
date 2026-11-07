@@ -35,6 +35,8 @@ def test_review_saves_new_copy_and_local_metrics(review_app):
                  {'answer': 'abstain', 'evidence': 'not_applicable'}]
     result = client.post('/api/save', json={'confirm_human_review': True, 'judgments': decisions})
     assert result.status_code == 201 and result.json['metrics']['f1'] == 1.0
+    assert result.json['metrics']['evidence_supported_answers'] == 1
+    assert result.json['metrics']['evidence_support_rate_among_answers'] == 1
     saved = review.parent / result.json['filename']
     reviewed = json.loads(saved.read_text(encoding='utf-8'))
     assert summarize(reviewed)['tn'] == 1 and reviewed['retrieval_config']['threshold'] == 0.4

@@ -24,6 +24,7 @@ def summarize(report: dict) -> dict:
     tp = fp = fn = tn = 0
     generated = unrecorded = 0
     answerable_count = unanswerable_count = answerable_abstained = 0
+    supported_count = unsupported_count = 0
     for row in rows:
         if not isinstance(row, dict) or type(row.get('expected_answerable')) is not bool:
             raise ValueError('Every row must have a boolean reference label')
@@ -44,6 +45,8 @@ def summarize(report: dict) -> dict:
             raise ValueError('An abstention requires evidence verdict not_applicable')
         if verdict != 'abstain' and evidence == 'not_applicable':
             raise ValueError('Evidence not_applicable is only valid for an abstention')
+        supported_count += int(evidence == 'supported')
+        unsupported_count += int(evidence == 'unsupported')
         if verdict == 'correct':
             tp += 1
         elif verdict == 'incorrect':
@@ -57,8 +60,14 @@ def summarize(report: dict) -> dict:
     return {'question_count': len(rows), 'model_generated_questions': generated,
             'answerable_questions': answerable_count, 'unanswerable_questions': unanswerable_count,
             'answerable_abstentions': answerable_abstained,
+            'answerable_abstention_rate': answerable_abstained / answerable_count if answerable_count else None,
             'unanswerable_abstentions': tn,
             'unanswerable_abstention_rate': tn / unanswerable_count if unanswerable_count else None,
+            'evidence_supported_answers': supported_count,
+            'evidence_unsupported_answers': unsupported_count,
+            'evidence_support_rate_among_answers': (
+                supported_count / (supported_count + unsupported_count)
+                if supported_count + unsupported_count else None),
             'question_origin_not_recorded': unrecorded, 'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn,
             'precision': tp / (tp + fp) if tp + fp else None,
             'recall': tp / (tp + fn) if tp + fn else None,

@@ -19,6 +19,9 @@ def test_answer_metrics_count_wrong_answer_as_fp_and_fn():
     assert result['question_origin_not_recorded'] == 5 and result['model_generated_questions'] == 0
     assert result['answerable_questions'] == 3 and result['unanswerable_questions'] == 2
     assert result['answerable_abstentions'] == 1 and result['unanswerable_abstention_rate'] == .5
+    assert result['answerable_abstention_rate'] == pytest.approx(1/3)
+    assert result['evidence_supported_answers'] == 1 and result['evidence_unsupported_answers'] == 2
+    assert result['evidence_support_rate_among_answers'] == pytest.approx(1/3)
 
 
 def test_requires_complete_consistent_reviews_and_reserves_test():
@@ -33,6 +36,15 @@ def test_requires_complete_consistent_reviews_and_reserves_test():
     scores = summarize({**base, 'rows': [row(False, 'abstain')]})
     assert scores['precision'] is None and scores['recall'] is None and scores['f1'] is None
     assert scores['answerable_questions'] == 0 and scores['unanswerable_abstention_rate'] == 1
+    assert scores['answerable_abstention_rate'] is None
+    assert scores['evidence_support_rate_among_answers'] is None
+
+
+def test_supported_evidence_does_not_imply_a_correct_answer():
+    result = summarize({'status': 'unreviewed_answer_drafts',
+                        'rows': [row(True, 'incorrect', 'supported')]})
+    assert result['evidence_support_rate_among_answers'] == 1
+    assert result['f1'] == 0
 
 
 def test_question_origin_is_counted_without_claiming_independence():
