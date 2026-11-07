@@ -32,6 +32,8 @@ def summarize(report: dict, *, include_by_type: bool = True) -> dict:
     for row in rows:
         if not isinstance(row, dict) or type(row.get('expected_answerable')) is not bool:
             raise ValueError('Every row must have a boolean reference label')
+        if row.get('generation_error') is not None:
+            raise ValueError('Generation failed for at least one question; regenerate before scoring')
         kind = row.get('question_type', 'unlabeled')
         if not isinstance(kind, str) or kind not in {'audio', 'visual', 'ocr', 'multimodal', 'unknown_route', 'unlabeled'}:
             raise ValueError('Invalid question type')

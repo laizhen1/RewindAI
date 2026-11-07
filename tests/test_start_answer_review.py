@@ -56,6 +56,33 @@ def test_create_draft_from_bound_local_labels(sources, monkeypatch):
     assert report['input_sha256']['video'] == hashlib.sha256(video.read_bytes()).hexdigest()
 
 
+def test_generation_failure_is_preserved_in_private_draft(sources, monkeypatch):
+    from scripts.review_answers import create_review_app
+    from video_rag.adapters.local_answer import LocalAnswerGenerationError
+
+    video, subs, labels, model, root = sources
+
+    class Generator:
+        model_input = staticmethod(LocalAnswerGenerator.model_input)
+        def __init__(self, path):
+            pass
+        def metadata(self):
+            return {'prompt_version': 'test'}
+        def generate(self, query, segments):
+            raise LocalAnswerGenerationError('Model failed')
+
+    monkeypatch.setattr('scripts.start_answer_review.LocalAnswerGenerator', Generator)
+    target = create_draft(video, subs, labels, 'sample', 'development', model, root / 'runs', allowed_roots=(root,))
+    report = json.loads(target.read_text(encoding='utf-8'))
+    assert report['rows'][0]['generation_error'] == 'Model failed'
+    assert report['rows'][0]['evidence'] and 'model_excerpt' not in report['rows'][0]['evidence'][0]
+    client = create_review_app(video, target, allowed_roots=(root,)).test_client()
+    assert client.get('/api/review').json['rows'][0]['generation_error'] == 'Model failed'
+    response = client.post('/api/save', json={'confirm_human_review': True,
+                           'judgments': [{'answer': 'abstain', 'evidence': 'not_applicable'}]})
+    assert response.status_code == 400 and 'Generation failed' in response.json['error']
+
+
 def test_create_semantic_draft_records_models_and_configuration(sources, monkeypatch):
     import numpy as np
 

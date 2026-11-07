@@ -55,6 +55,21 @@ def test_requires_human_declaration_complete_consistent_verdicts_and_local_origi
     assert len(list(review.parent.glob('reviewed-*.json'))) == 0
 
 
+def test_failed_generation_allows_progress_but_cannot_be_scored(review_app):
+    _client, video, review = review_app
+    report = json.loads(review.read_text(encoding='utf-8'))
+    report['rows'][0]['generation_error'] = 'Context limit exceeded'
+    failed = review.parent / 'failed-draft.json'
+    failed.write_text(json.dumps(report), encoding='utf-8')
+    client = create_review_app(video, failed, allowed_roots=(review.parent,)).test_client()
+    judgments = [{'answer': 'abstain', 'evidence': 'not_applicable'},
+                 {'answer': 'abstain', 'evidence': 'not_applicable'}]
+    assert client.post('/api/progress', json={'judgments': judgments}).status_code == 201
+    response = client.post('/api/save', json={'confirm_human_review': True, 'judgments': judgments})
+    assert response.status_code == 400 and 'Generation failed' in response.json['error']
+    assert not list(review.parent.glob('reviewed-*.json'))
+
+
 def test_rejects_changed_sources_and_wrong_video(review_app, tmp_path):
     client, video, review = review_app
     other = tmp_path / 'other.mp4'; other.write_bytes(b'wrong video')

@@ -10,7 +10,7 @@ from time import perf_counter
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'src'))
 
-from video_rag.adapters.local_answer import LocalAnswerGenerator
+from video_rag.adapters.local_answer import LocalAnswerGenerationError, LocalAnswerGenerator
 from video_rag.evaluation.private_output import private_output
 from video_rag.evaluation.provenance import fingerprint, verify_sources
 from video_rag.transcript_baseline import build_transcript_segments, segments_from_subtitles
@@ -35,9 +35,16 @@ def prepare_review(pipeline, data: dict, *, allow_frozen_test: bool = False, mod
                                           question_type not in {'audio', 'visual', 'ocr', 'multimodal', 'unknown_route'}):
             raise ValueError('Invalid question type')
         started = perf_counter()
-        answer = pipeline.ask(item['question'])
+        generation_error = None
+        try:
+            answer = pipeline.ask(item['question'])
+        except LocalAnswerGenerationError as exc:
+            generation_error = str(exc)
+            # Preserve retrievable context, but do not misrepresent a retry as
+            # the evidence actually supplied to the failed generation attempt.
+            answer = pipeline.ask(item['question'], generate_answer=False)
         model_input = (model_input_builder(item['question'].strip(), [hit.segment for hit in answer.evidence])
-                       if model_input_builder is not None and not answer.abstained else None)
+                       if model_input_builder is not None and not answer.abstained and generation_error is None else None)
         evidence = [{'start': hit.segment.start_time, 'end': hit.segment.end_time,
                      'text': hit.segment.transcript} for hit in answer.evidence]
         if model_input is not None:
@@ -54,6 +61,8 @@ def prepare_review(pipeline, data: dict, *, allow_frozen_test: bool = False, mod
             'latency_ms': round((perf_counter() - started) * 1000, 1),
             'human_answer_verdict': None, 'human_evidence_verdict': None,
         }
+        if generation_error is not None:
+            row['generation_error'] = generation_error
         if model_input is not None:
             row['model_question'] = model_input['question']
         if question_type is not None:

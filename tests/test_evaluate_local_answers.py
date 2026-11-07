@@ -28,6 +28,25 @@ def test_review_preserves_question_type_without_inventing_one():
         prepare_review(StubPipeline(), {'questions': [{'question': 'Why?', 'question_type': 'invalid'}]})
 
 
+def test_generation_failure_keeps_other_questions_without_inventing_model_input():
+    from video_rag.adapters.local_answer import LocalAnswerGenerationError
+
+    class Pipeline:
+        def ask(self, question, *, generate_answer=True):
+            if question == 'Fails?' and generate_answer:
+                raise LocalAnswerGenerationError('Model context limit exceeded')
+            segment = VideoSegment('s', 'v', 'video.mp4', 0, 3, transcript='Candidate')
+            return Answer(answer='Supported answer' if generate_answer else '',
+                          evidence=(Evidence(segment, 0.5, 0.6),))
+
+    rows = prepare_review(Pipeline(), {'questions': [{'question': 'Fails?'}, {'question': 'Works?'}]},
+                          model_input_builder=lambda q, s: {'question': q, 'excerpts': [s[0].transcript]})
+    assert len(rows) == 2 and rows[0]['generation_error'] == 'Model context limit exceeded'
+    assert rows[0]['answer'] == '' and rows[0]['evidence'][0]['text'] == 'Candidate'
+    assert 'model_question' not in rows[0] and 'model_excerpt' not in rows[0]['evidence'][0]
+    assert rows[1]['answer'] == 'Supported answer' and rows[1]['model_question'] == 'Works?'
+
+
 def test_rejects_test_split_and_invalid_questions():
     with pytest.raises(ValueError, match='reserved'):
         prepare_review(StubPipeline(), {'split': 'test', 'questions': [{'question': 'Why?'}]})

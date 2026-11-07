@@ -59,6 +59,8 @@ Open `http://127.0.0.1:5097/` on the same computer. Play the reference and candi
 
 The summary also reports median and nearest-rank P95 query time when recorded, with counts of available and missing observations. Timing includes local retrieval and generation but excludes model loading, index construction, and human review. Queries run sequentially, and caching and machine load affect the result; a small-sample P95 is not a general performance guarantee.
 
+If local answer generation fails for a question but a fresh retrieval succeeds, the draft records the failure and continues with later questions. The displayed candidates were retrieved again after the failure and are not claimed to be the failed attempt's model input. Save review progress if useful, then fix the cause and regenerate the draft before scoring: a failed generation is neither a refusal nor an incorrect answer. Progress is bound to the original draft and is not automatically transferred to a regenerated draft. If retrieval itself fails, the batch still stops and no review draft is saved.
+
 **Suggest exact refusals** can prefill unanswered judgments only for the fixed insufficient-evidence response. It does not overwrite existing judgments, recognize other refusal wording or verify the reference; the reviewer must check each suggestion before declaring review.
 
 ### Experimental local AI-judge agreement

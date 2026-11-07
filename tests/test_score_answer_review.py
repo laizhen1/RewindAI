@@ -40,6 +40,12 @@ def test_requires_complete_consistent_reviews_and_reserves_test():
     assert scores['evidence_support_rate_among_answers'] is None
 
 
+def test_failed_generation_cannot_be_scored_as_an_abstention():
+    failed = {**row(True, 'abstain'), 'generation_error': 'Context limit'}
+    with pytest.raises(ValueError, match='Generation failed'):
+        summarize({'status': 'unreviewed_answer_drafts', 'rows': [failed]})
+
+
 def test_supported_evidence_does_not_imply_a_correct_answer():
     result = summarize({'status': 'unreviewed_answer_drafts',
                         'rows': [row(True, 'incorrect', 'supported')]})
