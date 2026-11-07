@@ -45,13 +45,14 @@ def main() -> None:
         if args.subtitles and len(args.subtitles) != len(args.video):
             parser.error("Provide one --subtitles for each --video, or omit all for sidecars")
         subtitles = args.subtitles or [find_subtitles(video) for video in args.video]
-        sources = list(zip(args.video, subtitles, strict=True))
+        sources = [(video.expanduser().resolve(), subtitle.expanduser().resolve())
+                   for video, subtitle in zip(args.video, subtitles, strict=True)]
         source_versions = {}
         for video, _ in sources:
-            path = video.expanduser().resolve()
-            stat = path.stat()
-            source_versions[path] = (stat.st_size, stat.st_mtime_ns)
-        pipeline = build_transcript_library(sources) if sources else build_transcript_segments([])
+            stat = video.stat()
+            source_versions[video] = (stat.st_size, stat.st_mtime_ns)
+        pipeline = (build_transcript_library(sources) if sources and not args.save_startup_video
+                    else build_transcript_segments([]))
         generator = None
         builder = None
         if args.answer_model:
@@ -79,8 +80,6 @@ def main() -> None:
                 retriever = ClipFrameRetriever(visual_encoder)
                 retriever.build(segments)
                 return retriever
-        if args.save_startup_video:
-            pipeline = builder([]) if builder else build_transcript_segments([])
         app = create_app(pipeline, mode="transcript", transcript_builder=builder,
                          retrieval_type=retrieval_type, visual_builder=visual_builder,
                          answer_mode="local_experimental" if generator else "extractive")
@@ -94,7 +93,7 @@ def main() -> None:
         if args.save_startup_video:
             video, subtitle = sources[0]
             response = app.test_client().post("/api/library/local-video", json={
-                "video_path": str(video.resolve()), "subtitle_path": str(subtitle.resolve()),
+                "video_path": str(video), "subtitle_path": str(subtitle),
             })
             if response.status_code != 201:
                 message = (response.get_json(silent=True) or {}).get("error", "import failed")

@@ -17,6 +17,9 @@ def test_startup_video_is_saved_for_restart_and_duplicate_is_not_overwritten(tmp
     monkeypatch.setattr(sys, "argv", ["run_transcript.py", "--video", str(video), "--subtitles", str(subtitles),
                                       "--save-startup-video"])
     monkeypatch.setattr(Flask, "run", lambda self, **kwargs: None)
+    def reject_redundant_build(sources):
+        raise AssertionError('Saved startup videos should be indexed by the library import once')
+    monkeypatch.setattr(run_transcript, 'build_transcript_library', reject_redundant_build)
     run_transcript.main()
     client = create_app(build_transcript_segments([]), mode="transcript").test_client()
     assert len(client.get("/api/library").get_json()["videos"]) == 1
@@ -27,6 +30,28 @@ def test_startup_video_is_saved_for_restart_and_duplicate_is_not_overwritten(tmp
     reopened = create_app(build_transcript_segments([]), mode="transcript").test_client()
     assert not reopened.post("/api/ask", json={"question": "original"}).get_json()["abstained"]
     assert reopened.post("/api/ask", json={"question": "replacement"}).get_json()["abstained"]
+
+
+def test_startup_build_uses_the_same_resolved_video_path_as_the_guard(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    video = tmp_path / 'lesson.mp4'
+    video.write_bytes(b'original video')
+    subtitles = tmp_path / 'lesson.srt'
+    subtitles.write_text('1\n00:00:01,000 --> 00:00:04,000\nExample.\n', encoding='utf-8')
+    (tmp_path / 'nested').mkdir()
+    build = run_transcript.build_transcript_library
+    seen = []
+
+    def capture(sources):
+        seen.extend(sources)
+        return build(sources)
+
+    monkeypatch.setattr(run_transcript, 'build_transcript_library', capture)
+    monkeypatch.setattr(Flask, 'run', lambda self, **kwargs: None)
+    monkeypatch.setattr(sys, 'argv', ['run_transcript.py', '--video', str(tmp_path / 'nested' / '..' / video.name),
+                                     '--subtitles', str(subtitles)])
+    run_transcript.main()
+    assert seen == [(video.resolve(), subtitles.resolve())]
 
 
 def test_save_flag_requires_one_video(monkeypatch):

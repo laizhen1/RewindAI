@@ -56,6 +56,8 @@ For a transcript candidate, **View surrounding subtitles** loads the adjacent in
 
 The import dialog shows the browser-to-local-server copy progress when available. Reaching 100% means the copy was sent, not that indexing has finished; keep the page open while the server processes it. If the connection is interrupted, reload and check the library before retrying because the import may already have succeeded. Videos without subtitles continue with a separate transcription status after the copy is accepted.
 
+Local transcription can be cancelled while audio is being transcribed. Once index construction starts, wait for it to finish; the original video and any generated subtitle copy remain on this computer.
+
 To remove a lecture from the searchable library, select it and choose **Remove from library**. This removes its index entry, not its video or subtitle files; saved moments and notes are retained but may become unavailable until compatible material is re-imported. The confirmation explains this before removal.
 
 If you correct a transcript, select the lecture and choose **Update subtitles** to provide a timed SRT/VTT file. The local server rebuilds the index from it; the original media and subtitles are not changed. Bookmarks with exactly matching time ranges retain their links, while other notes remain saved but may need new bookmarks. The server removes its own temporary upload after processing when possible; the browser or operating system may retain temporary copies. A copy of the subtitle content is stored in the local index.
