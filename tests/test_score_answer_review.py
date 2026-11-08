@@ -22,6 +22,8 @@ def test_answer_metrics_count_wrong_answer_as_fp_and_fn():
     assert result['answerable_abstention_rate'] == pytest.approx(1/3)
     assert result['evidence_supported_answers'] == 1 and result['evidence_unsupported_answers'] == 2
     assert result['evidence_support_rate_among_answers'] == pytest.approx(1/3)
+    assert result['answered_questions'] == 3 and result['answer_rate'] == pytest.approx(3/5)
+    assert result['unsupported_answer_rate_per_question'] == pytest.approx(2/5)
 
 
 def test_requires_complete_consistent_reviews_and_reserves_test():
@@ -38,6 +40,8 @@ def test_requires_complete_consistent_reviews_and_reserves_test():
     assert scores['answerable_questions'] == 0 and scores['unanswerable_abstention_rate'] == 1
     assert scores['answerable_abstention_rate'] is None
     assert scores['evidence_support_rate_among_answers'] is None
+    assert scores['answered_questions'] == 0 and scores['answer_rate'] == 0
+    assert scores['unsupported_answer_rate_per_question'] == 0
 
 
 def test_failed_generation_cannot_be_scored_as_an_abstention():

@@ -84,6 +84,9 @@ def summarize(report: dict, *, include_by_type: bool = True) -> dict:
             'unanswerable_abstention_rate': tn / unanswerable_count if unanswerable_count else None,
             'evidence_supported_answers': supported_count,
             'evidence_unsupported_answers': unsupported_count,
+            'answered_questions': supported_count + unsupported_count,
+            'answer_rate': (supported_count + unsupported_count) / len(rows),
+            'unsupported_answer_rate_per_question': unsupported_count / len(rows),
             'evidence_support_rate_among_answers': (
                 supported_count / (supported_count + unsupported_count)
                 if supported_count + unsupported_count else None),
