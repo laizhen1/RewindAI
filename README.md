@@ -113,11 +113,11 @@ Open `http://127.0.0.1:5000`. The demo uses two preset segments, not lecture rec
 Run tests and the documented lint check with:
 
 ```bash
-python -m pytest -q
+python -m pytest --capture=sys -q
 python -m ruff check src/video_rag/api scripts/ingest_local.py tests/test_ingest_local.py tests/test_library_api.py
 ```
 
-Some tests are skipped when optional dependencies such as FAISS or PyAV are not installed. Passing the lightweight test suite does not validate the full multimodal model workflow.
+Some tests are skipped when optional dependencies such as FAISS or PyAV are not installed. On the tested Windows environment, pytest's default file-descriptor capture caused FAISS DLL initialization to fail after earlier tests; `--capture=sys` avoided that failure. Passing the lightweight test suite does not validate the full multimodal model workflow.
 
 ## Work with local video
 

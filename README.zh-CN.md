@@ -145,11 +145,11 @@ python scripts/run_demo.py
 测试与代码检查：
 
 ```bash
-python -m pytest -q
+python -m pytest --capture=sys -q
 python -m ruff check src/video_rag/api scripts/ingest_local.py tests/test_ingest_local.py tests/test_library_api.py
 ```
 
-未安装 FAISS、PyAV 等可选依赖时，相关测试会跳过。轻量测试通过并不代表完整多模态模型流程已验证。
+未安装 FAISS、PyAV 等可选依赖时，相关测试会跳过。在已测试的 Windows 环境中，pytest 默认的文件描述符捕获会导致 FAISS 在部分测试之后无法初始化；使用 `--capture=sys` 可避开该问题。轻量测试通过并不代表完整多模态模型流程已验证。
 
 ## 真实视频流程
 

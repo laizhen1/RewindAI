@@ -25,6 +25,7 @@ from scripts.review_retrieval_relevance import segment_fingerprint
 from video_rag.api.visual_sampling import sample_visual_segments
 from video_rag.evaluation.private_output import private_output
 from video_rag.evaluation.provenance import fingerprint
+from video_rag.evaluation.retrieval import hit_at_k, recall_at_k, reciprocal_rank
 from video_rag.retrieval.fusion import reciprocal_rank_fusion
 from video_rag.retrieval.onnx_semantic import SemanticRetriever
 from video_rag.retrieval.semantic_models import load_semantic_encoder, semantic_model_files
@@ -192,8 +193,33 @@ def frozen_snapshot(prepared: dict, comparison_gold: list[dict]) -> dict:
             'comparison_gold': comparison_gold}
 
 
+def paired_differences(predictions: dict, gold: dict) -> dict:
+    """Compare each route against text on the same questions; output aggregates only."""
+    if not gold or 'text' not in predictions or any(set(rows) != set(gold) for rows in predictions.values()):
+        raise ValueError('Paired comparisons require the same nonempty set of questions for every route')
+    pairs = {}
+    functions = {
+        'recall@5': lambda ranking, relevant: recall_at_k(ranking, relevant, 5),
+        'hit@5': lambda ranking, relevant: hit_at_k(ranking, relevant, 5),
+        'mrr@5': lambda ranking, relevant: reciprocal_rank(ranking[:5], relevant),
+    }
+    for route in ('frame', 'rrf', 'text_reranked'):
+        if route not in predictions:
+            continue
+        comparisons = {}
+        for name, metric in functions.items():
+            diffs = [metric(predictions[route][qid], set(relevant))
+                     - metric(predictions['text'][qid], set(relevant)) for qid, relevant in gold.items()]
+            tied = sum(math.isclose(value, 0, abs_tol=1e-12) for value in diffs)
+            improved = sum(value > 1e-12 for value in diffs)
+            comparisons[name] = {'mean_difference': sum(diffs) / len(diffs), 'improved': improved,
+                                 'worsened': len(diffs) - tied - improved, 'tied': tied}
+        pairs[f'{route}_minus_text'] = {'question_count': len(gold), 'metrics': comparisons}
+    return pairs
+
+
 def compare_rankings(questions: list, gold: dict, text_retriever, visual_retriever, known_ids: set[str],
-                     *, reranker=None, segments_by_id: dict | None = None) -> dict:
+                     *, reranker=None, segments_by_id: dict | None = None, paired_out: dict | None = None) -> dict:
     """Compare fixed top-five rankings without using unanswerable questions."""
     positive = [item for item in questions if item['expected_answerable']]
     if not positive or set(gold) != {item['question_id'] for item in positive}:
@@ -233,6 +259,8 @@ def compare_rankings(questions: list, gold: dict, text_retriever, visual_retriev
             predictions['text_reranked'][qid] = [segment.segment_id for segment, _ in ordered[:5]]
         scored_questions.append({'question_id': qid, 'question_type': item.get('question_type', 'unlabeled'),
                                  'relevant_segment_ids': gold[qid]})
+    if paired_out is not None:
+        paired_out.update(paired_differences(predictions, gold))
     return {name: metrics_with_breakdown(ranking, scored_questions, cutoffs=(1, 5))
             for name, ranking in predictions.items()}
 
@@ -297,8 +325,9 @@ def main() -> int:
             reranker = TranscriptOnlyReranker(str(prepared['model_dir']), device_map='cpu', max_length=1024,
                                              local_files_only=True)
         segment_map = {item.segment_id: item for item in segments}
+        paired = {}
         results = compare_rankings(data['questions'], ground_truth, text, visual, set(segment_map),
-                                   reranker=reranker, segments_by_id=segment_map)
+                                   reranker=reranker, segments_by_id=segment_map, paired_out=paired)
         verify_inputs(prepared)
         if is_test and (fingerprint(manifest_path) != manifest_hash
                         or comparison_gold_metadata(args.other_gold, prepared['hashes']['video']) != other):
@@ -313,11 +342,12 @@ def main() -> int:
                   'unanswerable_questions_excluded': sum(not item['expected_answerable'] for item in data['questions']),
                   'settings': {**prepared['settings'], 'sampled_segments': len(sampled),
                                'total_segments': len(segments)},
-                  'metrics': results,
+                  'metrics': results, 'paired_comparisons': paired,
                   'warning': 'Labels and completeness are user declarations, not independently verified. '
                              'Top-five unthresholded ranking differs from the workspace top-three pipeline. '
                              'Frame sampling can omit evidence; code hashes and dependency versions do not capture '
-                             'every runtime detail. Keep this report and fingerprints local.'}
+                             'every runtime detail. Paired differences are descriptive, not proof of generalization. '
+                             'Keep this report and fingerprints local.'}
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('x', encoding='utf-8', newline='\n') as out:
             json.dump(report, out, ensure_ascii=False, indent=2, allow_nan=False)

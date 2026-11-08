@@ -247,6 +247,7 @@ def test_local_comparison_saves_only_aggregate_and_detects_source_mutation(sourc
     assert module.main() == 0
     reranked = json.loads(reranked_output.read_text(encoding='utf-8'))
     assert 'text_reranked' in reranked['metrics'] and reranked['settings']['rerank_candidate_depth'] == 20
+    assert 'text_reranked_minus_text' in reranked['paired_comparisons']
     assert 'reranker:model.safetensors' in reranked['source_sha256']
     assert module.os.environ['HF_HUB_OFFLINE'] == module.os.environ['TRANSFORMERS_OFFLINE'] == '1'
     output2 = private / 'changed.json'
@@ -259,3 +260,17 @@ def test_local_comparison_saves_only_aggregate_and_detects_source_mutation(sourc
     with pytest.raises(SystemExit):
         module.main()
     assert not output2.exists()
+
+
+def test_paired_comparison_counts_improvements_regressions_and_ties():
+    from scripts.evaluate_local_segment_retrieval import paired_differences
+
+    gold = {'q1': ['a'], 'q2': ['b'], 'q3': ['c']}
+    rankings = {'text': {'q1': ['x'], 'q2': ['b'], 'q3': ['c']},
+                'frame': {'q1': ['a'], 'q2': ['x'], 'q3': ['c']}}
+    result = paired_differences(rankings, gold)['frame_minus_text']
+    assert result['question_count'] == 3
+    for metric in ('recall@5', 'hit@5', 'mrr@5'):
+        assert result['metrics'][metric] == {'mean_difference': 0, 'improved': 1, 'worsened': 1, 'tied': 1}
+    with pytest.raises(ValueError):
+        paired_differences({'text': {'q1': ['a']}}, gold)
