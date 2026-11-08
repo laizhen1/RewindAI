@@ -59,6 +59,10 @@
 
 下面的流程用于**开发集或验证集**。先用本机时间标注页保存问题，然后启动片段相关性复核页；它按视频时间显示所有字幕片段，不展示模型排名。对照录像选择直接支持答案的全部片段。只有实际逐段核对后才声明已核验；只有完整检查整段视频并找齐所有相关片段后才声明完整。保存的是本机草稿，声明不构成独立验证；修改视频、字幕、题目或片段切分后须重新标注。
 
+页面中的“在字幕中定位参考时间”可跳到最近的字幕片段，不会自动标记相关性；仍需检查完整视频，寻找其他相关证据。
+
+候选时间轴由字幕生成，不覆盖录像中所有时间。若问题依赖所有字幕片段之外的画面，现有页面无法标记、检索也无法找到该证据；此时不要声明标注完整，应先调整分段并重新标注，才能声称评估整段视频的召回。即使片段被采样，单个中点帧也可能错过画面。
+
 ```bash
 python scripts/review_retrieval_relevance.py --video PATH_TO_LOCAL_VIDEO --subtitles PATH_TO_LOCAL_SRT --labels PATH_TO_LOCAL_LABELS_CSV --video-id VIDEO_ID --split validation --output-dir artifacts/evaluation/relevance
 ```

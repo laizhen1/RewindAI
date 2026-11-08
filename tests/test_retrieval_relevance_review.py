@@ -225,6 +225,7 @@ def test_local_comparison_saves_only_aggregate_and_detects_source_mutation(sourc
     assert set(report['metrics']) == {'text', 'frame', 'rrf'}
     assert 'Private question' not in text and 'private answer' not in text and 'First fact' not in text
     assert report['metrics']['text']['overall']['recall@5'] == 1
+    assert 'visual evidence in gaps' in report['warning']
     with pytest.raises(SystemExit):
         module.main()
     from video_rag.adapters import qwen

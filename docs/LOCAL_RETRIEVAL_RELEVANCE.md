@@ -1,6 +1,8 @@
 # Local segment-relevance review and retrieval comparison
 
-This development/validation workflow evaluates text, sampled video frames and RRF on the same questions. It does not establish answer correctness, hallucination reduction, a reranker improvement, or a final test result. Keep course videos, subtitles, labels, segment IDs, fingerprints and reports on the local computer.
+This development/validation workflow evaluates text, sampled video frames and RRF on the same questions. It does not establish answer correctness, hallucination reduction, a reranker improvement, or a final test result. Keep course videos, subtitles, labels, segment IDs, fingerprints and reports on the local computer. In the review page, **Find reference in transcript** scrolls to the nearest segment without marking it relevant; it does not replace checking the full video for other evidence.
+
+The candidate timeline is built from subtitle cues, not fixed windows covering the entire recording. A visual event outside every subtitle-derived segment cannot be marked relevant or retrieved. If an answer depends on such a gap, do not declare its labels exhaustive; change the segmentation and re-label before claiming full-video recall. Even inside a sampled segment, the single midpoint frame can miss the relevant event.
 
 1. Save a video-bound CSV of questions using the local [time-labeling workflow](REWINDAI_EVALUATION_ZH.md). Install the documented PyAV and local model dependencies. Use a separate video for each split and avoid selecting thresholds or prompts on the final test video.
 2. Start the local relevance reviewer. It shows all transcript segments in video order, without retrieval rankings. Watch the original recording and select every segment that directly supports each answer. Time overlap by itself is not relevance.

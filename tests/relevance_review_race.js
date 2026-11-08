@@ -6,11 +6,11 @@ const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '../src/video_rag/api/templates/relevance_review.html'), 'utf8');
 const script = html.split('<script>')[1].split('</script>')[0];
 
-async function harness() {
+async function harness(overrides = {}) {
   const elements = {};
   const element = () => ({children: [], textContent: '', checked: false, disabled: false, scrollTop: 0,
     append(...items) { this.children.push(...items); }, replaceChildren() { this.children = []; },
-    play() { return Promise.resolve(); }});
+    play() { return Promise.resolve(); }, scrollIntoView() { this.scrolled = true; }});
   const getElementById = id => elements[id] ??= element();
   let pending, beforeUnload;
   const context = {
@@ -21,7 +21,7 @@ async function harness() {
       if (url === '/api/data') return Promise.resolve({ok: true, json: async () => ({
         questions: [{question_id:'q1',question:'Synthetic?',expected_answer:'A',question_type:'audio',
                      evidence_start_seconds:1,evidence_end_seconds:3}],
-        segments: [{id:'s1',start:1,end:3,text:'Synthetic evidence'}],unanswerable_excluded:0})});
+        segments: [{id:'s1',start:1,end:3,text:'Synthetic evidence'}],unanswerable_excluded:0,...overrides})});
       return new Promise(resolve => {pending = {url, options, resolve};});
     },
   };
@@ -34,6 +34,21 @@ async function harness() {
 }
 
 (async () => {
+  {
+    const h=await harness();h.elements.showReference.onclick();
+    assert.equal(h.elements.segments.children[0].scrolled,true);
+    assert.equal(h.elements.segments.children[0].children[2].children[0].checked,false);
+    assert.match(h.elements.status.textContent,/review the entire video/);
+    assert.equal(h.dirty(),false);
+  }
+  {
+    const h=await harness({questions:[{question_id:'q1',question:'Synthetic?',expected_answer:'A',question_type:'audio',
+                                      evidence_start_seconds:9,evidence_end_seconds:11}],
+                           segments:[{id:'s1',start:1,end:3,text:'Earlier'}, {id:'s2',start:10,end:12,text:'Later'}]});
+    h.elements.showReference.onclick();
+    assert.equal(h.elements.segments.children[1].scrolled,true);
+    assert.equal(h.dirty(),false);
+  }
   {
     const h=await harness();h.elements.segments.scrollTop=42;
     assert.match(h.elements.excluded.textContent,/0 unanswerable/);

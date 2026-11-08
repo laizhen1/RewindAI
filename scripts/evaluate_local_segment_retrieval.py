@@ -345,7 +345,9 @@ def main() -> int:
                   'metrics': results, 'paired_comparisons': paired,
                   'warning': 'Labels and completeness are user declarations, not independently verified. '
                              'Top-five unthresholded ranking differs from the workspace top-three pipeline. '
-                             'Frame sampling can omit evidence; code hashes and dependency versions do not capture '
+                             'Frames are sampled only within subtitle-derived segments; visual evidence in gaps '
+                             'cannot be indexed or labeled, and sampling can omit other evidence. '
+                             'Code hashes and dependency versions do not capture '
                              'every runtime detail. Paired differences are descriptive, not proof of generalization. '
                              'Keep this report and fingerprints local.'}
         target.parent.mkdir(parents=True, exist_ok=True)
