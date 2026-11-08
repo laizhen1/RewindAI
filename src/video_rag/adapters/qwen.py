@@ -16,11 +16,13 @@ class Qwen3Reranker:
         device_map: str = "auto",
         max_length: int = 8192,
         unload_after_score: bool = False,
+        local_files_only: bool = False,
     ) -> None:
         self.model_name = model_name
         self.device_map = device_map
         self.max_length = max_length
         self.unload_after_score = unload_after_score
+        self.local_files_only = local_files_only
         self._tokenizer: Any = None
         self._model: Any = None
         self._prefix_tokens: list[int] = []
@@ -39,12 +41,14 @@ class Qwen3Reranker:
             self._tokenizer = AutoTokenizer.from_pretrained(
                 self.model_name,
                 padding_side="left",
+                local_files_only=self.local_files_only,
             )
-            dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+            dtype = torch.bfloat16 if self.device_map != "cpu" and torch.cuda.is_available() else torch.float32
             self._model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 torch_dtype=dtype,
                 device_map=self.device_map,
+                local_files_only=self.local_files_only,
             ).eval()
             prefix = (
                 "<|im_start|>system\nJudge whether the Document meets the requirements "
@@ -104,14 +108,11 @@ class Qwen3Reranker:
         try:
             import gc
 
-            gc.collect()
-            if "torch" in globals() and torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            else:
-                import torch
+            import torch
 
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         except ImportError:
             pass
 
@@ -194,6 +195,7 @@ class QwenVLService:
         self._processor = None
         try:
             import gc
+
             import torch
 
             gc.collect()

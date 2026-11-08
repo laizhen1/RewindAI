@@ -51,7 +51,39 @@
 
 ## 5. 测量与报告
 
-两组对同一批可回答测试题计算 **Recall@K**：前 K 个片段是否包含至少一个人工标记的相关片段；报告 K、命中数与题目总数，并按问题类型列出。由于相邻片段可能同样有效，也单独人工检查视频和时间段是否覆盖证据。
+两组对同一批可回答测试题分别计算 **Recall@K**（每题前 K 个片段找回的相关片段数 ÷ 该题标记的全部相关片段数，再对题目取平均）和 **Hit@K**（前 K 个片段是否至少命中一个相关片段，再对题目取平均）。同时报告 MRR@K、K、每题或分组的数量及题目类型。Recall 的分母依赖相关片段标注是否完整；候选池之外未经检查的相关片段会导致高估。相邻片段可能同样有效，应对照视频人工核验，不应仅凭时间重叠标相关。无答案题单独报告，不放进这些正例指标。
+
+### 本机片段相关性复核与三路比较
+
+下面的流程用于**开发集或验证集**。先用本机时间标注页保存问题，然后启动片段相关性复核页；它按视频时间显示所有字幕片段，不展示模型排名。对照录像选择直接支持答案的全部片段。只有实际逐段核对后才声明已核验；只有完整检查整段视频并找齐所有相关片段后才声明完整。保存的是本机草稿，声明不构成独立验证；修改视频、字幕、题目或片段切分后须重新标注。
+
+```bash
+python scripts/review_retrieval_relevance.py --video PATH_TO_LOCAL_VIDEO --subtitles PATH_TO_LOCAL_SRT --labels PATH_TO_LOCAL_LABELS_CSV --video-id VIDEO_ID --split validation --output-dir artifacts/evaluation/relevance
+```
+
+打开 `http://127.0.0.1:5098/` 保存并可恢复进度。标注、问题、字幕、录像和指纹均须留在本机。无答案题不在此页的正例相关片段评估中，必须另行测量。
+
+确认所有可回答题的相关片段和完整性均已对照录像核对后，使用刚保存的 JSON 运行：
+
+```bash
+python scripts/evaluate_local_segment_retrieval.py --video PATH_TO_LOCAL_VIDEO --subtitles PATH_TO_LOCAL_SRT --labels PATH_TO_LOCAL_LABELS_CSV --gold PATH_TO_RELEVANCE_JSON --video-id VIDEO_ID --split validation --semantic-model PATH_TO_LOCAL_QWEN3_GGUF --visual-model PATH_TO_LOCAL_CLIP_DIRECTORY --output artifacts/evaluation/local-segment-comparison.json --confirm-reviewed
+```
+
+比较只在 CPU 本机运行，对同一批题目分别获取字幕语义与画面前 5 个候选，再以 RRF（k=60）融合，按题型报告 Recall@1/5、Hit@1/5 和 MRR@1/5。脚本要求本地 Qwen3-Embedding-0.6B GGUF 文件并记录其指纹，但不会独立证明模型身份；Qwen3 文档输入截断到 512 tokens，CLIP 查询可能截断到 77 tokens。画面最多采样 100 个片段中点，未采样片段无法被画面路线找回。此实验不应用相似度阈值，与工作台默认前 3 条、带阈值的问答链路不同；它不评估答案正确率。
+
+如需比较独立重排器，可追加 `--reranker-model 本地Qwen3-Reranker目录`。需事先检查模型许可、下载模型并安装兼容的 PyTorch、Transformers 和 Accelerate；脚本只读本机模型并使用 CPU。它对最多 20 个字幕语义候选按每批 4 条、最长 1024 tokens 重排，再取前 5 条，与原始字幕排序比较。两者均使用字幕文字，但重排路线考察更深的候选池，因此 Recall@5 才可能变化。模型文件会记录指纹，但不会独立证明其身份；CPU 运行可能较慢、占用较多内存。
+
+报告记录输入、模型、代码指纹及部分依赖版本，但不能证明标注正确或完全复现运行。输出仅限 `artifacts/` 或 `local_data/`，不得上传课程派生结果。
+
+#### 声明并冻结最终测试
+
+先在其他视频上选定配置，再独立复核 `test` 视频的问题及全部相关片段，不先查看测试排名。使用下面命令冻结输入和配置；对调参使用过的**每个**开发／验证相关性文件重复提供 `--other-gold`：
+
+```bash
+python scripts/freeze_local_segment_test.py --video PATH_TO_TEST_VIDEO --subtitles PATH_TO_TEST_SRT --labels PATH_TO_TEST_CSV --gold PATH_TO_TEST_RELEVANCE_JSON --video-id TEST_VIDEO_ID --semantic-model PATH_TO_QWEN3_GGUF --visual-model PATH_TO_CLIP_DIRECTORY --other-gold PATH_TO_DEVELOPMENT_RELEVANCE_JSON --other-gold PATH_TO_VALIDATION_RELEVANCE_JSON --output artifacts/evaluation/frozen-segment-test.json --confirm-reviewed --confirm-test-isolation
+```
+
+如使用重排器，冻结和评测时都要提供相同的 `--reranker-model`。测试时在上方比较命令中改用测试素材、`--split test`，并追加相同的 `--other-gold` 文件和 `--frozen-test-manifest artifacts/evaluation/frozen-segment-test.json`。程序会在评分前后检查输入、切分、模型文件、部分代码、配置和依赖版本，并比较**已提供文件中记录的**视频哈希。它不能证明已提供全部调参数据，也不能识别近重复录像、内容重叠、错误标签、非独立复核、重复测试或中途改回的文件；声明和清单并非防篡改证明。不要使用测试结果继续调参，并在报告中保留这些限制。
 
 答案质量需人工逐条判断：回答是否正确、引用片段是否支持结论、是否遗漏重要条件。单独报告无答案题的拒答数量和分母，同时检查有答案题的错误拒答。记录视频预处理时长、问答延迟和硬件条件；量力而行，不推断未测的价格或显存。
 

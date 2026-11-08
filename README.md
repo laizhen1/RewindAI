@@ -248,6 +248,8 @@ The workspace displays the latest 100 local feedback records and aggregates all 
 
 Candidate questions are diagnostic material, not a fully reviewed gold standard. Review answers and evidence against video, split by video, and separately assess audio, visual, combined and unanswerable questions. Do not present provisional results as verified accuracy.
 
+For a local, ranking-blind segment-relevance review and a top-five Qwen3/CLIP/RRF comparison, see the [retrieval relevance guide](docs/LOCAL_RETRIEVAL_RELEVANCE.md). Recall@K requires an exhaustively labeled set of relevant segments; Hit@K and MRR@K are reported separately. The optional reranker and declared frozen-test workflow are described in the guide; these measures do not evaluate answer correctness.
+
 To collect time-labeled drafts locally without editing a CSV by hand, install PyAV (`pip install -e ".[asr]"`) and run:
 
 ```powershell
