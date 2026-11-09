@@ -26,6 +26,7 @@ from scripts.diagnose_transcript import (
 )
 from scripts.prepare_temporal_questions import prepare, write_output
 from video_rag.api.visual_sampling import sample_visual_segments
+from video_rag.api.visual_timeline import cover_subtitle_gaps, video_duration_seconds
 from video_rag.evaluation.private_output import private_output
 from video_rag.evaluation.provenance import fingerprint, verify_sources
 from video_rag.retrieval.fusion import reciprocal_rank_fusion
@@ -145,6 +146,8 @@ def main():
                         help='Optional uncalibrated visual cutoff for evaluation only; workspace applies none')
     parser.add_argument('--min-coverage', type=float, default=0.5)
     parser.add_argument('--aggregate-only', action='store_true')
+    parser.add_argument('--cover-gaps', action='store_true',
+                        help='Add visual-only gap windows for development/validation diagnostics')
     args = parser.parse_args()
     try:
         from video_rag.retrieval.onnx_clip import ClipFrameRetriever, OnnxClipEncoder
@@ -156,6 +159,8 @@ def main():
                                                    not -1 <= args.visual_min_score <= 1):
             raise ValueError('Visual similarity threshold must be finite and in [-1, 1]')
         is_test = args.split == 'test'
+        if is_test and args.cover_gaps:
+            raise ValueError('Gap-enabled temporal diagnostics are reserved for development and validation')
         if is_test != (args.frozen_test_manifest is not None):
             raise ValueError('A frozen-test manifest is required only when --split test is selected')
         paths = {'video': args.video, 'subtitles': args.subtitles, 'questions': args.questions,
@@ -188,6 +193,8 @@ def main():
             transcript = build_semantic_pipeline(segments, load_semantic_encoder(args.semantic_model), args.semantic_threshold)
         else:
             transcript = build_transcript_segments(segments)
+        if args.cover_gaps:
+            segments = cover_subtitle_gaps(segments, video_duration_seconds(args.video))
         selected = sample_visual_segments(tuple(segments), limit=100)
         visual = ClipFrameRetriever(OnnxClipEncoder(args.visual_model))
         started = perf_counter()
@@ -210,6 +217,7 @@ def main():
                   'semantic_threshold': args.semantic_threshold if args.semantic_model else None,
                   'visual_min_score_experimental': args.visual_min_score,
                   'min_coverage': args.min_coverage, 'rrf_k': 60, 'top_k': 3,
+                  'visual_cover_gaps': args.cover_gaps,
                   'source_segments': len(segments), 'sampled_visual_segments': len(selected),
                   'visual_index_build_seconds': build_seconds, 'aggregate_only': args.aggregate_only,
                   'warning': 'Candidate timestamp coverage only; no visual relevance or answer correctness is assessed. '

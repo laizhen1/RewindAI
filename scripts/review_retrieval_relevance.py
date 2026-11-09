@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / 'src'))
 from flask import Flask, jsonify, render_template, request, send_file
 
 from scripts.prepare_temporal_questions import prepare
+from video_rag.api.visual_timeline import cover_subtitle_gaps, video_duration_seconds
 from video_rag.evaluation.private_output import PRIVATE_ROOTS, private_output
 from video_rag.evaluation.provenance import fingerprint
 from video_rag.transcript_baseline import segments_from_subtitles
@@ -33,7 +34,7 @@ def segment_fingerprint(segments) -> str:
 
 
 def create_relevance_app(video: Path, subtitles: Path, labels: Path, output_dir: Path,
-                         video_id: str, split: str, duration: float, *, allowed_roots=PRIVATE_ROOTS) -> Flask:
+                         video_id: str, split: str, duration: float, *, cover_gaps=False, allowed_roots=PRIVATE_ROOTS) -> Flask:
     """Bind a private, single-video review to its exact source files."""
     if split not in {'development', 'validation', 'test'} or not math.isfinite(duration) or duration <= 0:
         raise ValueError('Provide a valid split and video duration')
@@ -56,6 +57,8 @@ def create_relevance_app(video: Path, subtitles: Path, labels: Path, output_dir:
     segments = segments_from_subtitles(video, subtitles)
     if max(item.end_time for item in segments) > duration + 1:
         raise ValueError('Subtitle timestamps exceed the video duration')
+    if cover_gaps:
+        segments = cover_subtitle_gaps(segments, duration)
     if hashes != {name: fingerprint(path) for name, path in paths.items()}:
         raise ValueError('A source changed while preparing review')
     segment_ids = {item.segment_id for item in segments}
@@ -141,7 +144,7 @@ def create_relevance_app(video: Path, subtitles: Path, labels: Path, output_dir:
             return jsonify(error='A source changed; restart review'), 409
         return jsonify(questions=questions, segments=[{'id': item.segment_id, 'start': item.start_time,
                                                         'end': item.end_time, 'text': item.transcript}
-                                                       for item in segments], split=split,
+                                                       for item in segments], split=split, cover_gaps=cover_gaps,
                        unanswerable_excluded=len(data['questions']) - len(questions))
 
     @app.post('/api/save')
@@ -205,15 +208,14 @@ def main() -> int:
     parser.add_argument('--video-id', required=True)
     parser.add_argument('--split', choices=('development', 'validation', 'test'), required=True)
     parser.add_argument('--port', type=int, default=5098)
+    parser.add_argument('--cover-gaps', action='store_true', help='Add visual-only windows between subtitle segments')
     args = parser.parse_args()
     if not 1024 <= args.port <= 65535:
         parser.error('Port must be between 1024 and 65535')
     try:
-        import av
-        with av.open(str(args.video)) as container:
-            duration = container.duration / av.time_base if container.duration else 0
+        duration = video_duration_seconds(args.video)
         app = create_relevance_app(args.video, args.subtitles, args.labels, args.output_dir,
-                                   args.video_id, args.split, duration)
+                                   args.video_id, args.split, duration, cover_gaps=args.cover_gaps)
     except (ImportError, OSError, ValueError, TypeError, csv.Error) as exc:
         parser.exit(2, f'Cannot start local relevance review: {exc}\n')
     print(f'Open http://127.0.0.1:{args.port}/; keep private data on this computer.', flush=True)

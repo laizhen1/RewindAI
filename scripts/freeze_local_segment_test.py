@@ -28,6 +28,7 @@ def main() -> int:
     parser.add_argument('--other-gold', type=Path, action='append', required=True,
                         help='Development/validation relevance file; repeat for all videos used in tuning')
     parser.add_argument('--reranker-model', type=Path)
+    parser.add_argument('--cover-gaps', action='store_true', help='Use the same visual-only gap windows as the review')
     parser.add_argument('--confirm-reviewed', action='store_true')
     parser.add_argument('--confirm-test-isolation', action='store_true',
                         help='Declare no test video or questions were used to select settings')

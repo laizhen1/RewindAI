@@ -131,6 +131,35 @@ def test_scoring_requires_declared_complete_labels_and_exact_segmentation(source
         validate_gold(gold, **{**kwargs, 'hashes': {**gold['source_sha256'], 'video': '0' * 64}})
 
 
+def test_gap_review_adds_visual_only_labels_without_reusing_old_segmentation(sources):
+    from scripts.evaluate_local_segment_retrieval import validate_gold
+    from video_rag.api.visual_timeline import cover_subtitle_gaps
+    from video_rag.transcript_baseline import segments_from_subtitles
+
+    video, subtitles, labels, private = sources
+    old_client = app_for(sources).test_client()
+    old_data = old_client.get('/api/data').json
+    old_rows = [{'question_id': q['question_id'], 'relevant_segment_ids': [old_data['segments'][0]['id']],
+                 'verified': True, 'exhaustive': True} for q in old_data['questions']]
+    assert old_client.post('/api/save', json={'judgments': old_rows}).status_code == 201
+    new_client = create_relevance_app(video, subtitles, labels, private / 'reviews', 'sample', 'validation', 100,
+                                      cover_gaps=True, allowed_roots=(private,)).test_client()
+    data = new_client.get('/api/data').json
+    assert data['cover_gaps'] is True and len(data['segments']) > len(old_data['segments'])
+    assert new_client.get('/api/latest').status_code == 404
+    gap = next(item for item in data['segments'] if item['text'] == '')
+    rows = [{'question_id': q['question_id'], 'relevant_segment_ids': [gap['id']],
+             'verified': True, 'exhaustive': True} for q in data['questions']]
+    saved = new_client.post('/api/save', json={'judgments': rows}).json
+    gold = json.loads((private / 'reviews' / saved['filename']).read_text(encoding='utf-8'))
+    segments = segments_from_subtitles(video, subtitles)
+    kwargs = {'hashes': gold['source_sha256'], 'video_id': 'sample', 'split': 'validation',
+              'questions': data['questions'], 'segments': segments}
+    with pytest.raises(ValueError, match='segmentation'):
+        validate_gold(gold, **kwargs)
+    assert validate_gold(gold, **{**kwargs, 'segments': cover_subtitle_gaps(segments, 100)})['q1'] == [gap['id']]
+
+
 def test_paired_comparison_uses_fractional_recall_and_does_not_assume_fusion_improves():
     from scripts.evaluate_local_segment_retrieval import compare_rankings
     from video_rag.schemas import SearchHit
@@ -148,6 +177,27 @@ def test_paired_comparison_uses_fractional_recall_and_does_not_assume_fusion_imp
     assert result['rrf']['overall']['mrr@5'] == 0.2
     with pytest.raises(ValueError, match='invalid'):
         compare_rankings(questions, {'q': ['a']}, Retriever(['unknown']), Retriever(['b']), set('ab'))
+
+
+def test_visual_only_relevant_gap_can_be_found_without_text_evidence():
+    from scripts.evaluate_local_segment_retrieval import compare_rankings
+    from video_rag.schemas import SearchHit
+
+    class Retriever:
+        def __init__(self, ids):
+            self.ids = ids
+        def search(self, _query, top_k):
+            return [SearchHit(value, 1, 'synthetic', i + 1) for i, value in enumerate(self.ids[:top_k])]
+
+    question = {'question_id': 'q', 'question': 'What is on the slide?', 'question_type': 'visual',
+                'expected_answerable': True}
+    paired = {}
+    result = compare_rankings([question], {'q': ['visual_gap']}, Retriever(['spoken']),
+                              Retriever(['visual_gap']), {'spoken', 'visual_gap'}, paired_out=paired)
+    assert result['text']['overall']['recall@5'] == 0
+    assert result['frame']['overall']['recall@5'] == 1
+    assert result['rrf']['overall']['recall@5'] == 1
+    assert paired['rrf_minus_text']['metrics']['recall@5']['improved'] == 1
 
 
 def test_optional_reranker_reorders_deeper_same_text_candidates_in_bounded_batches():

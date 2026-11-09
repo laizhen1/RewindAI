@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 import uuid
 from collections.abc import Callable
@@ -18,6 +19,9 @@ from video_rag.api.visual_sampling import sample_visual_segments
 from video_rag.pipeline import VideoRAGPipeline
 from video_rag.schemas import VideoSegment
 
+MAX_VISUAL_SCOPE_VIDEOS = 100
+MAX_VISUAL_TIMELINE_SEGMENTS = 100_000
+
 
 def create_app(
     pipeline: VideoRAGPipeline,
@@ -27,11 +31,14 @@ def create_app(
     transcript_builder: Callable[[list[VideoSegment]], VideoRAGPipeline] | None = None,
     retrieval_type: str = "keyword",
     visual_builder: Callable[[list[VideoSegment]], object] | None = None,
+    visual_cover_gaps: bool = False,
     answer_mode: str = "extractive",
     upload_dir: str | Path = "artifacts/uploads",
 ) -> Flask:
     if answer_mode not in {"extractive", "local_experimental"}:
         raise ValueError("Unknown answer mode")
+    if visual_cover_gaps and (mode != "transcript" or visual_builder is None):
+        raise ValueError("Visual gap coverage requires transcript mode and a visual model")
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024 + 12 * 1024 * 1024
     store = LibraryStore(database_path)
@@ -105,6 +112,45 @@ def create_app(
         ids = video_ids if video_ids is not None else {segment.video_id for segment in pipeline.segments()}
         return any(not source_available(video_id) for video_id in ids)
 
+    # Gap segments are derived in memory from the current subtitle index. They
+    # never enter text retrieval or persisted subtitle records.
+    timeline_cache: dict[str, tuple[VideoRAGPipeline, list[VideoSegment]]] = {}
+
+    def visual_timeline(video_id: str) -> list[VideoSegment]:
+        current_pipeline = pipeline
+        if not source_available(video_id):
+            raise ValueError("Video moved or changed")
+        existing = timeline_cache.get(video_id)
+        if existing is not None and existing[0] is current_pipeline:
+            return existing[1]
+        segments = [segment for segment in current_pipeline.segments() if segment.video_id == video_id]
+        if not segments:
+            raise ValueError("Video is not indexed")
+        from video_rag.api.visual_timeline import cover_subtitle_gaps, video_duration_seconds
+
+        duration = video_duration_seconds(segments[0].source_path)
+        result = cover_subtitle_gaps(segments, duration)
+        if pipeline is not current_pipeline or not source_available(video_id):
+            raise ValueError("Video changed while preparing visual timeline")
+        timeline_cache[video_id] = (current_pipeline, result)
+        return result
+
+    def resolve_segment(segment_id: str, video_id: str | None = None) -> VideoSegment | None:
+        segment = pipeline.segment(segment_id)
+        if segment is not None:
+            return segment if video_id is None or segment.video_id == video_id else None
+        if not visual_cover_gaps or not segment_id.startswith("visual_gap_"):
+            return None
+        ids = [video_id] if video_id is not None else sorted({s.video_id for s in pipeline.segments()})
+        for candidate in ids:
+            try:
+                found = next((s for s in visual_timeline(candidate) if s.segment_id == segment_id), None)
+            except (ImportError, OSError, ValueError, RuntimeError):
+                continue
+            if found is not None:
+                return found
+        return None
+
     @app.before_request
     def protect_local_workspace():
         # This prototype stores private notes and offers local video access. Only
@@ -154,7 +200,8 @@ def create_app(
     @app.get("/api/health")
     def health():
         return jsonify({"status": "ok", "mode": mode, "retrieval_type": retrieval_type,
-                        "visual_enabled": visual_builder is not None, "answer_mode": answer_mode})
+                        "visual_enabled": visual_builder is not None, "visual_cover_gaps": visual_cover_gaps,
+                        "answer_mode": answer_mode})
 
     @app.get("/api/library")
     def library():
@@ -198,6 +245,7 @@ def create_app(
             except (sqlite3.Error, OSError, RuntimeError, ValueError):
                 return jsonify({"error": "Could not rebuild or save the local index"}), 500
             pipeline = replacement
+            timeline_cache.clear()
             source_versions.pop(video_id, None)
             visual_index = None
             visual_key = None
@@ -247,6 +295,7 @@ def create_app(
                 store.remember_video(added[0].video_id, str(video_path), current_stat.st_size,
                                      current_stat.st_mtime_ns, json.dumps([segment.to_dict() for segment in added]))
                 pipeline = replacement
+                timeline_cache.clear()
                 source_versions[added[0].video_id] = (current_stat.st_size, current_stat.st_mtime_ns)
                 visual_index = None
                 visual_key = None
@@ -295,6 +344,7 @@ def create_app(
                                                 json.dumps([segment.to_dict() for segment in added]), mapping):
                     return jsonify({"error": "Saved video changed; restart before updating"}), 409
                 pipeline = replacement
+                timeline_cache.clear()
                 visual_index = None
                 visual_key = None
                 return jsonify({"segment_count": len(added)})
@@ -503,11 +553,11 @@ def create_app(
     @app.get("/api/bookmarks")
     def bookmarks():
         items = store.bookmarks()
-        for item in items:
-            segment = pipeline.segment(item["segment_id"])
-            item["available"] = bool(segment and source_available(segment.video_id) and
-                                     segment.video_id == item["video_id"] and
-                                     segment.start_time == item["start_time"] and segment.end_time == item["end_time"])
+        with import_lock:
+            for item in items:
+                segment = resolve_segment(item["segment_id"], item["video_id"])
+                item["available"] = bool(segment and source_available(segment.video_id) and
+                                         segment.start_time == item["start_time"] and segment.end_time == item["end_time"])
         return jsonify({"bookmarks": items})
 
     @app.post("/api/bookmarks")
@@ -522,7 +572,7 @@ def create_app(
         if not isinstance(note, str) or len(note) > 4000:
             return jsonify({"error": "note must be at most 4000 characters"}), 400
         with import_lock:
-            segment = pipeline.segment(segment_id)
+            segment = resolve_segment(segment_id, video_id)
             if segment is None or segment.video_id != video_id:
                 return jsonify({"error": "segment not found in the loaded video"}), 404
             if mode == "transcript" and not source_available(video_id):
@@ -588,8 +638,10 @@ def create_app(
             return jsonify({"error": "invalid rating"}), 400
         if not isinstance(comment, str) or len(comment) > 4000:
             return jsonify({"error": "comment must be at most 4000 characters"}), 400
-        if segment_id is not None and (not isinstance(segment_id, str) or pipeline.segment(segment_id) is None):
-            return jsonify({"error": "segment not found"}), 404
+        if segment_id is not None:
+            with import_lock:
+                if not isinstance(segment_id, str) or resolve_segment(segment_id) is None:
+                    return jsonify({"error": "segment not found"}), 404
         target = payload.get("target_type", "answer" if segment_id is None else "unknown_evidence")
         if target not in ("answer", "transcript", "visual", "unknown_evidence"):
             return jsonify({"error": "invalid feedback target"}), 400
@@ -709,8 +761,20 @@ def create_app(
                     segments = tuple(segment for segment in segments if assignments.get(segment.video_id) == course_id)
                 if not segments:
                     return jsonify({"error": "No loaded videos in the selected scope"}), 400
-                if invalid_sources({segment.video_id for segment in segments}):
+                scope_video_ids = {segment.video_id for segment in segments}
+                if len(scope_video_ids) > MAX_VISUAL_SCOPE_VIDEOS:
+                    return jsonify({"error": "The selected scope contains too many videos; narrow the search scope"}), 400
+                if invalid_sources(scope_video_ids):
                     return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
+                if visual_cover_gaps:
+                    expanded: list[VideoSegment] = []
+                    for video_id in sorted(scope_video_ids):
+                        timeline = visual_timeline(video_id)
+                        if len(expanded) + len(timeline) > MAX_VISUAL_TIMELINE_SEGMENTS:
+                            timeline_cache.clear()
+                            return jsonify({"error": "The selected scope contains too many visual segments; narrow the search scope"}), 400
+                        expanded.extend(timeline)
+                    segments = tuple(expanded)
                 total = len(segments)
                 try:
                     selected = sample_visual_segments(segments, limit=100)
@@ -727,14 +791,21 @@ def create_app(
                     visual_key = None
                     return jsonify({"error": "A video in this search has moved or changed; restore it or remove and re-import its index"}), 409
                 lookup = {segment.segment_id: segment for segment in selected}
-                evidence = [{"segment_id": hit.segment_id, "video_id": lookup[hit.segment_id].video_id,
-                             "start_time": lookup[hit.segment_id].start_time,
-                             "end_time": lookup[hit.segment_id].end_time, "score": hit.score}
-                            for hit in hits if hit.segment_id in lookup]
+                evidence = []
+                for hit in hits:
+                    if hit.segment_id not in lookup:
+                        continue
+                    frame_time = hit.metadata.get("frame_time")
+                    if type(frame_time) not in (int, float) or not math.isfinite(frame_time) or frame_time < 0:
+                        frame_time = None
+                    evidence.append({"segment_id": hit.segment_id, "video_id": lookup[hit.segment_id].video_id,
+                                     "start_time": lookup[hit.segment_id].start_time,
+                                     "end_time": lookup[hit.segment_id].end_time, "score": hit.score,
+                                     "frame_time": frame_time})
         except (OSError, RuntimeError, ValueError, ImportError):
             return jsonify({"error": "Visual indexing or search failed; check local model and videos"}), 503
         return jsonify({"evidence": evidence, "source_segments": total, "indexed_segments": len(selected),
-                        "sampled": len(selected) < total,
+                        "sampled": len(selected) < total, "visual_cover_gaps": visual_cover_gaps,
                         "warning": "Visual similarity is not proof of relevance; results can be wrong "
                                    "even when nothing matches. Unindexed segments are not searched."})
 
@@ -790,9 +861,10 @@ def create_app(
             fused = reciprocal_rank_fusion(lists, k=60, top_k=3)
             text_ids = {item["segment_id"] for item in text_items}
             visual_ids = {item["segment_id"] for item in visual_items}
+            frame_times = {item["segment_id"]: item.get("frame_time") for item in visual_items}
             evidence = []
             for hit in fused:
-                segment = pipeline.segment(hit.segment_id)
+                segment = resolve_segment(hit.segment_id)
                 if segment is None:
                     continue
                 sources = [name for name, ids in (("transcript", text_ids), ("visual", visual_ids)) if hit.segment_id in ids]
@@ -800,9 +872,10 @@ def create_app(
                                  "start_time": segment.start_time, "end_time": segment.end_time,
                                  "transcript": segment.transcript if "transcript" in sources else "",
                                  "visual_caption": "画面相似候选，未生成画面描述" if "transcript" not in sources else "",
-                                 "sources": sources})
+                                 "sources": sources, "frame_time": frame_times.get(segment.segment_id)})
         return jsonify({"evidence": evidence, "visual_available": visual_response.status_code == 200,
                         "visual_error": None if visual_response.status_code == 200 else visual_data.get("error", "Visual search failed"),
+                        "visual_cover_gaps": visual_cover_gaps,
                         "sampled": visual_data.get("sampled"), "source_segments": visual_data.get("source_segments"),
                         "indexed_segments": visual_data.get("indexed_segments"),
                         "warning": "Experimental rank fusion: frame matches may be irrelevant; sampled frames can miss evidence. No answer generated."})
@@ -845,8 +918,9 @@ def create_app(
     def segment_frame(segment_id: str):
         if mode != "transcript":
             return jsonify({"error": "Frame preview is only available in subtitle mode"}), 409
-        frame_pipeline = pipeline
-        segment = frame_pipeline.segment(segment_id)
+        with import_lock:
+            frame_pipeline = pipeline
+            segment = resolve_segment(segment_id)
         if segment is None:
             return jsonify({"error": "Segment not found"}), 404
         if not source_available(segment.video_id):

@@ -19,8 +19,10 @@ def main() -> int:
         return 2
     print("Starting experimental English visual search locally on CPU; review every candidate.", flush=True)
     print("No model download is performed. Open http://127.0.0.1:5000/ when ready.", flush=True)
-    return subprocess.call([sys.executable, str(ROOT / "scripts" / "run_transcript.py"),
-                            "--visual-model", str(model)], cwd=ROOT)
+    command = [sys.executable, str(ROOT / "scripts" / "run_transcript.py"), "--visual-model", str(model)]
+    if os.environ.get("REWINDAI_VISUAL_COVER_GAPS") == "1":
+        command.append("--visual-cover-gaps")
+    return subprocess.call(command, cwd=ROOT)
 
 
 if __name__ == "__main__":

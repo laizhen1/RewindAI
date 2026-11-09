@@ -127,3 +127,41 @@ def test_json_questions_reject_test_and_unknown_splits(tmp_path):
     path.write_text(json.dumps({'split': 'validation', 'questions': []}), encoding='utf-8')
     data, binding, _ = load_questions(path, None, None, 'hash')
     assert data['split'] == 'validation' and binding is None
+
+
+def test_gap_temporal_fusion_matches_workspace_without_changing_text_index(tmp_path, monkeypatch):
+    from video_rag.api import visual_timeline
+
+    video = tmp_path / 'video.mp4'; video.write_bytes(b'synthetic')
+    subtitle = tmp_path / 'video.srt'
+    subtitle.write_text('1\n00:00:10,000 --> 00:00:12,000\nAttention queries.\n', encoding='utf-8')
+    segments = segments_from_subtitles(video, subtitle)
+    timeline = visual_timeline.cover_subtitle_gaps(segments, 40)
+    gap = next(s for s in timeline if not s.transcript)
+    monkeypatch.setattr(visual_timeline, 'video_duration_seconds', lambda _path: 40.0)
+
+    class Visual:
+        def search(self, _query, _top_k):
+            return [SearchHit(gap.segment_id, 0.8, 'visual', 1)]
+
+    pipeline = build_transcript_segments(segments)
+    result = FusedCandidates(pipeline, Visual(), timeline).ask('attention').to_dict()
+    client = create_app(pipeline, mode='transcript', visual_builder=lambda _: Visual(), visual_cover_gaps=True,
+                        database_path=tmp_path / 'state.db').test_client()
+    workspace = client.post('/api/hybrid-search', json={'question': 'attention'}).json
+    assert [(x['start_time'], x['end_time']) for x in result['evidence']] == [
+        (x['start_time'], x['end_time']) for x in workspace['evidence']]
+    assert all(item.segment.transcript for item in pipeline.ask('attention', generate_answer=False).evidence)
+
+
+def test_gap_temporal_diagnostic_does_not_run_on_unfrozen_test(monkeypatch, capsys):
+    import sys
+
+    from scripts import compare_temporal_multimodal as module
+
+    monkeypatch.setattr(sys, 'argv', ['compare', '--video', 'x', '--subtitles', 'x', '--questions', 'x',
+                                     '--visual-model', 'x', '--output', str(module.ROOT / 'artifacts' / 'gap-test-invalid.json'),
+                                     '--split', 'test', '--cover-gaps'])
+    with pytest.raises(SystemExit):
+        module.main()
+    assert 'reserved for development and validation' in capsys.readouterr().err

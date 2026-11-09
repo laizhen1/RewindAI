@@ -34,6 +34,8 @@ def main() -> None:
     parser.add_argument("--answer-model", type=Path, help="Optional experimental local GGUF answer model (CPU only)")
     parser.add_argument("--semantic-model", type=Path, help="Local Qwen3 embedding GGUF file")
     parser.add_argument("--visual-model", type=Path, help="Optional experimental local CLIP ONNX model directory")
+    parser.add_argument("--visual-cover-gaps", action="store_true",
+                        help="Experimentally include visual-only windows between subtitle segments")
     parser.add_argument("--semantic-threshold", type=float, default=0.4,
                         help="Experimental uncalibrated cosine threshold (default 0.4)")
     args = parser.parse_args()
@@ -41,6 +43,8 @@ def main() -> None:
         parser.error("--port must be between 1 and 65535")
     if args.save_startup_video and len(args.video) != 1:
         parser.error("--save-startup-video requires exactly one --video")
+    if args.visual_cover_gaps and not args.visual_model:
+        parser.error("--visual-cover-gaps requires --visual-model")
     try:
         if args.subtitles and len(args.subtitles) != len(args.video):
             parser.error("Provide one --subtitles for each --video, or omit all for sidecars")
@@ -82,6 +86,7 @@ def main() -> None:
                 return retriever
         app = create_app(pipeline, mode="transcript", transcript_builder=builder,
                          retrieval_type=retrieval_type, visual_builder=visual_builder,
+                         visual_cover_gaps=args.visual_cover_gaps,
                          answer_mode="local_experimental" if generator else "extractive")
         for video, version in source_versions.items():
             try:

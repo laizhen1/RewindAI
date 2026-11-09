@@ -15,7 +15,9 @@ if not exist "%REWINDAI_VISUAL_MODEL_DIR%\tokenizer.json" goto missing
 if not exist "%REWINDAI_VISUAL_MODEL_DIR%\onnx\model_quantized.onnx" goto missing
 echo Experimental local CPU models. Visual fusion returns candidates, not generated answers.
 echo First visual search may take time. Verify all results against the recording.
-.venv\Scripts\python.exe scripts\run_transcript.py --semantic-model "%REWINDAI_SEMANTIC_MODEL%" --visual-model "%REWINDAI_VISUAL_MODEL_DIR%" --answer-model "%REWINDAI_ANSWER_MODEL%"
+set "REWINDAI_VISUAL_OPTION="
+if "%REWINDAI_VISUAL_COVER_GAPS%"=="1" set "REWINDAI_VISUAL_OPTION=--visual-cover-gaps"
+.venv\Scripts\python.exe scripts\run_transcript.py --semantic-model "%REWINDAI_SEMANTIC_MODEL%" --visual-model "%REWINDAI_VISUAL_MODEL_DIR%" --answer-model "%REWINDAI_ANSWER_MODEL%" %REWINDAI_VISUAL_OPTION%
 if errorlevel 1 (
   echo Workspace failed to start. Check dependencies and README.md.
   pause

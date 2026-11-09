@@ -78,12 +78,16 @@ class ClipFrameRetriever:
     def __init__(self, encoder: OnnxClipEncoder) -> None:
         self.encoder = encoder
         self.ids: list[str] = []
+        self.frame_times: list[float] = []
         self.vectors: np.ndarray | None = None
 
     def build(self, segments: list[VideoSegment]) -> None:
         if not segments:
             raise ValueError("At least one video segment is required")
-        self.ids = []
+        if len({segment.segment_id for segment in segments}) != len(segments):
+            raise ValueError("Visual segment IDs must be unique")
+        ids: list[str] = []
+        frame_times: list[float] = []
         vectors = []
         import av
 
@@ -92,13 +96,21 @@ class ClipFrameRetriever:
             images = []
             for segment in batch:
                 try:
-                    png, _ = extract_frame_png(segment.source_path, (segment.start_time + segment.end_time) / 2)
+                    png, actual = extract_frame_png(segment.source_path, (segment.start_time + segment.end_time) / 2)
                 except av.error.FFmpegError as exc:
                     raise ValueError("Could not decode a video frame") from exc
+                if not np.isfinite(actual) or actual < 0:
+                    raise ValueError("Could not determine the sampled frame time")
                 images.append(preprocess_png(png))
-            vectors.append(self.encoder.encode_images(images))
-            self.ids.extend(segment.segment_id for segment in batch)
-        self.vectors = np.concatenate(vectors)
+                frame_times.append(float(actual))
+            encoded = np.asarray(self.encoder.encode_images(images), dtype=np.float32)
+            if (encoded.ndim != 2 or encoded.shape[0] != len(batch) or encoded.shape[1] == 0
+                    or not np.all(np.isfinite(encoded)) or np.any(np.linalg.norm(encoded, axis=1) == 0)):
+                raise ValueError("CLIP returned invalid image embeddings")
+            vectors.append(encoded)
+            ids.extend(segment.segment_id for segment in batch)
+        result = np.concatenate(vectors)
+        self.ids, self.frame_times, self.vectors = ids, frame_times, result
 
     def search(self, query: str, top_k: int = 3) -> list[SearchHit]:
         if self.vectors is None:
@@ -107,5 +119,6 @@ class ClipFrameRetriever:
             return []
         scores = self.vectors @ self.encoder.encode_query(query)
         order = sorted(range(len(scores)), key=lambda i: (-float(scores[i]), self.ids[i]))[:top_k]
-        return [SearchHit(self.ids[index], float(scores[index]), self.name, rank)
+        return [SearchHit(self.ids[index], float(scores[index]), self.name, rank,
+                          {"frame_time": self.frame_times[index]})
                 for rank, index in enumerate(order, 1)]

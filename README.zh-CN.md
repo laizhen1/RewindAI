@@ -207,6 +207,8 @@ Qwen3 对 151 道公开视频完整字幕问题的评测中，**108/151** 道题
 
 “实验性融合检索”使用 RRF（k=60）合并字幕和采样画面的候选排名，并标注来源；它不生成回答，也不能证明画面与问题相关。画面检索失败时会提示并保留字幕候选。Windows 用户可运行 `Start-RewindAI-Visual-Answers.cmd` 加载三个本地 CPU 模型；普通 AI 回答仍只基于字幕，融合检索只展示待核对片段。
 
+如需实验性搜索字幕间隙的画面，Windows 用户可运行 `Start-RewindAI-Visual-Gaps.cmd`（文本使用关键词）或 `Start-RewindAI-Visual-Gaps-Answers.cmd`（加载本地 Qwen3 文本检索和回答模型）；也可以在 `--visual-model` 命令中追加 `--visual-cover-gaps`。间隙片段没有字幕，不进入文本索引。画面路线最多仍只采样 100 个片段中点，覆盖时间轴不代表看到了所有画面。纯画面收藏需启用此选项且源索引未改变才可恢复；替换字幕后会失效。该功能尚未在用户课程上验证。
+
 [画面搜索实验指南](docs/LOCAL_VISUAL_EXPERIMENT.md)还介绍如何在同一批开发或验证题上，本机对比纯字幕与融合候选的时间定位。该对照不评估画面是否相关或答案是否正确；课程题目和评测结果必须留在本机。
 
 安装 `python -m pip install -e ".[semantic]" "av>=11,<17"`，并将 [Xenova/clip-vit-base-patch32](https://huggingface.co/Xenova/clip-vit-base-patch32) 的 `tokenizer.json` 与 `onnx/model_quantized.onnx` 下载到本机模型目录（模型文件约 154 MB，遵循模型自身许可）。然后运行：

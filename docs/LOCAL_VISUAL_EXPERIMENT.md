@@ -4,6 +4,10 @@ This prototype scores an English text query against **one midpoint frame per sub
 
 The visual search is explicitly opt-in through `--visual-model`; keyword or semantic subtitle search continues to be available separately. The comparison view displays the two lists separately without generating an answer. An additional experimental workspace option fuses their candidate ranks with RRF; neither view establishes that a candidate is relevant. If visual search fails, the workspace retains the transcript result and displays the failure. Indexing occurs on the first visual query and repeats after the video library changes. The prototype indexes at most 100 segments in the selected scope and handles at most four frames per encoding batch. For larger scopes it deterministically spreads the budget across videos, retaining at least one segment per video, and samples evenly within each video; the interface reports how many were selected. Unselected segments cannot be retrieved, so coverage is incomplete. More than 100 videos in one scope requires narrowing the scope. It supports all loaded videos, the selected video, or that video’s assigned course. It keeps only the most recently used visual index in memory, so switching scope can trigger reindexing. It may take significant CPU time for long recordings. The 6 GB GPU is not used by this path.
 
+Visual results include the approximate time of the frame actually decoded for the index. When available, the workspace provides a separate jump to that frame as well as the segment-start jump. The preview is decoded again from the unchanged local file; timing and decoder behavior can vary, so verify the surrounding recording.
+
+The gap-aware workspace rejects scopes with more than 100 videos or more than 100,000 total timeline segments before building the visual model index; narrow the scope if needed. The frame budget remains 100, so this resource limit is not a coverage guarantee.
+
 The single sampled frame can miss slides, animations and brief events. CLIP's similarity is not a calibrated probability, and the system does not have a validated rejection threshold: even an absent object returns the highest-scoring frames. A retrieved frame is a candidate for human review, not a verified answer. The image preprocessing uses PyAV bicubic resizing and a center crop with CLIP's published RGB normalization; it is not a claim of bit-exact equivalence to every other CLIP implementation.
 
 ## Public-video smoke test
@@ -106,6 +110,8 @@ For a development-only sensitivity experiment, append `--visual-min-score 0.25` 
 ```powershell
 python scripts/compare_temporal_multimodal.py --video PATH_TO_VIDEO --subtitles PATH_TO_SRT --questions PATH_TO_LOCAL_QUESTIONS_JSON --visual-model PATH_TO_LOCAL_CLIP --semantic-model PATH_TO_LOCAL_MINILM --aggregate-only --output artifacts/evaluation/paired_temporal.json
 ```
+
+For development or validation only, add `--cover-gaps` to include visual-only windows between subtitle segments, matching the optional workspace timeline. The transcript baseline still indexes only subtitles. This option is not supported by the existing frozen temporal-test protocol. Timestamp overlap is a diagnostic proxy; it does not establish visual relevance, answer correctness, or standard retrieval Recall@K.
 
 Only development and validation drafts should be used for iteration. A test CSV is accepted only with a separately declared frozen-test manifest as described below. Labels and source binding are not independently verified, and the model cannot reliably reject absent visual content. Reports, questions and fingerprints can contain sensitive information and must remain local. Index build latency excludes model loading; query latency is sequential and excludes indexing. The sampled frames can omit relevant visual evidence.
 

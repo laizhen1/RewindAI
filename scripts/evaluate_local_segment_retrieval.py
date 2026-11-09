@@ -23,6 +23,7 @@ from scripts.evaluate_retrieval import metrics_with_breakdown
 from scripts.prepare_temporal_questions import prepare
 from scripts.review_retrieval_relevance import segment_fingerprint
 from video_rag.api.visual_sampling import sample_visual_segments
+from video_rag.api.visual_timeline import cover_subtitle_gaps, video_duration_seconds
 from video_rag.evaluation.private_output import private_output
 from video_rag.evaluation.provenance import fingerprint
 from video_rag.evaluation.retrieval import hit_at_k, recall_at_k, reciprocal_rank
@@ -39,7 +40,7 @@ CODE_FILES = (
     'src/video_rag/evaluation/retrieval.py', 'src/video_rag/evaluation/provenance.py',
     'src/video_rag/retrieval/semantic_models.py', 'src/video_rag/retrieval/qwen_semantic.py',
     'src/video_rag/retrieval/onnx_semantic.py', 'src/video_rag/retrieval/onnx_clip.py',
-    'src/video_rag/retrieval/fusion.py', 'src/video_rag/api/visual_sampling.py',
+    'src/video_rag/retrieval/fusion.py', 'src/video_rag/api/visual_sampling.py', 'src/video_rag/api/visual_timeline.py',
     'src/video_rag/api/frames.py', 'src/video_rag/transcript_baseline.py', 'src/video_rag/schemas.py',
     'src/video_rag/adapters/qwen.py',
 )
@@ -107,7 +108,8 @@ def experiment_settings(args) -> dict:
             'rerank_candidate_depth': 20 if args.reranker_model is not None else None,
             'rerank_batch_size': 4 if args.reranker_model is not None else None,
             'rerank_max_length': 1024 if args.reranker_model is not None else None,
-            'frame_sampling': 'one midpoint per sampled segment', 'frame_sample_limit': 100}
+            'frame_sampling': 'one midpoint per sampled segment', 'frame_sample_limit': 100,
+            'cover_subtitle_gaps': getattr(args, 'cover_gaps', False), 'gap_window_seconds': 20}
 
 
 def prepare_inputs(args) -> dict:
@@ -140,6 +142,9 @@ def prepare_inputs(args) -> dict:
     with labels.open(encoding='utf-8-sig', newline='') as source:
         data = prepare(list(csv.DictReader(source)), args.video_id, args.split)
     segments = segments_from_subtitles(args.video, args.subtitles)
+    if getattr(args, 'cover_gaps', False):
+        duration = video_duration_seconds(args.video)
+        segments = cover_subtitle_gaps(segments, duration)
     gold = json.loads(gold_path.read_text(encoding='utf-8-sig'))
     ground_truth = validate_gold(gold, hashes={name: before[name] for name in source_paths},
                                  video_id=args.video_id, split=args.split, questions=data['questions'], segments=segments)
@@ -272,6 +277,7 @@ def main() -> int:
     parser.add_argument('--video-id', required=True)
     parser.add_argument('--split', choices=('development', 'validation', 'test'), required=True)
     parser.add_argument('--reranker-model', type=Path, help='Optional local Qwen3-Reranker-0.6B model directory (CPU)')
+    parser.add_argument('--cover-gaps', action='store_true', help='Use the same visual-only gap windows as the review')
     parser.add_argument('--frozen-test-manifest', type=Path, help='Required only for a declared frozen test')
     parser.add_argument('--other-gold', type=Path, action='append', default=[],
                         help='Development/validation relevance file used when freezing the test')
@@ -345,8 +351,11 @@ def main() -> int:
                   'metrics': results, 'paired_comparisons': paired,
                   'warning': 'Labels and completeness are user declarations, not independently verified. '
                              'Top-five unthresholded ranking differs from the workspace top-three pipeline. '
-                             'Frames are sampled only within subtitle-derived segments; visual evidence in gaps '
-                             'cannot be indexed or labeled, and sampling can omit other evidence. '
+                             + ('Visual-only gap windows cover the timeline, but midpoint sampling can miss events. '
+                                if args.cover_gaps else
+                                'Frames are sampled only within subtitle-derived segments; visual evidence in gaps '
+                                'cannot be indexed or labeled, and sampling can omit other evidence. ')
+                             +
                              'Code hashes and dependency versions do not capture '
                              'every runtime detail. Paired differences are descriptive, not proof of generalization. '
                              'Keep this report and fingerprints local.'}
