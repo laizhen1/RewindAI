@@ -283,7 +283,7 @@ Visual retrieval has only a small public-video frame diagnostic with assistant-d
 
 ## License
 
-RewindAI's code is available for non-commercial use, modification and redistribution under the [RewindAI Non-Commercial Use License](LICENSE). Commercial use requires separate written permission. Model weights, datasets, videos and third-party dependencies have their own terms.
+RewindAI's code is available under the [PolyForm Noncommercial License 1.0.0](LICENSE) (`PolyForm-Noncommercial-1.0.0`). The license permits noncommercial use, modification and redistribution, and specifies additional permitted uses for certain organizations; uses outside its terms require separate permission. This is a source-available license, not an OSI-approved open-source license. Model weights, datasets, videos and third-party dependencies have their own terms.
 
 ## Links
 
